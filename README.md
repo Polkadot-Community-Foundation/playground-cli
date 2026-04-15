@@ -36,7 +36,7 @@ pnpm cli:install
 Every PR automatically publishes a dev release tagged with the branch name. Others can try it with:
 
 ```bash
-VERSION=ch/my-branch curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | bash
+VERSION=my-branch curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | bash
 ```
 
 ### Releasing
