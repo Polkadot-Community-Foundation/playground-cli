@@ -32,14 +32,14 @@ jobs:
                   bun build --compile --target=bun-darwin-arm64 src/index.ts --outfile dot-darwin-arm64
 
             - name: Delete previous dev release
-              run: gh release delete "${{ github.head_ref }}" --cleanup-tag -y 2>/dev/null || true
+              run: gh release delete "dev/${{ github.head_ref }}" --cleanup-tag -y 2>/dev/null || true
               env:
                   GH_TOKEN: ${{ github.token }}
 
             - name: Create dev release
               uses: softprops/action-gh-release@v2
               with:
-                  tag_name: ${{ github.head_ref }}
+                  tag_name: dev/${{ github.head_ref }}
                   name: "Dev: ${{ github.head_ref }}"
                   prerelease: true
                   make_latest: false
@@ -52,5 +52,5 @@ jobs:
                       Dev build from `${{ github.head_ref }}`.
 
                       ```
-                      curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=${{ github.head_ref }} bash
+                      curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=dev/${{ github.head_ref }} bash
                       ```
