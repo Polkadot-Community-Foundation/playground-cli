@@ -52,5 +52,5 @@ jobs:
                       Dev build from `${{ github.head_ref }}`.
 
                       ```
-                      VERSION=${{ github.head_ref }} curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | bash
+                      curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=${{ github.head_ref }} bash
                       ```
