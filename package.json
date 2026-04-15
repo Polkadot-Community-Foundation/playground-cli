@@ -11,6 +11,7 @@
     "scripts": {
         "format": "biome format --write .",
         "format:check": "biome format .",
+        "build": "bun build --compile src/index.ts --outfile ./dist/dot",
         "cli:install": "bun build --compile src/index.ts --outfile ~/.polkadot/bin/dot"
     },
     "dependencies": {
@@ -18,6 +19,7 @@
     },
     "devDependencies": {
         "@biomejs/biome": "^1.9.4",
+        "@changesets/cli": "^2.29.8",
         "typescript": "^5.9.3"
     },
     "pnpm": {
