@@ -25,7 +25,7 @@ importers:
         version: 0.4.4(rxjs@7.8.2)
       '@polkadot-apps/terminal':
         specifier: latest
-        version: 0.2.1(esbuild@0.25.12)(rxjs@7.8.2)
+        version: 0.2.2(esbuild@0.25.12)(rxjs@7.8.2)
       '@polkadot-apps/tx':
         specifier: latest
         version: 0.3.5(rxjs@7.8.2)
@@ -689,8 +689,8 @@ packages:
   '@polkadot-apps/storage@0.2.8':
     resolution: {integrity: sha512-7+C2Zz090NTdnS7YQ/YBxrI0KRTP7v8oRcmGGptNNoPXJpwuxM9TNsJp0wAIdpohPOCDkJ3FA+Z/uRxzFAAIMw==}
 
-  '@polkadot-apps/terminal@0.2.1':
-    resolution: {integrity: sha512-tR/gpy5fqcD+Drnn1tdbjIifIgQLjdjtGOX3UzphY5bqB84KNE6U6TZ1x1SkwcyqQcS7c88rRDbC0s8Wj4wI2g==}
+  '@polkadot-apps/terminal@0.2.2':
+    resolution: {integrity: sha512-KWXJprsIKFOri2nYkv2w50x8GP5B8Ne2cF48/PiHfN7F5+l1ji/43ON1n2IQrZXKiLruna0vidFHKpCVo/fgHg==}
 
   '@polkadot-apps/tx@0.3.5':
     resolution: {integrity: sha512-QtD5ymZ24Q7sD8HBSKOsDqCXJTFv9/OPRbe75r1oLWVao8TjWV/KCwu4AGXtImVe806jbDXH/InVISkiffx31A==}
@@ -2976,7 +2976,7 @@ snapshots:
       - utf-8-validate
       - yaml
 
-  '@polkadot-apps/terminal@0.2.1(esbuild@0.25.12)(rxjs@7.8.2)':
+  '@polkadot-apps/terminal@0.2.2(esbuild@0.25.12)(rxjs@7.8.2)':
     dependencies:
       '@novasamatech/host-papp': 0.6.17(esbuild@0.25.12)(rxjs@7.8.2)
       '@novasamatech/statement-store': 0.6.17(esbuild@0.25.12)(rxjs@7.8.2)
