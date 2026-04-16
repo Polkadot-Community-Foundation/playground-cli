@@ -13,6 +13,7 @@ These are things that aren't self-evident from reading the code and have bitten 
 
 ## Repo conventions
 
+- **Every user-facing PR must include a changeset.** Releases are automated via `.github/workflows/release.yml`, but the workflow is a no-op unless a `.changeset/*.md` file exists on merge. Create one with `pnpm changeset` (or write `.changeset/<slug>.md` by hand — frontmatter: `"playground-cli": patch|minor|major`, body: user-visible summary). Pure refactors / test-only changes can skip it.
 - Tests are `*.test.ts` next to the source. `vitest.config.ts` only picks up `.test.ts`; if you add `.tsx` tests update the config too.
 - Pure logic that lives inside a `.tsx` component should be lifted into a sibling `.ts` file (see `completion.ts` next to `InitScreen.tsx`, or the `formatPas`/`formatMb` exports in `AccountSetup.tsx`). Tests can then import it without dragging React + Ink into the vitest runner.
 - Do NOT add Claude attribution (`Co-Authored-By: Claude`, emoji signatures, etc.) to commits, PRs, or generated files.
