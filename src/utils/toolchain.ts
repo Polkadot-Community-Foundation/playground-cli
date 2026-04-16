@@ -1,49 +1,66 @@
-import { execSync } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir, platform } from "node:os";
 
-export function commandExists(cmd: string): boolean {
+/** Async exec — resolves with stdout, rejects on non-zero exit. */
+function run(cmd: string, opts?: { shell?: string }): Promise<string> {
+    return new Promise((resolve, reject) => {
+        exec(cmd, { shell: opts?.shell ?? "/bin/bash" }, (err, stdout) => {
+            if (err) reject(err);
+            else resolve(stdout);
+        });
+    });
+}
+
+/** Async exec with stdio inherited (user sees output). */
+function runInherit(cmd: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(cmd, { stdio: "inherit", shell: "/bin/bash" });
+        child.on("close", (code: number) =>
+            code === 0 ? resolve() : reject(new Error(`exit ${code}`)),
+        );
+    });
+}
+
+async function commandExists(cmd: string): Promise<boolean> {
     try {
-        execSync(`command -v ${cmd}`, { stdio: "pipe" });
+        await run(`command -v ${cmd}`);
         return true;
     } catch {
         return false;
     }
 }
 
-function hasRustNightly(): boolean {
+async function hasRustNightly(): Promise<boolean> {
     try {
-        const out = execSync("rustup toolchain list", { encoding: "utf-8", stdio: "pipe" });
+        const out = await run("rustup toolchain list");
         return out.includes("nightly");
     } catch {
         return false;
     }
 }
 
-function hasRustSrc(): boolean {
+async function hasRustSrc(): Promise<boolean> {
     try {
-        const out = execSync("rustup component list --toolchain nightly", {
-            encoding: "utf-8",
-            stdio: "pipe",
-        });
+        const out = await run("rustup component list --toolchain nightly");
         return out.includes("rust-src (installed)");
     } catch {
         return false;
     }
 }
 
-function hasCdm(): boolean {
-    return commandExists("cdm") && commandExists("cargo-pvm-contract");
+async function hasCdm(): Promise<boolean> {
+    return (await commandExists("cdm")) && (await commandExists("cargo-pvm-contract"));
 }
 
 function isIpfsInitialized(): boolean {
     return existsSync(resolve(homedir(), ".ipfs"));
 }
 
-export function isGhAuthenticated(): boolean {
+export async function isGhAuthenticated(): Promise<boolean> {
     try {
-        execSync("gh auth status", { stdio: "pipe" });
+        await run("gh auth status");
         return true;
     } catch {
         return false;
@@ -52,8 +69,8 @@ export function isGhAuthenticated(): boolean {
 
 export interface ToolStep {
     name: string;
-    check: () => boolean;
-    install: () => void;
+    check: () => Promise<boolean>;
+    install: () => Promise<void>;
     manualHint?: string;
 }
 
@@ -62,55 +79,48 @@ export const TOOL_STEPS: ToolStep[] = [
         name: "rustup",
         check: () => commandExists("rustup"),
         install: () =>
-            execSync('curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y', {
-                stdio: "inherit",
-                shell: "/bin/bash",
-            }),
+            runInherit('curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'),
         manualHint: "https://rustup.rs",
     },
     {
         name: "Rust nightly",
         check: () => hasRustNightly(),
-        install: () => execSync("rustup toolchain install nightly", { stdio: "inherit" }),
+        install: () => runInherit("rustup toolchain install nightly"),
     },
     {
         name: "rust-src",
         check: () => hasRustSrc(),
-        install: () =>
-            execSync("rustup component add rust-src --toolchain nightly", { stdio: "inherit" }),
+        install: () => runInherit("rustup component add rust-src --toolchain nightly"),
     },
     {
         name: "cdm & cargo-pvm-contract",
         check: () => hasCdm(),
         install: () =>
-            execSync(
+            runInherit(
                 "curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash",
-                { stdio: "inherit", shell: "/bin/bash" },
             ),
         manualHint:
             "curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash",
     },
     {
         name: "IPFS",
-        check: () => commandExists("ipfs") && isIpfsInitialized(),
-        install: () => {
-            if (!commandExists("ipfs")) {
-                if (platform() === "darwin" && commandExists("brew")) {
-                    execSync("brew install ipfs", { stdio: "inherit" });
+        check: async () => (await commandExists("ipfs")) && isIpfsInitialized(),
+        install: async () => {
+            if (!(await commandExists("ipfs"))) {
+                if (platform() === "darwin" && (await commandExists("brew"))) {
+                    await runInherit("brew install ipfs");
                 } else if (platform() === "darwin") {
-                    execSync(
+                    await runInherit(
                         "curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_darwin-arm64.tar.gz | tar xz && cd kubo && sudo bash install.sh && cd .. && rm -rf kubo",
-                        { stdio: "inherit", shell: "/bin/bash" },
                     );
                 } else {
-                    execSync(
+                    await runInherit(
                         "curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_linux-amd64.tar.gz | tar xz && cd kubo && sudo bash install.sh && cd .. && rm -rf kubo",
-                        { stdio: "inherit", shell: "/bin/bash" },
                     );
                 }
             }
             if (!isIpfsInitialized()) {
-                execSync("ipfs init", { stdio: "inherit" });
+                await runInherit("ipfs init");
             }
         },
         manualHint: "https://docs.ipfs.tech/install/ then run: ipfs init",
@@ -118,12 +128,12 @@ export const TOOL_STEPS: ToolStep[] = [
     {
         name: "GitHub CLI",
         check: () => commandExists("gh"),
-        install: () => {
-            if (commandExists("brew")) {
-                execSync("brew install gh", { stdio: "inherit" });
+        install: async () => {
+            if (await commandExists("brew")) {
+                await runInherit("brew install gh");
             } else {
                 // GH install instructions: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
-                execSync(
+                await runInherit(
                     [
                         "(type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y))",
                         "sudo mkdir -p -m 755 /etc/apt/keyrings",
@@ -135,7 +145,6 @@ export const TOOL_STEPS: ToolStep[] = [
                         "sudo apt update",
                         "sudo apt install gh -y",
                     ].join(" && "),
-                    { stdio: "inherit", shell: "/bin/bash" },
                 );
             }
         },
