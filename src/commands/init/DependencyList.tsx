@@ -5,6 +5,8 @@ import { TOOL_STEPS, isGhAuthenticated } from "../../utils/toolchain.js";
 
 type Status = "pending" | "checking" | "installing" | "ok" | "failed" | "warning";
 
+const OUTPUT_LINES = 5;
+
 interface StepState {
     name: string;
     status: Status;
@@ -39,10 +41,15 @@ export function DependencyList({
         ...TOOL_STEPS.map((s) => ({ name: s.name, status: "pending" as Status })),
         ...(showAuth ? [{ name: "Authenticated", status: "pending" as Status }] : []),
     ]);
+    const [output, setOutput] = useState<string[]>([]);
     const [complete, setComplete] = useState(false);
     const [allOk, setAllOk] = useState(true);
 
     useEffect(() => {
+        const onData = (line: string) => {
+            setOutput((prev) => [...prev.slice(-(OUTPUT_LINES - 1)), line]);
+        };
+
         (async () => {
             let ok = true;
 
@@ -58,8 +65,9 @@ export function DependencyList({
                     setSteps((prev) =>
                         prev.map((s, j) => (j === i ? { ...s, status: "installing" } : s)),
                     );
+                    setOutput([]);
                     try {
-                        await step.install();
+                        await step.install(onData);
                         setSteps((prev) =>
                             prev.map((s, j) => (j === i ? { ...s, status: "ok" } : s)),
                         );
@@ -71,6 +79,7 @@ export function DependencyList({
                             ),
                         );
                     }
+                    setOutput([]);
                 }
             }
 
@@ -113,6 +122,15 @@ export function DependencyList({
                     {step.message && <Text dimColor>{step.message}</Text>}
                 </Box>
             ))}
+            {output.length > 0 && (
+                <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+                    {output.map((line, i) => (
+                        <Text key={i} dimColor>
+                            {line}
+                        </Text>
+                    ))}
+                </Box>
+            )}
             {complete && (
                 <Box marginTop={1}>
                     {allOk ? (

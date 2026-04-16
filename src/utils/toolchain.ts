@@ -13,10 +13,16 @@ function run(cmd: string, opts?: { shell?: string }): Promise<string> {
     });
 }
 
-/** Async exec with stdio inherited (user sees output). */
-function runInherit(cmd: string): Promise<void> {
+/** Async exec with output piped to a callback. */
+function runPiped(cmd: string, onData?: (line: string) => void): Promise<void> {
     return new Promise((resolve, reject) => {
-        const child = spawn(cmd, { stdio: "inherit", shell: "/bin/bash" });
+        const child = spawn(cmd, { stdio: "pipe", shell: "/bin/bash" });
+        const forward = (chunk: Buffer) => {
+            const lines = chunk.toString().split("\n").filter(Boolean);
+            for (const line of lines) onData?.(line);
+        };
+        child.stdout?.on("data", forward);
+        child.stderr?.on("data", forward);
         child.on("close", (code: number) =>
             code === 0 ? resolve() : reject(new Error(`exit ${code}`)),
         );
@@ -70,7 +76,7 @@ export async function isGhAuthenticated(): Promise<boolean> {
 export interface ToolStep {
     name: string;
     check: () => Promise<boolean>;
-    install: () => Promise<void>;
+    install: (onData?: (line: string) => void) => Promise<void>;
     manualHint?: string;
 }
 
@@ -78,26 +84,30 @@ export const TOOL_STEPS: ToolStep[] = [
     {
         name: "rustup",
         check: () => commandExists("rustup"),
-        install: () =>
-            runInherit('curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'),
+        install: (onData) =>
+            runPiped(
+                'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
+                onData,
+            ),
         manualHint: "https://rustup.rs",
     },
     {
         name: "Rust nightly",
         check: () => hasRustNightly(),
-        install: () => runInherit("rustup toolchain install nightly"),
+        install: (onData) => runPiped("rustup toolchain install nightly", onData),
     },
     {
         name: "rust-src",
         check: () => hasRustSrc(),
-        install: () => runInherit("rustup component add rust-src --toolchain nightly"),
+        install: (onData) => runPiped("rustup component add rust-src --toolchain nightly", onData),
     },
     {
         name: "cdm & cargo-pvm-contract",
         check: () => hasCdm(),
-        install: () =>
-            runInherit(
+        install: (onData) =>
+            runPiped(
                 "curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash",
+                onData,
             ),
         manualHint:
             "curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash",
@@ -105,22 +115,24 @@ export const TOOL_STEPS: ToolStep[] = [
     {
         name: "IPFS",
         check: async () => (await commandExists("ipfs")) && isIpfsInitialized(),
-        install: async () => {
+        install: async (onData) => {
             if (!(await commandExists("ipfs"))) {
                 if (platform() === "darwin" && (await commandExists("brew"))) {
-                    await runInherit("brew install ipfs");
+                    await runPiped("brew install ipfs", onData);
                 } else if (platform() === "darwin") {
-                    await runInherit(
+                    await runPiped(
                         "curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_darwin-arm64.tar.gz | tar xz && cd kubo && sudo bash install.sh && cd .. && rm -rf kubo",
+                        onData,
                     );
                 } else {
-                    await runInherit(
+                    await runPiped(
                         "curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_linux-amd64.tar.gz | tar xz && cd kubo && sudo bash install.sh && cd .. && rm -rf kubo",
+                        onData,
                     );
                 }
             }
             if (!isIpfsInitialized()) {
-                await runInherit("ipfs init");
+                await runPiped("ipfs init", onData);
             }
         },
         manualHint: "https://docs.ipfs.tech/install/ then run: ipfs init",
@@ -128,12 +140,12 @@ export const TOOL_STEPS: ToolStep[] = [
     {
         name: "GitHub CLI",
         check: () => commandExists("gh"),
-        install: async () => {
+        install: async (onData) => {
             if (await commandExists("brew")) {
-                await runInherit("brew install gh");
+                await runPiped("brew install gh", onData);
             } else {
                 // GH install instructions: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
-                await runInherit(
+                await runPiped(
                     [
                         "(type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y))",
                         "sudo mkdir -p -m 755 /etc/apt/keyrings",
@@ -145,6 +157,7 @@ export const TOOL_STEPS: ToolStep[] = [
                         "sudo apt update",
                         "sudo apt install gh -y",
                     ].join(" && "),
+                    onData,
                 );
             }
         },
