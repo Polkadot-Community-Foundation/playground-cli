@@ -137,8 +137,7 @@ export function DependencyList({ onDone }: { onDone: () => void }) {
                                 .map((s) => (
                                     <Box key={s.name} flexDirection="column">
                                         <Text>
-                                            <Text color="red">✖</Text>{" "}
-                                            <Text bold>{s.name}</Text>
+                                            <Text color="red">✖</Text> <Text bold>{s.name}</Text>
                                         </Text>
                                         {s.message && <Text>{s.message}</Text>}
                                     </Box>
