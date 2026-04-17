@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { initCommand } from "./commands/init/index.js";
-import { modCommand } from "./commands/mod.js";
+import { modCommand } from "./commands/mod/index.js";
 import { buildCommand } from "./commands/build.js";
 import { deployCommand } from "./commands/deploy.js";
 import { updateCommand } from "./commands/update.js";
