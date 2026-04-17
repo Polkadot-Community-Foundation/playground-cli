@@ -59,7 +59,7 @@ export const modCommand = new Command("mod")
                 console.log("  Next steps:");
                 console.log(`  1. cd ${targetDir}`);
                 console.log("  2. edit with claude");
-                console.log("  3. dot deploy");
+                console.log("  3. dot deploy --playground");
             }
         } finally {
             resolved.destroy();
