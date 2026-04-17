@@ -19,4 +19,4 @@ program.addCommand(buildCommand);
 program.addCommand(deployCommand);
 program.addCommand(updateCommand);
 
-program.parse();
+program.parseAsync().then(() => process.exit(0));

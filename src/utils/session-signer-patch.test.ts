@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { SignerPayloadJSON } from "polkadot-api/pjs-signer";
-import { adaptSignPayload, adaptSignRaw, fromHex, toHex } from "./signer.js";
+import { adaptSignPayload, adaptSignRaw, fromHex, toHex } from "./session-signer-patch.js";
 
 // Duck-typed Result builders. Our session.signPayload returns neverthrow's
 // ResultAsync, but our adapter only touches `isErr()`, `.value`, `.error`.
