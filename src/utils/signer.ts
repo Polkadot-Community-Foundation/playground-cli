@@ -11,8 +11,6 @@ import { createDevSigner, getDevPublicKey, type DevAccountName } from "@polkadot
 import type { PolkadotSigner } from "polkadot-api";
 import { getSessionSigner, type SessionHandle } from "./auth.js";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
 export type SignerSource = "dev" | "session";
 
 export interface ResolvedSigner {
