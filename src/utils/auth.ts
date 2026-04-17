@@ -17,7 +17,7 @@ import {
     type PairingStatus,
     type AttestationStatus,
 } from "@polkadot-apps/terminal";
-import { createTxSigner } from "./signer.js";
+import { createTxSigner } from "./session-signer-patch.js";
 import type { PolkadotSigner } from "polkadot-api";
 
 const DEFAULT_METADATA_URL =

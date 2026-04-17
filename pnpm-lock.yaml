@@ -28,7 +28,7 @@ importers:
         version: 0.4.4(postcss@8.5.10)(rxjs@7.8.2)
       '@polkadot-apps/terminal':
         specifier: latest
-        version: 0.2.2(esbuild@0.27.7)(postcss@8.5.10)(rxjs@7.8.2)
+        version: 0.2.3(esbuild@0.27.7)(postcss@8.5.10)(rxjs@7.8.2)
       '@polkadot-apps/tx':
         specifier: latest
         version: 0.3.5(postcss@8.5.10)(rxjs@7.8.2)
@@ -1103,8 +1103,8 @@ packages:
   '@polkadot-apps/storage@0.2.8':
     resolution: {integrity: sha512-7+C2Zz090NTdnS7YQ/YBxrI0KRTP7v8oRcmGGptNNoPXJpwuxM9TNsJp0wAIdpohPOCDkJ3FA+Z/uRxzFAAIMw==}
 
-  '@polkadot-apps/terminal@0.2.2':
-    resolution: {integrity: sha512-KWXJprsIKFOri2nYkv2w50x8GP5B8Ne2cF48/PiHfN7F5+l1ji/43ON1n2IQrZXKiLruna0vidFHKpCVo/fgHg==}
+  '@polkadot-apps/terminal@0.2.3':
+    resolution: {integrity: sha512-3b86jZExSCyKp9hpvAwW00BlBoNtz9k6HtTTl4El655hB/X52drn/2ZNSpNVO7Yw1K0T7xbVU/sYH8/NK5NrNQ==}
 
   '@polkadot-apps/tx@0.3.5':
     resolution: {integrity: sha512-QtD5ymZ24Q7sD8HBSKOsDqCXJTFv9/OPRbe75r1oLWVao8TjWV/KCwu4AGXtImVe806jbDXH/InVISkiffx31A==}
@@ -2775,8 +2775,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  typescript@6.0.2:
-    resolution: {integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ==}
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -3983,8 +3983,8 @@ snapshots:
       rollup: 4.60.1
       rollup-plugin-esbuild: 6.2.1(esbuild@0.27.7)(rollup@4.60.1)
       rxjs: 7.8.2
-      tsc-prog: 2.3.0(typescript@6.0.2)
-      typescript: 6.0.2
+      tsc-prog: 2.3.0(typescript@6.0.3)
+      typescript: 6.0.3
       write-package: 7.2.0
     transitivePeerDependencies:
       - bufferutil
@@ -4459,7 +4459,7 @@ snapshots:
       - utf-8-validate
       - yaml
 
-  '@polkadot-apps/terminal@0.2.2(esbuild@0.27.7)(postcss@8.5.10)(rxjs@7.8.2)':
+  '@polkadot-apps/terminal@0.2.3(esbuild@0.27.7)(postcss@8.5.10)(rxjs@7.8.2)':
     dependencies:
       '@novasamatech/host-papp': 0.6.17(esbuild@0.27.7)(postcss@8.5.10)(rxjs@7.8.2)
       '@novasamatech/statement-store': 0.6.17(esbuild@0.27.7)(postcss@8.5.10)(rxjs@7.8.2)
@@ -6220,9 +6220,9 @@ snapshots:
     dependencies:
       typescript: 5.9.3
 
-  tsc-prog@2.3.0(typescript@6.0.2):
+  tsc-prog@2.3.0(typescript@6.0.3):
     dependencies:
-      typescript: 6.0.2
+      typescript: 6.0.3
 
   tslib@2.8.1: {}
 
@@ -6264,7 +6264,7 @@ snapshots:
 
   typescript@5.9.3: {}
 
-  typescript@6.0.2: {}
+  typescript@6.0.3: {}
 
   ufo@1.6.3: {}
 
