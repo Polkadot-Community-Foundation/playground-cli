@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Box, Text } from "ink";
+import { Box } from "ink";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getGateway, fetchJson } from "@polkadot-apps/bulletin";
-import { StepRunner, type Step, type StepRunnerResult } from "../../utils/ui/index.js";
+import { StepRunner, type Step } from "../../utils/ui/components/StepRunner.js";
+import { Header, Hint, Row, Section } from "../../utils/ui/theme/index.js";
 import { isGhAuthenticated, forkAndClone, cloneRepo, runCommand } from "../../utils/git.js";
+import { VERSION_LABEL } from "../../utils/version.js";
 
 interface AppMetadata {
     name?: string;
@@ -39,24 +41,24 @@ export function SetupScreen({
 
     const steps: Step[] = [
         {
-            name: "Fetch app metadata",
+            name: "fetch app metadata",
             run: async (log) => {
                 if (initial) {
-                    log("Using cached metadata");
+                    log("using cached metadata");
                     return;
                 }
-                log(`Querying registry for ${domain}...`);
+                log(`querying registry for ${domain}...`);
                 const metaRes = await registry.getMetadataUri.query(domain);
                 const cid = metaRes.value.isSome ? metaRes.value.value : null;
                 if (!cid) throw new Error(`App "${domain}" not found in registry`);
 
-                log(`Fetching metadata from IPFS (${cid.slice(0, 16)}...)...`);
+                log(`fetching metadata from IPFS (${cid.slice(0, 16)}...)...`);
                 meta = await fetchJson<AppMetadata>(cid, getGateway("paseo"));
                 if (!meta.repository) throw new Error("App has no repository URL");
             },
         },
         {
-            name: canFork ? "Fork & clone" : "Clone",
+            name: canFork ? "fork & clone" : "clone",
             run: async (log) => {
                 const repo = meta.repository!;
                 if (canFork) {
@@ -69,10 +71,10 @@ export function SetupScreen({
             },
         },
         {
-            name: "Run setup.sh",
+            name: "run setup.sh",
             run: async (log) => {
                 if (!existsSync(resolve(targetDir, "setup.sh"))) {
-                    throw new StepWarning("No setup.sh found");
+                    throw new StepWarning("no setup.sh found");
                 }
                 await runCommand("bash setup.sh", { cwd: targetDir, log });
             },
@@ -83,21 +85,23 @@ export function SetupScreen({
 
     return (
         <Box flexDirection="column">
+            <Header cmd="dot mod" subtitle={domain} network="paseo" right={VERSION_LABEL} />
+
             <StepRunner
-                title={`Modding ${domain}`}
+                title={`modding ${domain}`}
                 steps={steps}
                 onDone={(result) => {
                     if (result.error) setError(result.error);
                     onDone(result.ok);
                 }}
             />
-            <Box marginTop={1} paddingLeft={2}>
-                <Text dimColor>→ {targetDir}</Text>
-            </Box>
+
+            <Hint>→ {targetDir}</Hint>
+
             {error && (
-                <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-                    <Text color="red">{error}</Text>
-                </Box>
+                <Section>
+                    <Row mark="fail" label="setup failed" value={error} tone="danger" />
+                </Section>
             )}
         </Box>
     );

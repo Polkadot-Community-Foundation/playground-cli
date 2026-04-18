@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Box, Text } from "ink";
-import { Spinner, Done, Failed, Warning } from "../../utils/ui/index.js";
+import { Box } from "ink";
+import { Row, LogTail, Section, type MarkKind } from "../../utils/ui/theme/index.js";
 import { TOOL_STEPS, isGhAuthenticated } from "../../utils/toolchain.js";
 
 type Status = "pending" | "checking" | "installing" | "ok" | "failed" | "warning";
@@ -14,19 +14,19 @@ interface StepState {
     hint?: string;
 }
 
-function StatusIcon({ status }: { status: Status }) {
+function toMark(status: Status): MarkKind {
     switch (status) {
+        case "ok":
+            return "ok";
+        case "failed":
+            return "fail";
+        case "warning":
+            return "warn";
         case "checking":
         case "installing":
-            return <Spinner />;
-        case "ok":
-            return <Done />;
-        case "failed":
-            return <Failed />;
-        case "warning":
-            return <Warning />;
+            return "run";
         default:
-            return <Text dimColor>·</Text>;
+            return "idle";
     }
 }
 
@@ -37,11 +37,10 @@ export function DependencyList({ onDone }: { onDone: () => void }) {
             status: "pending" as Status,
             hint: s.manualHint,
         })),
-        { name: "Authenticated", status: "pending" as Status },
+        { name: "authenticated", status: "pending" as Status },
     ]);
     const [output, setOutput] = useState<string[]>([]);
     const [complete, setComplete] = useState(false);
-    const [allOk, setAllOk] = useState(true);
 
     useEffect(() => {
         const onData = (line: string) => {
@@ -49,8 +48,6 @@ export function DependencyList({ onDone }: { onDone: () => void }) {
         };
 
         (async () => {
-            let ok = true;
-
             for (let i = 0; i < TOOL_STEPS.length; i++) {
                 const step = TOOL_STEPS[i];
                 setSteps((prev) =>
@@ -71,7 +68,6 @@ export function DependencyList({ onDone }: { onDone: () => void }) {
                         );
                         setOutput([]);
                     } catch (err) {
-                        ok = false;
                         const msg = err instanceof Error ? err.message : String(err);
                         setSteps((prev) =>
                             prev.map((s, j) =>
@@ -92,13 +88,12 @@ export function DependencyList({ onDone }: { onDone: () => void }) {
                 setSteps((prev) =>
                     prev.map((s, j) =>
                         j === authIdx
-                            ? { ...s, status: "warning", message: "Run: gh auth login" }
+                            ? { ...s, status: "warning", message: "run: gh auth login" }
                             : s,
                     ),
                 );
             }
 
-            setAllOk(ok);
             setComplete(true);
         })();
     }, []);
@@ -108,50 +103,28 @@ export function DependencyList({ onDone }: { onDone: () => void }) {
     }, [complete]);
 
     return (
-        <Box flexDirection="column" paddingLeft={2}>
-            <Box marginBottom={1}>
-                <Text bold>Installing dependencies</Text>
-            </Box>
+        <Section title="dependencies">
             {steps.map((step) => (
-                <Box key={step.name} gap={1}>
-                    <StatusIcon status={step.status} />
-                    <Text>{step.name}</Text>
-                    {step.message && <Text dimColor>{step.message}</Text>}
-                </Box>
+                <Row
+                    key={step.name}
+                    mark={toMark(step.status)}
+                    label={step.name}
+                    value={step.message}
+                    tone={
+                        step.status === "failed"
+                            ? "danger"
+                            : step.status === "warning"
+                              ? "warning"
+                              : "muted"
+                    }
+                    hint={step.status === "failed" ? step.hint : undefined}
+                />
             ))}
             {!complete && (
-                <Box flexDirection="column" marginTop={1} paddingLeft={2} height={OUTPUT_LINES}>
-                    {Array.from({ length: OUTPUT_LINES }, (_, i) => (
-                        <Text key={i} dimColor>
-                            {output[i] ?? " "}
-                        </Text>
-                    ))}
-                </Box>
-            )}
-            {complete && (
                 <Box marginTop={1}>
-                    {allOk ? (
-                        <Text>
-                            <Text color="green">✔</Text>{" "}
-                            <Text bold>All dependencies installed</Text>
-                        </Text>
-                    ) : (
-                        <Box flexDirection="column">
-                            {steps
-                                .filter((s) => s.status === "failed")
-                                .map((s) => (
-                                    <Box key={s.name} flexDirection="column">
-                                        <Text>
-                                            <Text color="red">✖</Text> <Text bold>{s.name}</Text>
-                                        </Text>
-                                        {s.message && <Text>{s.message}</Text>}
-                                        {s.hint && <Text dimColor>Manual install: {s.hint}</Text>}
-                                    </Box>
-                                ))}
-                        </Box>
-                    )}
+                    <LogTail lines={output} height={OUTPUT_LINES} />
                 </Box>
             )}
-        </Box>
+        </Section>
     );
 }

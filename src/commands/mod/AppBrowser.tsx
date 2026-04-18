@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
 import { getGateway, fetchJson } from "@polkadot-apps/bulletin";
-import { Spinner } from "../../utils/ui/index.js";
+import { Mark, Hint, COLOR } from "../../utils/ui/theme/index.js";
 
 export interface AppEntry {
     domain: string;
@@ -41,11 +41,9 @@ export function AppBrowser({ registry, onSelect }: Props) {
             const indices = [];
             for (let i = startIdx; i > startIdx - BATCH && i >= 0; i--) indices.push(i);
 
-            // Track where next batch should start
             const lowestQueried = Math.min(...indices);
             nextIdx.current = lowestQueried > 0 ? lowestQueried - 1 : null;
 
-            // Fetch domains in parallel
             const results = await Promise.all(
                 indices.map(async (i) => {
                     const res = await registry.getDomainAt.query(i);
@@ -60,7 +58,6 @@ export function AppBrowser({ registry, onSelect }: Props) {
             setApps((prev) => [...prev, ...entries]);
             setFetching(false);
 
-            // Fetch metadata in background, update each entry as it arrives
             await Promise.allSettled(
                 entries.map(async (entry) => {
                     const metaRes = await registry.getMetadataUri.query(entry.domain);
@@ -85,7 +82,6 @@ export function AppBrowser({ registry, onSelect }: Props) {
         [registry, gateway],
     );
 
-    // Initial load
     useEffect(() => {
         (async () => {
             const res = await registry.getAppCount.query();
@@ -95,14 +91,12 @@ export function AppBrowser({ registry, onSelect }: Props) {
         })();
     }, []);
 
-    // Auto-load when cursor nears end
     useEffect(() => {
         if (cursor >= apps.length - 3 && nextIdx.current !== null && !fetching) {
             loadBatch(nextIdx.current);
         }
     }, [cursor, apps.length, fetching]);
 
-    // Keyboard
     useInput((input, key) => {
         if (key.upArrow && cursor > 0) {
             const next = cursor - 1;
@@ -122,47 +116,45 @@ export function AppBrowser({ registry, onSelect }: Props) {
     const descW = Math.max((stdout?.columns ?? 80) - COL.num - COL.domain - COL.name - 10, 10);
 
     return (
-        <Box flexDirection="column">
+        <Box flexDirection="column" paddingLeft={2}>
             <Box>
                 <Text dimColor>
-                    {pad(" #", COL.num)}│ {pad("Domain", COL.domain)}│ {pad("Name", COL.name)}│{" "}
-                    Description
+                    {`${pad(" #", COL.num)}  ${pad("domain", COL.domain)}  ${pad(
+                        "name",
+                        COL.name,
+                    )}  description`}
                 </Text>
             </Box>
             <Box>
-                <Text dimColor>
-                    {"─".repeat(COL.num)}┼{"─".repeat(COL.domain + 1)}┼{"─".repeat(COL.name + 1)}┼
-                    {"─".repeat(descW + 1)}
-                </Text>
+                <Text dimColor>{"─".repeat(COL.num + COL.domain + COL.name + descW + 6)}</Text>
             </Box>
 
             {visible.map((app, i) => {
                 const idx = scroll + i;
                 const sel = idx === cursor;
                 const num = sel
-                    ? `>${String(idx + 1).padStart(COL.num - 1)}`
+                    ? `›${String(idx + 1).padStart(COL.num - 1)}`
                     : ` ${String(idx + 1).padStart(COL.num - 1)}`;
                 return (
                     <Box key={idx}>
-                        <Text bold={sel} color={sel ? "cyan" : undefined}>
-                            {num}│ {pad(app.domain, COL.domain)}│{" "}
-                            {pad(app.name ?? (app.name === null ? "…" : "—"), COL.name)}│{" "}
-                            {pad(app.description ?? "", descW)}
+                        <Text bold={sel} color={sel ? COLOR.accent : undefined}>
+                            {`${num}  ${pad(app.domain, COL.domain)}  ${pad(
+                                app.name ?? (app.name === null ? "…" : "—"),
+                                COL.name,
+                            )}  ${pad(app.description ?? "", descW)}`}
                         </Text>
                     </Box>
                 );
             })}
 
             {fetching && (
-                <Box gap={1}>
-                    <Spinner />
-                    <Text dimColor>Loading apps...</Text>
+                <Box gap={1} marginTop={1} paddingLeft={0}>
+                    <Mark kind="run" />
+                    <Text dimColor>loading apps…</Text>
                 </Box>
             )}
             <Box marginTop={fetching ? 0 : 1}>
-                <Text dimColor>
-                    ↑↓ navigate ⏎ select q quit ({apps.length}/{total})
-                </Text>
+                <Hint>{`↑↓ navigate  ·  ⏎ select  ·  q quit  ·  (${apps.length}/${total})`}</Hint>
             </Box>
         </Box>
     );

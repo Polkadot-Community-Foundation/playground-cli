@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Box, Text } from "ink";
+import { Box } from "ink";
+import { Header, Row, Section } from "../../utils/ui/theme/index.js";
 import { DependencyList } from "./DependencyList.js";
 import { QrLogin } from "./QrLogin.js";
 import { AccountSetup } from "./AccountSetup.js";
 import { computeAllDone } from "./completion.js";
+import { VERSION_LABEL } from "../../utils/version.js";
 import type { LoginHandle } from "../../utils/auth.js";
 
 export function InitScreen({
@@ -50,24 +52,35 @@ export function InitScreen({
 
     return (
         <Box flexDirection="column">
+            <Header
+                cmd="dot init"
+                subtitle="polkadot playground"
+                network="paseo"
+                right={VERSION_LABEL}
+            />
+
             {needsQr && <QrLogin login={login} onDone={handleAuthDone} />}
             {!needsQr && existingAddress && (
-                <Box paddingLeft={2} gap={1} marginBottom={1}>
-                    <Text color="green">✔</Text>
-                    <Text bold>Logged in</Text>
-                    <Text dimColor>{existingAddress}</Text>
-                </Box>
+                <Section>
+                    <Row mark="ok" label="logged in" value={existingAddress} tone="muted" />
+                </Section>
             )}
+
             <DependencyList onDone={handleDepsDone} />
+
             {loggedInAddress && depsComplete && (
                 <AccountSetup address={loggedInAddress} onDone={handleAccountDone} />
             )}
+
             {allDone && (
-                <Box paddingLeft={2} marginTop={1}>
-                    <Text color="green">✔</Text>
-                    <Text bold> Setup complete</Text>
-                    {!accountOk && <Text dimColor> (some account setup steps failed)</Text>}
-                </Box>
+                <Section gapBelow={false}>
+                    <Row
+                        mark="ok"
+                        label="setup complete"
+                        value={accountOk ? undefined : "some account setup steps failed"}
+                        tone={accountOk ? "default" : "warning"}
+                    />
+                </Section>
             )}
         </Box>
     );

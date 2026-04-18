@@ -1,14 +1,14 @@
 /**
- * Reusable step runner — displays a list of sequential steps with
- * spinner → ✔/✖/! transitions and a fixed-height log box for output.
+ * Reusable step runner — displays a list of sequential steps with status
+ * marks and a fixed-height log tail for step output.
  *
  * Errors are passed to onDone for the parent to display below the UI.
- * Warnings (isWarning = true) show inline and don't stop execution.
+ * Warnings (`isWarning = true`) show inline and don't stop execution.
  */
 
 import { useState, useEffect } from "react";
-import { Box, Text } from "ink";
-import { Spinner, Done, Failed, Warning } from "./loading.js";
+import { Box } from "ink";
+import { Row, Section, LogTail, type MarkKind } from "../theme/index.js";
 
 export interface Step {
     name: string;
@@ -25,23 +25,18 @@ interface StepState {
 
 const LOG_LINES = 5;
 
-function StatusIcon({ status }: { status: StepStatus }) {
-    // ✔ and ✖ render wide (2 cols). Pad spinner and · to match.
+function toMark(status: StepStatus): MarkKind {
     switch (status) {
         case "running":
-            return (
-                <Text>
-                    <Spinner />{" "}
-                </Text>
-            );
+            return "run";
         case "ok":
-            return <Done />;
+            return "ok";
         case "failed":
-            return <Failed />;
+            return "fail";
         case "warning":
-            return <Warning />;
+            return "warn";
         default:
-            return <Text dimColor>· </Text>;
+            return "idle";
     }
 }
 
@@ -112,30 +107,21 @@ export function StepRunner({ title, steps, onDone }: Props) {
     const running = states.some((s) => s.status === "running");
 
     return (
-        <Box flexDirection="column" paddingLeft={2}>
-            <Box marginBottom={1} marginTop={1}>
-                <Text bold>{title}</Text>
-            </Box>
-
+        <Section title={title}>
             {states.map((step) => (
-                <Box key={step.name} gap={1}>
-                    <StatusIcon status={step.status} />
-                    <Text>
-                        {step.name}
-                        {step.message ? <Text dimColor> — {step.message}</Text> : ""}
-                    </Text>
-                </Box>
+                <Row
+                    key={step.name}
+                    mark={toMark(step.status)}
+                    label={step.name}
+                    value={step.message}
+                    tone={step.status === "failed" ? "danger" : "muted"}
+                />
             ))}
-
             {running && output.length > 0 && (
-                <Box flexDirection="column" marginTop={1} paddingLeft={2} height={LOG_LINES}>
-                    {Array.from({ length: LOG_LINES }, (_, i) => (
-                        <Text key={i} dimColor>
-                            {output[i] ?? " "}
-                        </Text>
-                    ))}
+                <Box marginTop={1}>
+                    <LogTail lines={output} height={LOG_LINES} />
                 </Box>
             )}
-        </Box>
+        </Section>
     );
 }

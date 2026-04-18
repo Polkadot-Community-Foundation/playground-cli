@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
-import { Spinner, Done, Failed, Warning } from "../../utils/ui/index.js";
+import {
+    Header,
+    Row,
+    Section,
+    Hint,
+    Callout,
+    Sparkline,
+    Select,
+    Input,
+    setWindowTitle,
+    type MarkKind,
+} from "../../utils/ui/theme/index.js";
 import {
     runDeploy,
     resolveSignerSetup,
@@ -17,6 +28,7 @@ import {
 import { buildSummaryView } from "./summary.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
 import { DEFAULT_BUILD_DIR } from "../../config.js";
+import { VERSION_LABEL } from "../../utils/version.js";
 
 export interface DeployScreenInputs {
     projectDir: string;
@@ -64,6 +76,11 @@ export function DeployScreen({
         pickInitialStage(initialMode, initialBuildDir, initialDomain, initialPublish),
     );
 
+    // Passed down to RunningStage; read back on completion for the sparkline.
+    // Ref instead of state so the high-frequency chunk-progress stream doesn't
+    // force re-renders of the whole DeployScreen.
+    const finalChunkTimingsRef = useRef<number[]>([]);
+
     const advance = (
         nextMode: SignerMode | null = mode,
         nextBuildDir: string | null = buildDir,
@@ -74,26 +91,49 @@ export function DeployScreen({
         setStage(s);
     };
 
-    // Used only once inputs are fully resolved; read by the `running` stage.
     const resolved = useMemo<Resolved | null>(() => {
         if (mode === null || buildDir === null || domain === null || publishToPlayground === null)
             return null;
         return { mode, buildDir, domain, publishToPlayground };
     }, [mode, buildDir, domain, publishToPlayground]);
 
+    // Dynamic terminal tab title: subtitle becomes the domain once we know it.
+    const headerSubtitle = resolved?.domain ?? domain ?? undefined;
+
     return (
-        <Box flexDirection="column" paddingLeft={2}>
+        <Box flexDirection="column">
+            <Header
+                cmd="dot deploy"
+                subtitle={headerSubtitle}
+                network="paseo"
+                right={VERSION_LABEL}
+            />
+
             {stage.kind === "prompt-signer" && (
-                <SignerPrompt
+                <Select<SignerMode>
+                    label="signer"
+                    options={[
+                        {
+                            value: "dev",
+                            label: "dev signer",
+                            hint: "fast, 0 phone taps for upload",
+                        },
+                        {
+                            value: "phone",
+                            label: "your phone signer",
+                            hint: "signed with your logged-in account",
+                        },
+                    ]}
                     onSelect={(m) => {
                         setMode(m);
                         advance(m);
                     }}
                 />
             )}
+
             {stage.kind === "prompt-buildDir" && (
-                <TextPrompt
-                    label="Build directory"
+                <Input
+                    label="build directory"
                     initial={DEFAULT_BUILD_DIR}
                     onSubmit={(v) => {
                         setBuildDir(v);
@@ -101,16 +141,17 @@ export function DeployScreen({
                     }}
                 />
             )}
+
             {stage.kind === "prompt-domain" && (
-                <TextPrompt
-                    label="Domain (e.g. my-app)"
-                    initial=""
+                <Input
+                    label="domain"
+                    placeholder="my-app"
                     prefill={domain ?? ""}
                     externalError={domainError}
                     validate={(v) =>
                         /^[a-z0-9][a-z0-9-]*(\.dot)?$/i.test(v.trim())
                             ? null
-                            : "Use lowercase letters, digits, and dashes."
+                            : "use lowercase letters, digits, and dashes"
                     }
                     onSubmit={(v) => {
                         const trimmed = v.trim();
@@ -120,6 +161,7 @@ export function DeployScreen({
                     }}
                 />
             )}
+
             {stage.kind === "validate-domain" && (
                 <ValidateDomainStage
                     domain={stage.domain}
@@ -134,16 +176,22 @@ export function DeployScreen({
                     }}
                 />
             )}
+
             {stage.kind === "prompt-publish" && (
-                <YesNoPrompt
-                    label="Publish to the Playground?"
-                    initial={false}
-                    onSubmit={(yes) => {
+                <Select<boolean>
+                    label="publish to the playground?"
+                    options={[
+                        { value: false, label: "no", hint: "DotNS only" },
+                        { value: true, label: "yes", hint: "publish to the playground registry" },
+                    ]}
+                    initialIndex={0}
+                    onSelect={(yes) => {
                         setPublishToPlayground(yes);
                         advance(mode, buildDir, domain, yes);
                     }}
                 />
             )}
+
             {stage.kind === "confirm" && resolved && (
                 <ConfirmStage
                     inputs={resolved}
@@ -154,34 +202,36 @@ export function DeployScreen({
                     }}
                 />
             )}
+
             {stage.kind === "running" && resolved && (
                 <RunningStage
                     projectDir={projectDir}
                     inputs={resolved}
                     userSigner={userSigner}
-                    onFinish={(outcome) => {
+                    onFinish={(outcome, chunkTimings) => {
                         setStage({ kind: "done", outcome });
+                        // Surface completion on the terminal tab so users can glance over.
+                        setWindowTitle(`dot deploy · ${resolved.domain} · ✓`);
                         onDone(outcome);
+                        // chunkTimings is threaded via ref below — consumed by FinalResult.
+                        finalChunkTimingsRef.current = chunkTimings;
                     }}
                     onError={(message) => {
                         setStage({ kind: "error", message });
+                        setWindowTitle(`dot deploy · ${resolved.domain} · ✕`);
                         onDone(null);
                     }}
                 />
             )}
-            {stage.kind === "done" && <FinalResult outcome={stage.outcome} />}
+
+            {stage.kind === "done" && (
+                <FinalResult outcome={stage.outcome} chunkTimings={finalChunkTimingsRef.current} />
+            )}
+
             {stage.kind === "error" && (
-                <Box flexDirection="column" marginTop={1}>
-                    <Box gap={1}>
-                        <Failed />
-                        <Text color="red" bold>
-                            Deploy failed
-                        </Text>
-                    </Box>
-                    <Text color="red" dimColor wrap="wrap">
-                        {stage.message}
-                    </Text>
-                </Box>
+                <Section>
+                    <Row mark="fail" label="deploy failed" value={stage.message} tone="danger" />
+                </Section>
             )}
         </Box>
     );
@@ -211,97 +261,7 @@ function pickNextStage(
     return { kind: "confirm" };
 }
 
-// ── Prompt components ────────────────────────────────────────────────────────
-
-function SignerPrompt({ onSelect }: { onSelect: (mode: SignerMode) => void }) {
-    const [index, setIndex] = useState(0);
-    const options: Array<{ mode: SignerMode; label: string; hint: string }> = [
-        { mode: "dev", label: "Dev signer", hint: "Fast. 0 phone taps for upload." },
-        { mode: "phone", label: "Your phone signer", hint: "Signed with your logged-in account." },
-    ];
-
-    useInput((_input, key) => {
-        if (key.upArrow) setIndex((i) => (i - 1 + options.length) % options.length);
-        if (key.downArrow) setIndex((i) => (i + 1) % options.length);
-        if (key.return) onSelect(options[index].mode);
-    });
-
-    return (
-        <Box flexDirection="column">
-            <Text bold>Signer — use ↑/↓ then Enter</Text>
-            {options.map((opt, i) => (
-                <Box key={opt.mode} gap={1}>
-                    <Text color={i === index ? "cyan" : undefined}>{i === index ? "▸" : " "}</Text>
-                    <Text color={i === index ? "cyan" : undefined} bold={i === index}>
-                        {opt.label}
-                    </Text>
-                    <Text dimColor>— {opt.hint}</Text>
-                </Box>
-            ))}
-        </Box>
-    );
-}
-
-function TextPrompt({
-    label,
-    initial,
-    prefill,
-    externalError,
-    validate,
-    onSubmit,
-}: {
-    label: string;
-    initial: string;
-    prefill?: string;
-    externalError?: string | null;
-    validate?: (value: string) => string | null;
-    onSubmit: (value: string) => void;
-}) {
-    const [value, setValue] = useState(prefill ?? initial);
-    const [error, setError] = useState<string | null>(null);
-
-    useInput((input, key) => {
-        if (key.return) {
-            const final = value.trim() || initial;
-            if (validate) {
-                const msg = validate(final);
-                if (msg) {
-                    setError(msg);
-                    return;
-                }
-            }
-            onSubmit(final);
-            return;
-        }
-        if (key.backspace || key.delete) {
-            setValue((v) => v.slice(0, -1));
-            setError(null);
-            return;
-        }
-        if (key.ctrl || key.meta) return;
-        // Accept printable characters.
-        if (input && input.length > 0 && input >= " " && input !== "\t") {
-            setValue((v) => v + input);
-            setError(null);
-        }
-    });
-
-    const shownError = error ?? externalError ?? null;
-    return (
-        <Box flexDirection="column">
-            <Text bold>
-                {label}
-                {initial ? ` [${initial}]` : ""}
-            </Text>
-            <Box>
-                <Text color="cyan">▸ </Text>
-                <Text>{value}</Text>
-                <Text color="cyan">█</Text>
-            </Box>
-            {shownError && <Text color="red">{shownError}</Text>}
-        </Box>
-    );
-}
+// ── Domain validation ────────────────────────────────────────────────────────
 
 function ValidateDomainStage({
     domain,
@@ -326,7 +286,7 @@ function ValidateDomainStage({
                 if (result.status === "available") {
                     setStatus("done");
                     setMessage(formatAvailability(result));
-                    // Short hold so the user can read any note (e.g. "PoP will
+                    // Short hold so users can read any note (e.g. "PoP will
                     // be set up automatically") before the next prompt mounts.
                     setTimeout(
                         () => {
@@ -346,7 +306,7 @@ function ValidateDomainStage({
                 if (cancelled) return;
                 const msg = err instanceof Error ? err.message : String(err);
                 setStatus("error");
-                setMessage(`Availability check failed: ${msg}`);
+                setMessage(`availability check failed: ${msg}`);
                 setTimeout(() => {
                     if (!cancelled) onUnavailable(msg);
                 }, 600);
@@ -357,48 +317,12 @@ function ValidateDomainStage({
         };
     }, [domain]);
 
+    const mark: MarkKind = status === "checking" ? "run" : status === "done" ? "ok" : "fail";
+    const label = status === "checking" ? `checking ${domain}` : (message ?? "");
     return (
-        <Box flexDirection="column">
-            <Box gap={1}>
-                {status === "checking" ? <Spinner /> : status === "done" ? <Done /> : <Failed />}
-                <Text>
-                    {status === "checking" ? `Checking availability of ${domain}…` : message}
-                </Text>
-            </Box>
-        </Box>
-    );
-}
-
-function YesNoPrompt({
-    label,
-    initial,
-    onSubmit,
-}: {
-    label: string;
-    initial: boolean;
-    onSubmit: (yes: boolean) => void;
-}) {
-    const [yes, setYes] = useState(initial);
-
-    useInput((input, key) => {
-        if (key.leftArrow || key.rightArrow || input === "y" || input === "n") {
-            setYes((prev) => (input === "y" ? true : input === "n" ? false : !prev));
-        }
-        if (key.return) onSubmit(yes);
-    });
-
-    return (
-        <Box flexDirection="column">
-            <Text bold>{label} (y/n, ←/→ to toggle)</Text>
-            <Box gap={2}>
-                <Text color={yes ? "cyan" : undefined} bold={yes}>
-                    {yes ? "▸ Yes" : "  Yes"}
-                </Text>
-                <Text color={!yes ? "cyan" : undefined} bold={!yes}>
-                    {!yes ? "▸ No" : "  No"}
-                </Text>
-            </Box>
-        </Box>
+        <Section>
+            <Row mark={mark} label={label} tone={status === "error" ? "danger" : "muted"} />
+        </Section>
     );
 }
 
@@ -445,38 +369,42 @@ function ConfirmStage({
 
     return (
         <Box flexDirection="column">
-            <Text bold>{view.headline}</Text>
-            <Box flexDirection="column" marginTop={1}>
+            <Section title={view.headline.toLowerCase()}>
                 {view.rows.map((row) => (
-                    <Box key={row.label} gap={2}>
-                        <Text color="cyan">{row.label.padEnd(10)}</Text>
-                        <Text>{row.value}</Text>
-                    </Box>
+                    <Row
+                        key={row.label}
+                        label={row.label.toLowerCase()}
+                        value={row.value}
+                        tone="default"
+                    />
                 ))}
-            </Box>
-            <Box flexDirection="column" marginTop={1}>
+            </Section>
+
+            <Section>
                 {view.totalApprovals === 0 ? (
-                    <Text dimColor>No phone approvals required.</Text>
+                    <Row label="phone approvals" value="none" tone="muted" />
                 ) : (
                     <>
-                        <Text bold>Phone approvals required: {view.totalApprovals}</Text>
+                        <Row
+                            label="phone approvals"
+                            value={String(view.totalApprovals)}
+                            tone="accent"
+                        />
                         {view.approvalLines.map((line) => (
-                            <Text key={line} dimColor>
-                                {"   "}
+                            <Hint key={line} indent={2}>
                                 {line}
-                            </Text>
+                            </Hint>
                         ))}
                     </>
                 )}
-            </Box>
-            <Box marginTop={1}>
-                <Text>Press Enter to deploy, Esc to cancel.</Text>
-            </Box>
+            </Section>
+
+            <Hint>{"enter to deploy  ·  esc to cancel"}</Hint>
+
             {"error" in setup && setup.error && (
-                <Box marginTop={1} gap={1}>
-                    <Warning />
-                    <Text color="yellow">{setup.error}</Text>
-                </Box>
+                <Callout tone="warning">
+                    <Text>{setup.error}</Text>
+                </Callout>
             )}
         </Box>
     );
@@ -491,11 +419,24 @@ interface PhaseState {
 
 const PHASE_ORDER: DeployPhase[] = ["build", "storage-and-dotns", "playground", "done"];
 const PHASE_TITLE: Record<DeployPhase, string> = {
-    build: "Build",
-    "storage-and-dotns": "Upload + DotNS",
-    playground: "Publish to Playground",
-    done: "Done",
+    build: "build",
+    "storage-and-dotns": "upload + dotns",
+    playground: "publish to playground",
+    done: "done",
 };
+
+function phaseMark(status: PhaseState["status"]): MarkKind {
+    switch (status) {
+        case "complete":
+            return "ok";
+        case "running":
+            return "run";
+        case "error":
+            return "fail";
+        default:
+            return "idle";
+    }
+}
 
 function RunningStage({
     projectDir,
@@ -507,7 +448,7 @@ function RunningStage({
     projectDir: string;
     inputs: Resolved;
     userSigner: ResolvedSigner | null;
-    onFinish: (outcome: DeployOutcome) => void;
+    onFinish: (outcome: DeployOutcome, chunkTimings: number[]) => void;
     onError: (message: string) => void;
 }) {
     const initialPhases: Record<DeployPhase, PhaseState> = {
@@ -523,13 +464,18 @@ function RunningStage({
     const [signingPrompt, setSigningPrompt] = useState<SigningEvent | null>(null);
     const [latestInfo, setLatestInfo] = useState<string | null>(null);
 
+    // Per-chunk timing for the sparkline on completion. Held in refs to avoid
+    // re-renders on every chunk tick.
+    const chunkTimingsRef = useRef<number[]>([]);
+    const lastChunkAtRef = useRef<number | null>(null);
+
     // ── Throttled info updates ──────────────────────────────────────────
-    // Verbose builds (vite / next) and bulletin-deploy's per-chunk logs
-    // can fire hundreds of "build-log" / "info" events per second. Calling
-    // setLatestInfo on every one floods React's update queue and — on long
-    // deploys — builds up enough backpressure to spike memory into the
-    // gigabytes. Users only ever see the most recent line anyway, so we
-    // coalesce updates to ~10 per second via a ref-based sink.
+    // Verbose builds (vite / next) and bulletin-deploy's per-chunk logs can
+    // fire hundreds of info events per second. Calling setLatestInfo on
+    // every one floods React's update queue and on long deploys builds up
+    // enough backpressure to spike memory into the gigabytes. Users only
+    // ever see the most recent line anyway, so we coalesce updates to ~10
+    // per second via a ref-based sink.
     const pendingInfoRef = useRef<string | null>(null);
     const infoTimerRef = useRef<NodeJS.Timeout | null>(null);
     const INFO_THROTTLE_MS = 100;
@@ -549,6 +495,9 @@ function RunningStage({
     };
 
     useEffect(() => {
+        // Announce the command + target in the terminal tab on mount.
+        setWindowTitle(`dot deploy · ${inputs.domain} · building`);
+
         let cancelled = false;
 
         (async () => {
@@ -562,7 +511,7 @@ function RunningStage({
                     userSigner,
                     onEvent: (event) => handleEvent(event),
                 });
-                if (!cancelled) onFinish(outcome);
+                if (!cancelled) onFinish(outcome, chunkTimingsRef.current);
             } catch (err) {
                 if (!cancelled) {
                     const message = err instanceof Error ? err.message : String(err);
@@ -574,6 +523,13 @@ function RunningStage({
         function handleEvent(event: DeployEvent) {
             if (event.kind === "phase-start") {
                 setPhases((p) => ({ ...p, [event.phase]: { status: "running" } }));
+                if (event.phase === "storage-and-dotns") {
+                    setWindowTitle(`dot deploy · ${inputs.domain} · uploading`);
+                } else if (event.phase === "playground") {
+                    setWindowTitle(`dot deploy · ${inputs.domain} · publishing`);
+                } else if (event.phase === "build") {
+                    setWindowTitle(`dot deploy · ${inputs.domain} · building`);
+                }
             } else if (event.kind === "phase-complete") {
                 setPhases((p) => ({ ...p, [event.phase]: { status: "complete" } }));
             } else if (event.kind === "build-log") {
@@ -582,7 +538,13 @@ function RunningStage({
                 queueInfo(`> ${event.config.description}`);
             } else if (event.kind === "storage-event") {
                 if (event.event.kind === "chunk-progress") {
-                    queueInfo(`Uploading chunk ${event.event.current}/${event.event.total}`);
+                    const now = performance.now();
+                    const last = lastChunkAtRef.current;
+                    if (last !== null) {
+                        chunkTimingsRef.current.push(now - last);
+                    }
+                    lastChunkAtRef.current = now;
+                    queueInfo(`uploading chunk ${event.event.current}/${event.event.total}`);
                 } else if (event.event.kind === "info") {
                     queueInfo(event.event.message);
                 }
@@ -593,7 +555,7 @@ function RunningStage({
                     setSigningPrompt(null);
                 } else if (event.event.kind === "sign-error") {
                     setSigningPrompt(null);
-                    queueInfo(`Signing rejected: ${event.event.message}`);
+                    queueInfo(`signing rejected: ${event.event.message}`);
                 }
             } else if (event.kind === "error") {
                 setPhases((p) => ({
@@ -615,40 +577,34 @@ function RunningStage({
 
     return (
         <Box flexDirection="column">
-            {PHASE_ORDER.filter((p) => p !== "done").map((phase) => {
-                const state = phases[phase];
-                return (
-                    <Box key={phase} gap={1}>
-                        {state.status === "running" && <Spinner />}
-                        {state.status === "complete" && <Done />}
-                        {state.status === "error" && <Failed />}
-                        {state.status === "pending" && <Text dimColor>•</Text>}
-                        <Text bold={state.status === "running"}>{PHASE_TITLE[phase]}</Text>
-                        {state.detail && <Text dimColor>— {state.detail}</Text>}
-                    </Box>
-                );
-            })}
+            <Section gapBelow={false}>
+                {PHASE_ORDER.filter((p) => p !== "done").map((phase) => {
+                    const state = phases[phase];
+                    return (
+                        <Row
+                            key={phase}
+                            mark={phaseMark(state.status)}
+                            label={PHASE_TITLE[phase]}
+                            value={state.detail}
+                            tone={state.status === "error" ? "danger" : "muted"}
+                        />
+                    );
+                })}
+            </Section>
+
             {latestInfo && (
-                <Box marginTop={1} paddingLeft={2}>
-                    <Text dimColor>{truncate(latestInfo, 120)}</Text>
+                <Box marginTop={1}>
+                    <Hint indent={2}>{truncate(latestInfo, 120)}</Hint>
                 </Box>
             )}
+
             {signingPrompt && signingPrompt.kind === "sign-request" && (
-                <Box
-                    marginTop={1}
-                    borderStyle="round"
-                    borderColor="yellowBright"
-                    paddingX={1}
-                    flexDirection="column"
-                >
-                    <Text color="yellowBright" bold>
-                        📱 Check your phone
-                    </Text>
+                <Callout tone="warning" title="check your phone">
                     <Text>
-                        Approve step {signingPrompt.step} of {signingPrompt.total}:{" "}
+                        approve step {signingPrompt.step} of {signingPrompt.total}:{" "}
                         <Text bold>{signingPrompt.label}</Text>
                     </Text>
-                </Box>
+                </Callout>
             )}
         </Box>
     );
@@ -656,37 +612,49 @@ function RunningStage({
 
 // ── Final result ─────────────────────────────────────────────────────────────
 
-function FinalResult({ outcome }: { outcome: DeployOutcome }) {
+function FinalResult({
+    outcome,
+    chunkTimings,
+}: {
+    outcome: DeployOutcome;
+    chunkTimings: number[];
+}) {
     return (
         <Box flexDirection="column" marginTop={1}>
-            <Box gap={1}>
-                <Done />
-                <Text color="green" bold>
-                    Deploy complete
-                </Text>
-            </Box>
-            <Box flexDirection="column" marginTop={1}>
-                <LabelValue label="URL" value={outcome.appUrl} />
-                <LabelValue label="Domain" value={outcome.fullDomain} />
-                <LabelValue label="App CID" value={outcome.appCid} />
-                {outcome.ipfsCid && <LabelValue label="IPFS CID" value={outcome.ipfsCid} />}
-                {outcome.metadataCid && (
-                    <LabelValue label="Metadata CID" value={outcome.metadataCid} />
-                )}
-            </Box>
-        </Box>
-    );
-}
+            <Row mark="ok" label="deploy complete" tone="default" />
 
-function LabelValue({ label, value }: { label: string; value: string }) {
-    return (
-        <Box gap={2}>
-            <Text color="cyan">{label.padEnd(12)}</Text>
-            <Text>{value}</Text>
+            <Box marginTop={1}>
+                <Section gapBelow={false}>
+                    <Row label="url" value={outcome.appUrl} />
+                    <Row label="domain" value={outcome.fullDomain} />
+                    <Row label="app cid" value={outcome.appCid} />
+                    {outcome.ipfsCid && <Row label="ipfs cid" value={outcome.ipfsCid} />}
+                    {outcome.metadataCid && (
+                        <Row label="metadata cid" value={outcome.metadataCid} />
+                    )}
+                </Section>
+            </Box>
+
+            {chunkTimings.length > 0 && (
+                <Box paddingLeft={2} flexDirection="row">
+                    <Text>{"chunks".padEnd(14)}</Text>
+                    <Sparkline values={chunkTimings} width={16} />
+                    <Text dimColor>
+                        {`  ${chunkTimings.length + 1} chunks  ·  avg ${(
+                            average(chunkTimings) / 1000
+                        ).toFixed(2)}s/chunk`}
+                    </Text>
+                </Box>
+            )}
         </Box>
     );
 }
 
 function truncate(s: string, n: number): string {
     return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+function average(xs: number[]): number {
+    if (xs.length === 0) return 0;
+    return xs.reduce((a, b) => a + b, 0) / xs.length;
 }

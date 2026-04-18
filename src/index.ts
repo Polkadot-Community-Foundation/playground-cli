@@ -7,7 +7,8 @@ import { modCommand } from "./commands/mod/index.js";
 import { buildCommand } from "./commands/build.js";
 import { deployCommand } from "./commands/deploy/index.js";
 import { updateCommand } from "./commands/update.js";
-import { installSignalHandlers } from "./utils/process-guard.js";
+import { installSignalHandlers, onProcessShutdown } from "./utils/process-guard.js";
+import { clearWindowTitle } from "./utils/ui/theme/window-title.js";
 
 // ── Bun compiled-binary stdin workaround ─────────────────────────────────────
 // When `dot` is shipped via `bun build --compile`, Ink's internal
@@ -38,6 +39,11 @@ if (process.env.BULLETIN_DEPLOY_TELEMETRY === undefined) {
 // or a stray async error can't turn `dot` into a zombie that grows memory
 // indefinitely.
 installSignalHandlers();
+
+// Hand the terminal tab title back to the shell on exit. The shell usually
+// repaints its own title immediately, but being explicit avoids leaving
+// "dot deploy · my-app.dot · ✓" stuck on a long-lived tab.
+onProcessShutdown(clearWindowTitle);
 
 const program = new Command()
     .name("dot")
