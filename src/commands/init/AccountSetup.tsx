@@ -1,19 +1,18 @@
 import { useState, useEffect } from "react";
-import { Box, Text } from "ink";
-import { Spinner, Done, Failed } from "../../utils/ui/index.js";
+import { Row, Section, type MarkKind } from "../../utils/ui/theme/index.js";
 import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
 import { checkBalance, ensureFunded, FUND_AMOUNT } from "../../utils/account/funding.js";
 import { checkMapping, ensureMapped } from "../../utils/account/mapping.js";
+import { checkAllowance, ensureAllowance, LOW_TX_THRESHOLD } from "../../utils/account/allowance.js";
 import {
-    checkAllowance,
-    ensureAllowance,
-    LOW_TX_THRESHOLD,
-} from "../../utils/account/allowance.js";
+    checkAttestation,
+    getBulletinBlockTimeMs,
+    formatAttestation,
+    type FormattedAttestation,
+} from "../../utils/account/attestation.js";
 
 type Status = "pending" | "active" | "ok" | "failed" | "skipped";
-
-const STEP_COUNT = 3;
 
 /** Planck per PAS (10 decimals). */
 const PLANCK_PER_PAS = 10_000_000_000n;
@@ -21,22 +20,24 @@ const PLANCK_PER_PAS = 10_000_000_000n;
 interface StepState {
     label: string;
     status: Status;
-    detail?: string;
+    value?: string;
+    valueTone?: "default" | "danger" | "warning" | "muted" | "accent";
+    hint?: string;
     error?: string;
 }
 
-function StatusIcon({ status }: { status: Status }) {
+function toMark(status: Status): MarkKind | undefined {
     switch (status) {
         case "active":
-            return <Spinner />;
+            return "run";
         case "ok":
-            return <Done />;
+            return "ok";
         case "failed":
-            return <Failed />;
+            return "fail";
         case "skipped":
-            return <Text dimColor>-</Text>;
+            return "idle";
         default:
-            return <Text dimColor>·</Text>;
+            return "idle";
     }
 }
 
@@ -63,9 +64,9 @@ export function AccountSetup({
     onDone: (success: boolean) => void;
 }) {
     const [steps, setSteps] = useState<StepState[]>([
-        { label: "Funding account", status: "pending" },
-        { label: "Mapping account (Revive)", status: "pending" },
-        { label: "Granting bulletin access", status: "pending" },
+        { label: "funding", status: "pending" },
+        { label: "mapping", status: "pending" },
+        { label: "bulletin", status: "pending" },
     ]);
 
     useEffect(() => {
@@ -91,7 +92,7 @@ export function AccountSetup({
                 client = await getConnection();
             } catch (err) {
                 const msg = describe(err);
-                for (let i = 0; i < STEP_COUNT; i++) update(i, { status: "failed", error: msg });
+                setSteps((prev) => prev.map((s) => ({ ...s, status: "failed", error: msg })));
                 finish(false);
                 return;
             }
@@ -104,29 +105,24 @@ export function AccountSetup({
                 const before = await checkBalance(client, address);
                 if (cancelled) return;
                 if (before.sufficient) {
-                    update(0, {
-                        status: "ok",
-                        detail: `Balance: ${formatPas(before.free)}`,
-                    });
+                    update(0, { status: "ok", value: formatPas(before.free) });
                     funded = true;
                 } else {
                     update(0, {
                         status: "active",
-                        detail: `Balance: ${formatPas(before.free)} — funding...`,
+                        value: formatPas(before.free),
+                        hint: "funding…",
                     });
                     await ensureFunded(client, address);
                     if (cancelled) return;
                     // Optimistic post-balance: avoids a second RPC call that
                     // could read a stale best-block and display the old value.
                     const expected = before.free + FUND_AMOUNT;
-                    update(0, {
-                        status: "ok",
-                        detail: `Balance: ${formatPas(expected)}`,
-                    });
+                    update(0, { status: "ok", value: formatPas(expected), hint: undefined });
                     funded = true;
                 }
             } catch (err) {
-                update(0, { status: "failed", error: describe(err) });
+                update(0, { status: "failed", error: describe(err), valueTone: "danger" });
             }
 
             // Step 1: Revive mapping (requires funds, user signs via mobile wallet)
@@ -136,56 +132,67 @@ export function AccountSetup({
                     const mapped = await checkMapping(client, address);
                     if (cancelled) return;
                     if (mapped) {
-                        update(1, { status: "ok", detail: "Already mapped" });
+                        update(1, { status: "ok", value: "mapped", valueTone: "muted" });
                     } else {
                         session = await getSessionSigner();
                         if (cancelled) return;
                         if (!session) {
                             update(1, {
                                 status: "failed",
-                                error: "No session — run dot init to log in",
+                                error: "no session — run dot init to log in",
                             });
                         } else {
                             update(1, {
                                 status: "active",
-                                detail: "Approve on your Polkadot mobile app...",
+                                value: "approve on your Polkadot mobile app…",
+                                valueTone: "muted",
                             });
                             await ensureMapped(client, address, session.signer);
                             if (cancelled) return;
-                            update(1, { status: "ok", detail: "Mapped" });
+                            update(1, { status: "ok", value: "mapped", valueTone: "muted" });
                         }
                     }
                 } catch (err) {
                     update(1, { status: "failed", error: describe(err) });
                 }
             } else {
-                update(1, { status: "skipped", error: "Skipped — account not funded" });
+                update(1, {
+                    status: "skipped",
+                    value: "skipped — account not funded",
+                    valueTone: "muted",
+                });
             }
 
-            // Step 2: Bulletin allowance (Alice signs, independent of mapping)
+            // Step 2: Bulletin attestation (Alice signs, independent of mapping).
+            // Always surfaces the formatted attestation validity — users see
+            // this even on re-runs where nothing needs refreshing.
             update(2, { status: "active" });
             try {
+                const blockTimeMs = await getBulletinBlockTimeMs(client);
                 const before = await checkAllowance(client, address);
                 if (cancelled) return;
                 if (before.authorized && before.remainingTxs >= LOW_TX_THRESHOLD) {
-                    update(2, {
-                        status: "ok",
-                        detail: `${before.remainingTxs} txs, ${formatMb(before.remainingBytes)} remaining`,
+                    const attestation = await checkAttestation(client, address);
+                    if (cancelled) return;
+                    applyAttestation(update, 2, "ok", formatAttestation(attestation, blockTimeMs), {
+                        txs: before.remainingTxs,
+                        bytes: before.remainingBytes,
                     });
                 } else {
                     update(2, {
                         status: "active",
-                        detail: before.authorized
-                            ? `Low quota (${before.remainingTxs} txs) — authorizing...`
-                            : "Not authorized — authorizing...",
+                        value: before.authorized
+                            ? `low quota (${before.remainingTxs} txs) — refreshing…`
+                            : "not authorized — attesting…",
+                        valueTone: "muted",
                     });
                     await ensureAllowance(client, address);
                     if (cancelled) return;
-                    const after = await checkAllowance(client, address);
+                    const attestation = await checkAttestation(client, address);
                     if (cancelled) return;
-                    update(2, {
-                        status: "ok",
-                        detail: `${after.remainingTxs} txs, ${formatMb(after.remainingBytes)} remaining`,
+                    applyAttestation(update, 2, "ok", formatAttestation(attestation, blockTimeMs), {
+                        txs: attestation.remainingTxs,
+                        bytes: attestation.remainingBytes,
                     });
                 }
             } catch (err) {
@@ -208,24 +215,32 @@ export function AccountSetup({
     }, [address, onDone]);
 
     return (
-        <Box flexDirection="column" paddingLeft={2}>
-            <Box marginBottom={1}>
-                <Text bold>Account setup</Text>
-            </Box>
+        <Section title="account">
             {steps.map((step) => (
-                <Box key={step.label} flexDirection="column">
-                    <Box gap={1}>
-                        <StatusIcon status={step.status} />
-                        <Text>{step.label}</Text>
-                        {step.detail && <Text dimColor>{step.detail}</Text>}
-                    </Box>
-                    {step.error && (
-                        <Box paddingLeft={4}>
-                            <Text dimColor>{step.error}</Text>
-                        </Box>
-                    )}
-                </Box>
+                <Row
+                    key={step.label}
+                    mark={toMark(step.status)}
+                    label={step.label}
+                    value={step.value}
+                    tone={step.valueTone ?? "default"}
+                    hint={step.error ?? step.hint}
+                />
             ))}
-        </Box>
+        </Section>
     );
+}
+
+/** Write a formatted attestation into a step's value, with its quota as the hint. */
+function applyAttestation(
+    update: (idx: number, patch: Partial<StepState>) => void,
+    idx: number,
+    status: Status,
+    formatted: FormattedAttestation,
+    quota: { txs: number | undefined; bytes: bigint | undefined },
+): void {
+    const hint =
+        quota.txs !== undefined && quota.bytes !== undefined
+            ? `${quota.txs} txs  ·  ${formatMb(quota.bytes)} remaining`
+            : undefined;
+    update(idx, { status, value: formatted.text, valueTone: formatted.tone, hint });
 }

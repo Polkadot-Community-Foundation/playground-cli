@@ -14,3 +14,12 @@ export {
     LOW_TX_THRESHOLD,
     type AllowanceStatus,
 } from "./allowance.js";
+export {
+    checkAttestation,
+    getBulletinBlockTimeMs,
+    formatAttestation,
+    humanizeDuration,
+    type AttestationStatus,
+    type AttestationTone,
+    type FormattedAttestation,
+} from "./attestation.js";
