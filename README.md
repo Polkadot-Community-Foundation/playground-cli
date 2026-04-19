@@ -78,6 +78,21 @@ Flags:
 
 When forking, you're prompted for the repo name after picking an app; the default is `<slug>-<6 hex chars>` and Enter keeps it. Pass `--repo-name` or `-y` to run non-interactively.
 
+## Troubleshooting
+
+### Reporting a memory issue
+
+If `dot deploy` gets killed with `✖ Memory use exceeded 4 GB` (the watchdog's abort) or you see RSS climb unexpectedly, re-run with both of:
+
+```bash
+DOT_MEMORY_TRACE=1 DOT_DEPLOY_VERBOSE=1 dot deploy ...
+```
+
+- `DOT_MEMORY_TRACE=1` streams a per-second `rss / heap / external / peak` sample to stderr from the watchdog worker. The worker has its own event loop, so samples keep firing even while the main thread is busy — perfect for capturing the timeline of a leak.
+- `DOT_DEPLOY_VERBOSE=1` prefixes every `bulletin-deploy` log line with `[+<seconds>s]` so you can line the memory samples up with the exact chunk / retry / reconnect that preceded each spike.
+
+Attach the combined output to the bug report along with the site size and roughly how many chunks the deploy was into when the spike started — it's dramatically more useful than a stack trace alone.
+
 ## Contributing
 
 ### Setup
