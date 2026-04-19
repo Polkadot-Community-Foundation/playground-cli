@@ -87,8 +87,56 @@ export function installSignalHandlers(): void {
 
     // Unhandled rejections should not silently keep the event loop alive.
     process.on("unhandledRejection", (reason) => {
+        if (isBenignUnsubscriptionError(reason)) {
+            if (process.env.DOT_DEPLOY_VERBOSE === "1") {
+                process.stderr.write(
+                    "(suppressed benign post-destroy UnsubscriptionError: Not connected)\n",
+                );
+            }
+            return;
+        }
         process.stderr.write(`\nUnhandled promise rejection: ${String(reason)}\n`);
         runAllCleanupAndExit(1);
+    });
+
+    // Mirror the same filter for sync uncaught exceptions. polkadot-api's
+    // `client.destroy()` schedules subscription teardown that can surface as
+    // either an `unhandledRejection` or an `uncaughtException` depending on
+    // whether the finalizer throws from a microtask or a sync path — handling
+    // both removes the "naked stack trace" the user sees today right under
+    // `Required status: ProofOfPersonhoodFull`.
+    process.on("uncaughtException", (err) => {
+        if (isBenignUnsubscriptionError(err)) {
+            if (process.env.DOT_DEPLOY_VERBOSE === "1") {
+                process.stderr.write(
+                    "(suppressed benign post-destroy UnsubscriptionError: Not connected)\n",
+                );
+            }
+            return;
+        }
+        process.stderr.write(`\nUncaught exception: ${err?.stack ?? String(err)}\n`);
+        runAllCleanupAndExit(1);
+    });
+}
+
+/**
+ * True for the specific rxjs `UnsubscriptionError` we see on `client.destroy()`
+ * when a still-live chainHead (or similar) subscription's teardown tries to
+ * send a cancel RPC and the WS has already closed — by design, because we
+ * just destroyed the client. The symptom is a giant stack trace wrapping
+ * `Error: Not connected`, which looks terrifying but is already the expected
+ * outcome. Keeping the match narrow (UnsubscriptionError + every inner error
+ * is "Not connected") so a genuinely new rxjs failure still escalates.
+ */
+export function isBenignUnsubscriptionError(reason: unknown): boolean {
+    if (!(reason instanceof Error) || reason.name !== "UnsubscriptionError") {
+        return false;
+    }
+    const errors = (reason as Error & { errors?: unknown }).errors;
+    if (!Array.isArray(errors) || errors.length === 0) return false;
+    return errors.every((e) => {
+        const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e ?? "");
+        return /not connected/i.test(msg);
     });
 }
 
