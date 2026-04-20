@@ -143,8 +143,7 @@ export function detectInstallConfig(input: DetectInput): InstallConfig | null {
     const pkg = input.packageJson;
     if (!pkg) return null;
     const depCount =
-        Object.keys(pkg.dependencies ?? {}).length +
-        Object.keys(pkg.devDependencies ?? {}).length;
+        Object.keys(pkg.dependencies ?? {}).length + Object.keys(pkg.devDependencies ?? {}).length;
     if (depCount === 0) return null;
     return PM_INSTALL[detectPackageManager(input.lockfiles)];
 }
