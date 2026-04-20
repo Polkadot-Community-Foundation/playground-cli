@@ -7,11 +7,13 @@
 
 export {
     detectBuildConfig,
+    detectInstallConfig,
     detectPackageManager,
     BuildDetectError,
     PM_LOCKFILES,
     type BuildConfig,
     type DetectInput,
+    type InstallConfig,
     type PackageManager,
 } from "./detect.js";
 export { loadDetectInput, runBuild, type RunBuildOptions, type RunBuildResult } from "./runner.js";

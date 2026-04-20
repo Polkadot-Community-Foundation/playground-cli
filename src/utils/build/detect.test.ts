@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     detectBuildConfig,
+    detectInstallConfig,
     detectPackageManager,
     BuildDetectError,
     type DetectInput,
@@ -11,6 +12,7 @@ function input(overrides: Partial<DetectInput> = {}): DetectInput {
         packageJson: null,
         lockfiles: new Set(),
         configFiles: new Set(),
+        hasNodeModules: true,
         ...overrides,
     };
 }
@@ -124,5 +126,78 @@ describe("detectBuildConfig", () => {
                 }),
             ),
         ).toThrow(BuildDetectError);
+    });
+});
+
+describe("detectInstallConfig", () => {
+    it("returns null when node_modules is already present", () => {
+        expect(
+            detectInstallConfig(
+                input({
+                    packageJson: { dependencies: { vite: "^5.0.0" } },
+                    hasNodeModules: true,
+                }),
+            ),
+        ).toBeNull();
+    });
+
+    it("returns null when package.json is missing", () => {
+        expect(detectInstallConfig(input({ hasNodeModules: false }))).toBeNull();
+    });
+
+    it("returns null when the project declares no dependencies", () => {
+        // A package.json with scripts but no deps has nothing to install; we
+        // shouldn't pointlessly spawn `npm install`.
+        expect(
+            detectInstallConfig(
+                input({
+                    packageJson: { scripts: { build: "echo hi" } },
+                    hasNodeModules: false,
+                }),
+            ),
+        ).toBeNull();
+    });
+
+    it("returns the npm install command when no lockfile is present", () => {
+        expect(
+            detectInstallConfig(
+                input({
+                    packageJson: { devDependencies: { vite: "^7.0.0" } },
+                    hasNodeModules: false,
+                }),
+            ),
+        ).toEqual({ cmd: "npm", args: ["install"], description: "npm install" });
+    });
+
+    it("picks the install command matching the detected lockfile", () => {
+        expect(
+            detectInstallConfig(
+                input({
+                    packageJson: { dependencies: { react: "^19.0.0" } },
+                    lockfiles: new Set(["pnpm-lock.yaml"]),
+                    hasNodeModules: false,
+                }),
+            ),
+        ).toEqual({ cmd: "pnpm", args: ["install"], description: "pnpm install" });
+
+        expect(
+            detectInstallConfig(
+                input({
+                    packageJson: { dependencies: { react: "^19.0.0" } },
+                    lockfiles: new Set(["bun.lockb"]),
+                    hasNodeModules: false,
+                }),
+            ),
+        ).toEqual({ cmd: "bun", args: ["install"], description: "bun install" });
+
+        expect(
+            detectInstallConfig(
+                input({
+                    packageJson: { dependencies: { react: "^19.0.0" } },
+                    lockfiles: new Set(["yarn.lock"]),
+                    hasNodeModules: false,
+                }),
+            ),
+        ).toEqual({ cmd: "yarn", args: ["install"], description: "yarn install" });
     });
 });

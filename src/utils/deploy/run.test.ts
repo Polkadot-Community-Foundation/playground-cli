@@ -39,6 +39,7 @@ const {
         packageJson: { scripts: { build: "vite build" } },
         lockfiles: new Set<string>(),
         configFiles: new Set<string>(),
+        hasNodeModules: true,
     })),
 }));
 

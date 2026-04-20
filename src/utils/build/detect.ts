@@ -27,6 +27,14 @@ export interface BuildConfig {
     defaultOutputDir: string;
 }
 
+export interface InstallConfig {
+    /** Binary + args to spawn. */
+    cmd: string;
+    args: string[];
+    /** Human-readable description ("npm install", "pnpm install", …). */
+    description: string;
+}
+
 export interface DetectInput {
     /** Parsed package.json contents (object after JSON.parse), or null if missing. */
     packageJson: {
@@ -38,6 +46,8 @@ export interface DetectInput {
     lockfiles: Set<string>;
     /** Set of additional config-file basenames (e.g. vite.config.ts). */
     configFiles: Set<string>;
+    /** Whether a node_modules/ directory exists at the project root. */
+    hasNodeModules: boolean;
 }
 
 export class BuildDetectError extends Error {
@@ -109,6 +119,35 @@ const PM_EXEC: Record<PackageManager, string[]> = {
     bun: ["bunx"],
     npm: ["npx"],
 };
+
+const PM_INSTALL: Record<PackageManager, InstallConfig> = {
+    pnpm: { cmd: "pnpm", args: ["install"], description: "pnpm install" },
+    yarn: { cmd: "yarn", args: ["install"], description: "yarn install" },
+    bun: { cmd: "bun", args: ["install"], description: "bun install" },
+    npm: { cmd: "npm", args: ["install"], description: "npm install" },
+};
+
+/**
+ * Decide whether we need to run an install step before building. Returns the
+ * install command when the project has dependencies declared but no
+ * node_modules/ directory, otherwise null.
+ *
+ * Rationale: without this check, `dot build` for an uninstalled project falls
+ * through to `npx vite build` (or similar), which ephemerally downloads the
+ * framework binary but can't resolve the project's own `vite.config.ts`
+ * imports — yielding a confusing ERR_MODULE_NOT_FOUND deep in the config
+ * loader. Auto-installing first eliminates the footgun.
+ */
+export function detectInstallConfig(input: DetectInput): InstallConfig | null {
+    if (input.hasNodeModules) return null;
+    const pkg = input.packageJson;
+    if (!pkg) return null;
+    const depCount =
+        Object.keys(pkg.dependencies ?? {}).length +
+        Object.keys(pkg.devDependencies ?? {}).length;
+    if (depCount === 0) return null;
+    return PM_INSTALL[detectPackageManager(input.lockfiles)];
+}
 
 /**
  * Pick a build command given the detected project state.
