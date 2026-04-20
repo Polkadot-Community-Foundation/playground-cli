@@ -227,10 +227,19 @@ async function runHeadless(ctx: {
 
     // Check availability BEFORE we build + upload, so CI fails fast on a
     // Reserved / already-taken name without wasting a chunk upload.
+    //
+    // `ownerSs58Address` MUST match whoever will actually sign the DotNS
+    // `register()` extrinsic — otherwise the preflight reports "taken" on a
+    // re-deploy. In phone mode bulletin-deploy uses the user's signer, so
+    // passing the user's address is correct. In dev mode bulletin-deploy
+    // falls back to its built-in DEFAULT_MNEMONIC, so the user's H160 does
+    // NOT match the on-chain owner — we omit the address and let
+    // bulletin-deploy's own preflight (run with the right signer during
+    // `deploy()`) do the comparison.
     process.stdout.write(`\nChecking availability of ${domain.replace(/\.dot$/, "") + ".dot"}…\n`);
     const availability = await checkDomainAvailability(domain, {
         env: ctx.env,
-        ownerSs58Address: ctx.userSigner?.address,
+        ownerSs58Address: mode === "phone" ? ctx.userSigner?.address : undefined,
     });
     if (availability.status !== "available") {
         throw new Error(formatAvailability(availability));
