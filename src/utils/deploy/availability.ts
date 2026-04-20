@@ -90,11 +90,23 @@ export interface CheckAvailabilityOptions {
     /** Optional timeout in ms. Each RPC call has its own internal timeout. */
     timeoutMs?: number;
     /**
-     * The deploying account's SS58 address. When provided we derive its H160
-     * via `ss58ToH160` and treat "owned by you" as an update path rather than
-     * a `taken` block. Omit in dev-mode-without-signer and we skip the
-     * ownership check entirely (bulletin-deploy's own preflight is the
-     * ultimate source of truth when the real signer is used).
+     * SS58 address of the account that will SIGN the DotNS `register()` /
+     * `setContenthash` extrinsics — NOT necessarily the currently logged-in
+     * user. When provided we derive its H160 via `ss58ToH160` and treat
+     * "owned by you" as an update path rather than a `taken` block.
+     *
+     * Must match whoever bulletin-deploy will use as its DotNS signer:
+     *   - Phone mode → user's signer address.
+     *   - Dev mode   → omit entirely (bulletin-deploy falls back to its
+     *     built-in `DEFAULT_MNEMONIC`, and we have no easy way to derive
+     *     that H160 without replicating bulletin-deploy internals). When
+     *     omitted we skip the preflight ownership check; bulletin-deploy's
+     *     own preflight during `deploy()` is run with the right signer and
+     *     classifies the re-deploy correctly.
+     *
+     * Passing the wrong address (e.g. the phone session's H160 in dev mode)
+     * mis-reports re-deploys as `taken` because the on-chain owner is the
+     * dev account, not the user.
      */
     ownerSs58Address?: string;
 }
