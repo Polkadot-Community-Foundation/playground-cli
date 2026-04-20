@@ -18,5 +18,5 @@ export async function getRegistryContract(
         defaultSigner: signer.signer,
         defaultOrigin: signer.address,
     });
-    return manager.getContract("@example/playground-registry");
+    return manager.getContract("@w3s/playground-registry");
 }

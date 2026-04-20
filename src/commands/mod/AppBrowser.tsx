@@ -31,37 +31,56 @@ export function AppBrowser({ registry, onSelect }: Props) {
     const [cursor, setCursor] = useState(0);
     const [scroll, setScroll] = useState(0);
     const [fetching, setFetching] = useState(true);
-    const nextIdx = useRef<number | null>(null);
+    // Next ascending-index window to request from `getApps(start, count)`. We
+    // page high → low (newest-first), so this walks downward: the next call's
+    // `start` is `prevStart - BATCH` (clamped to 0). `null` means no more.
+    const nextStart = useRef<number | null>(null);
 
     const gateway = getGateway("paseo");
 
     const loadBatch = useCallback(
-        async (startIdx: number) => {
+        async (start: number) => {
             setFetching(true);
-            const indices = [];
-            for (let i = startIdx; i > startIdx - BATCH && i >= 0; i--) indices.push(i);
 
-            const lowestQueried = Math.min(...indices);
-            nextIdx.current = lowestQueried > 0 ? lowestQueried - 1 : null;
+            // Contract returns entries ascending from `start`. We want
+            // newest-first in the list, so reverse after. `count` may be
+            // capped short if `start + count > total` — no harm, the
+            // contract simply returns fewer entries.
+            const res = await registry.getApps.query(start, BATCH);
+            const rawEntries = res.value.entries as Array<{
+                index: number;
+                domain: string;
+                metadata_uri: string;
+                owner: string;
+            }>;
+            // Keep our `total` in sync with the contract's reported value.
+            // Always calling setTotal is fine — React bails out on same-value
+            // updates, so this doesn't cause extra renders.
+            setTotal(res.value.total as number);
 
-            const results = await Promise.all(
-                indices.map(async (i) => {
-                    const res = await registry.getDomainAt.query(i);
-                    return res.value.isSome ? (res.value.value as string) : null;
-                }),
-            );
+            // Sort defensively — we can't rely on the contract's ordering
+            // guarantees, and every entry carries its own `index`.
+            const sorted = [...rawEntries].sort((a, b) => b.index - a.index);
 
-            const entries: AppEntry[] = results
-                .filter((d): d is string => d !== null)
-                .map((domain) => ({ domain, name: null, description: null, repository: null }));
+            nextStart.current = start > 0 ? Math.max(0, start - BATCH) : null;
+
+            const entries: AppEntry[] = sorted.map((e) => ({
+                domain: e.domain,
+                name: null,
+                description: null,
+                repository: null,
+            }));
 
             setApps((prev) => [...prev, ...entries]);
             setFetching(false);
 
+            // Metadata JSONs still have to be fetched one-at-a-time from
+            // the gateway — that's IPFS HTTP, not a chain query. Kick them
+            // off in parallel and update each row as it lands.
             await Promise.allSettled(
-                entries.map(async (entry) => {
-                    const metaRes = await registry.getMetadataUri.query(entry.domain);
-                    const cid = metaRes.value.isSome ? (metaRes.value.value as string) : null;
+                sorted.map(async (raw, i) => {
+                    const entry = entries[i];
+                    const cid = raw.metadata_uri;
                     if (!cid) return;
                     const meta = await fetchJson<Record<string, string>>(cid, gateway);
                     setApps((prev) =>
@@ -87,15 +106,16 @@ export function AppBrowser({ registry, onSelect }: Props) {
             const res = await registry.getAppCount.query();
             const count = res.value as number;
             setTotal(count);
-            if (count > 0) await loadBatch(count - 1);
+            if (count > 0) await loadBatch(Math.max(0, count - BATCH));
+            else setFetching(false);
         })();
-    }, []);
+    }, [registry, loadBatch]);
 
     useEffect(() => {
-        if (cursor >= apps.length - 3 && nextIdx.current !== null && !fetching) {
-            loadBatch(nextIdx.current);
+        if (cursor >= apps.length - 3 && nextStart.current !== null && !fetching) {
+            loadBatch(nextStart.current);
         }
-    }, [cursor, apps.length, fetching]);
+    }, [cursor, apps.length, fetching, loadBatch]);
 
     useInput((input, key) => {
         if (key.upArrow && cursor > 0) {
