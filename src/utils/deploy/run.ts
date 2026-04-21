@@ -18,6 +18,7 @@ import {
 import { runStorageDeploy } from "./storage.js";
 import { publishToPlayground, normalizeDomain } from "./playground.js";
 import { runContractsPhase, type ContractsPhaseEvent } from "./contracts.js";
+import { getOrCreateSessionAccount } from "./session-account.js";
 import { resolveSignerSetup, type SignerMode, type DeployApproval } from "./signerMode.js";
 import {
     wrapSignerWithEvents,
@@ -26,7 +27,10 @@ import {
     type SigningEvent,
 } from "./signingProxy.js";
 import type { DeployLogEvent } from "./progress.js";
-import { resolveSigner, type ResolvedSigner } from "../signer.js";
+import { checkBalance, FUND_AMOUNT } from "../account/funding.js";
+import { Enum } from "polkadot-api";
+import { submitAndWatch, createDevSigner } from "@polkadot-apps/tx";
+import type { ResolvedSigner } from "../signer.js";
 import { getConnection } from "../connection.js";
 import type { Env } from "../../config.js";
 import type { DeployPlan } from "./availability.js";
@@ -81,6 +85,14 @@ export interface RunDeployOptions {
      * (3 DotNS taps) if absent and auto-corrects at runtime.
      */
     plan?: DeployPlan;
+    /**
+     * Whether the contracts phase will need to top up its session key. Passed
+     * through so the internal `resolveSignerSetup` call produces the same
+     * approvals total the caller (CLI summary / confirm page) already
+     * showed — otherwise the TUI's "step N of M" counter displays the wrong
+     * total until the funding tap auto-extends it mid-flight.
+     */
+    contractsFundingNeeded?: boolean;
 }
 
 export interface DeployOutcome {
@@ -110,6 +122,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         userSigner: options.userSigner,
         publishToPlayground: options.publishToPlayground,
         plan: options.plan,
+        contractsFundingNeeded: options.contractsFundingNeeded,
     });
 
     options.onEvent({ kind: "plan", approvals: setup.approvals });
@@ -137,7 +150,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
     }
 
     // ── Contracts ────────────────────────────────────────────────────────
-    const contractsDeployed = await maybeRunContracts(options);
+    const contractsDeployed = await maybeRunContracts(options, counter);
 
     // ── Storage + DotNS via bulletin-deploy ──────────────────────────────
     options.onEvent({ kind: "phase-start", phase: "storage-and-dotns" });
@@ -216,13 +229,29 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
  * the row without leaving it "pending" forever.
  *
  * Signer resolution:
- *   - phone mode   → reuse `userSigner` (same key that signs DotNS / playground).
- *   - dev mode     → resolve `//Alice` on the fly. This mirrors how the rest of
- *                    the `dev` path works — bulletin-deploy uses its own
- *                    DEFAULT_MNEMONIC for storage, and we deliberately don't
- *                    entangle the contracts signer with that one.
+ *   Contract deploys are signed by a persistent on-disk **session key**
+ *   (`~/.polkadot/accounts.json`), not the user's main signer. Why: the
+ *   mobile signer can't handle the encoded size of a batched contract
+ *   deploy today, and its failure mode is miscategorised downstream (the
+ *   phone's error message contains "rejected" → `@polkadot-apps/tx` flags
+ *   it as a user-cancel, discarding the real cause). A local sr25519 key
+ *   funded once per session sidesteps the mobile-signing path entirely.
+ *
+ *   Funding source for the session key:
+ *     - user signer present (phone mode, or `--suri`) → user pays, one
+ *       on-phone tap per low-balance top-up.
+ *     - pure dev mode (no user signer)               → fund from Alice.
+ *
+ *   Consequence: contracts are owned by the session H160, not the user's.
+ *   Fine for v1 — we're on testnet and there's no contract registry
+ *   ownership record yet. Revisit when we either (a) have a mobile signer
+ *   that can sign large txs, or (b) publish contracts to the registry with
+ *   owner semantics that matter.
  */
-async function maybeRunContracts(options: RunDeployOptions): Promise<DeployOutcome["contracts"]> {
+async function maybeRunContracts(
+    options: RunDeployOptions,
+    counter: SigningCounter,
+): Promise<DeployOutcome["contracts"]> {
     if (!options.deployContracts) {
         options.onEvent({
             kind: "phase-skipped",
@@ -246,22 +275,25 @@ async function maybeRunContracts(options: RunDeployOptions): Promise<DeployOutco
 
     options.onEvent({ kind: "phase-start", phase: "contracts" });
 
-    let contractsSigner: ResolvedSigner | null = null;
-    let ownsContractsSigner = false;
     try {
-        if (options.mode === "phone") {
-            if (!options.userSigner) {
-                throw new Error(
-                    "contracts deploy requires a signed-in phone session in --signer phone mode",
-                );
-            }
-            contractsSigner = options.userSigner;
-        } else {
-            contractsSigner = await resolveSigner({ suri: "//Alice" });
-            ownsContractsSigner = true;
+        const { info: session, created } = await getOrCreateSessionAccount();
+        const client = await getConnection();
+
+        // One-shot top-up — signed by whoever is available (user's signer
+        // in phone/--suri mode, Alice as a dev fallback). Funding only
+        // happens when the session key is below threshold, so day-2 runs
+        // usually skip this step entirely.
+        await ensureSessionFunded({
+            client,
+            sessionAddress: session.account.ss58Address,
+            userSigner: options.userSigner,
+            counter,
+            onEvent: options.onEvent,
+        });
+        if (created) {
+            await submitAndWatch(client.assetHub.tx.Revive.map_account(), session.account.signer);
         }
 
-        const client = await getConnection();
         const result = await runContractsPhase({
             projectDir: options.projectDir,
             contractsType,
@@ -269,8 +301,8 @@ async function maybeRunContracts(options: RunDeployOptions): Promise<DeployOutco
             // bulletin, individuality}>`; cdm only needs the first two. The
             // structural extra field is harmless at runtime.
             client: client as unknown as Parameters<typeof runContractsPhase>[0]["client"],
-            signer: contractsSigner.signer,
-            origin: contractsSigner.address,
+            signer: session.account.signer,
+            origin: session.account.ss58Address,
             onEvent: (event) => options.onEvent({ kind: "contracts-event", event }),
         });
 
@@ -280,13 +312,54 @@ async function maybeRunContracts(options: RunDeployOptions): Promise<DeployOutco
         const message = err instanceof Error ? err.message : String(err);
         options.onEvent({ kind: "error", phase: "contracts", message });
         throw err;
-    } finally {
-        if (ownsContractsSigner && contractsSigner) {
-            try {
-                contractsSigner.destroy();
-            } catch {}
-        }
     }
+}
+
+/**
+ * Top up the contracts session key if it's underfunded. Emits
+ * `contracts-event` info lines for the TUI and, when the user's own signer
+ * pays, wires the `signing` event stream so the "check your phone" prompt
+ * shows up like every other phone approval. A no-op when the balance is
+ * already above `MIN_BALANCE` — that's the common case after the first deploy.
+ */
+async function ensureSessionFunded(opts: {
+    client: Awaited<ReturnType<typeof getConnection>>;
+    sessionAddress: string;
+    userSigner: ResolvedSigner | null;
+    counter: SigningCounter;
+    onEvent: RunDeployOptions["onEvent"];
+}): Promise<void> {
+    const emitInfo = (message: string) =>
+        opts.onEvent({ kind: "contracts-event", event: { kind: "info", message } });
+
+    const balance = await checkBalance(opts.client, opts.sessionAddress);
+    if (balance.sufficient) {
+        emitInfo(`session key funded (${opts.sessionAddress})`);
+        return;
+    }
+
+    emitInfo(`funding session key ${opts.sessionAddress}…`);
+
+    // User signer (phone session or --suri dev key) pays when available.
+    // Pure dev mode (no userSigner and no --suri) falls back to Alice —
+    // same pattern `dot init` already uses to bootstrap new accounts.
+    const funder = opts.userSigner
+        ? wrapSignerWithEvents(opts.userSigner.signer, {
+              label: "Fund contract deploy session key",
+              counter: opts.counter,
+              onEvent: (event) => opts.onEvent({ kind: "signing", event }),
+          })
+        : createDevSigner("Alice");
+
+    await submitAndWatch(
+        opts.client.assetHub.tx.Balances.transfer_keep_alive({
+            dest: Enum("Id", opts.sessionAddress),
+            value: FUND_AMOUNT,
+        }),
+        funder,
+    );
+
+    emitInfo("session key funded");
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

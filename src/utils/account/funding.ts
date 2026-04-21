@@ -10,11 +10,11 @@ import type { PaseoClient } from "../connection.js";
 
 const AT_BEST = { at: "best" as const };
 
-/** 1 PAS — below this we consider the account underfunded. */
-export const MIN_BALANCE = 10_000_000_000n;
+/** 0.1 PAS — below this we consider the account underfunded. */
+export const MIN_BALANCE = 1_000_000_000n;
 
-/** 10 PAS — amount Alice sends when funding. */
-export const FUND_AMOUNT = 100_000_000_000n;
+/** 1 PAS — amount sent when funding. */
+export const FUND_AMOUNT = 10_000_000_000n;
 
 export interface BalanceStatus {
     free: bigint;

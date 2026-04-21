@@ -29,6 +29,9 @@ import {
     type SigningEvent,
 } from "../../utils/deploy/index.js";
 import { buildSummaryView } from "./summary.js";
+import { readSessionAccount } from "../../utils/deploy/session-account.js";
+import { checkBalance } from "../../utils/account/funding.js";
+import { getConnection } from "../../utils/connection.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
 import type { ContractsType } from "../../utils/build/detect.js";
 import { DEFAULT_BUILD_DIR } from "../../config.js";
@@ -446,6 +449,41 @@ function ConfirmStage({
     onProceed: () => void;
     onCancel: () => void;
 }) {
+    // Whether the contracts phase will need to sign a Balances.transfer to
+    // top up the session key. Starts pessimistic (yes, needed) so the
+    // approvals list is populated immediately; resolved asynchronously
+    // by a one-shot balance query below. Only affects phone sessions —
+    // local dev funders run in-process without a user tap.
+    const needsSessionFunding = inputs.deployContracts && userSigner?.source === "session";
+    const [contractsFundingNeeded, setContractsFundingNeeded] =
+        useState<boolean>(needsSessionFunding);
+
+    useEffect(() => {
+        if (!needsSessionFunding) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const session = await readSessionAccount();
+                if (session === null) {
+                    // No key minted yet → the deploy path will create one
+                    // and fund it, so a tap is guaranteed. Leave
+                    // `contractsFundingNeeded` at its pessimistic default.
+                    return;
+                }
+                const client = await getConnection();
+                const { sufficient } = await checkBalance(client, session.account.ss58Address);
+                if (!cancelled) setContractsFundingNeeded(!sufficient);
+            } catch {
+                // If the pre-check fails (network blip, etc.), leave the
+                // default `true` in place — overestimating one tap is a
+                // better failure mode than hiding it and surprising the user.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [needsSessionFunding]);
+
     const setup = useMemo(() => {
         try {
             return resolveSignerSetup({
@@ -453,6 +491,7 @@ function ConfirmStage({
                 userSigner,
                 publishToPlayground: inputs.publishToPlayground,
                 plan: plan ?? undefined,
+                contractsFundingNeeded,
             });
         } catch (err) {
             return {
@@ -460,7 +499,7 @@ function ConfirmStage({
                 error: err instanceof Error ? err.message : String(err),
             };
         }
-    }, [inputs, userSigner, plan]);
+    }, [inputs, userSigner, plan, contractsFundingNeeded]);
 
     // Only warn on the oversized branch — silent when README is absent or
     // within the cap, per the product decision to inline tacitly and speak
@@ -660,6 +699,14 @@ function RunningStage({
                     mode: inputs.mode,
                     publishToPlayground: inputs.publishToPlayground,
                     deployContracts: inputs.deployContracts,
+                    // Pessimistic default — if the confirm-stage balance
+                    // check refined this to `false`, the counter still
+                    // auto-clamps at runtime so the only downside is
+                    // showing "step N of N+1" briefly if funding is
+                    // actually skipped. Cheaper than threading a second
+                    // piece of state through the stage transition.
+                    contractsFundingNeeded:
+                        inputs.deployContracts && userSigner?.source === "session",
                     userSigner,
                     plan: plan ?? undefined,
                     onEvent: (event) => handleEvent(event),
