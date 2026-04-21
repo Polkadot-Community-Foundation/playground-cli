@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+// MUST be the first import — sets env vars that gate bulletin-deploy's
+// Sentry + memory-report paths before their modules evaluate. See
+// `src/bootstrap.ts` for the rationale.
+import "./bootstrap.js";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { initCommand } from "./commands/init/index.js";
@@ -24,15 +28,6 @@ if (process.stdin.isTTY) {
     process.stdin.on("readable", () => {});
     // Don't let the listener itself hold the event loop open on exit.
     process.stdin.unref();
-}
-
-// Opt out of bulletin-deploy's Sentry telemetry unless the user has
-// explicitly opted in. Sentry buffers breadcrumbs + spans in-memory while
-// it tries to reach its endpoint — on a flaky or long-running deploy this
-// has been observed to balloon the process. Users can re-enable by setting
-// `BULLETIN_DEPLOY_TELEMETRY=1` before invoking `dot deploy`.
-if (process.env.BULLETIN_DEPLOY_TELEMETRY === undefined) {
-    process.env.BULLETIN_DEPLOY_TELEMETRY = "0";
 }
 
 // Install SIGINT/SIGTERM/SIGHUP + unhandledRejection handlers so a force-quit
