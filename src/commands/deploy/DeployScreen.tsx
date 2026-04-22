@@ -29,7 +29,7 @@ import {
     type SigningEvent,
 } from "../../utils/deploy/index.js";
 import { buildSummaryView } from "./summary.js";
-import { readSessionAccount } from "../../utils/deploy/session-account.js";
+import { readSessionAccount, SESSION_MIN_BALANCE } from "../../utils/deploy/session-account.js";
 import { checkBalance } from "../../utils/account/funding.js";
 import { getConnection } from "../../utils/connection.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
@@ -471,7 +471,11 @@ function ConfirmStage({
                     return;
                 }
                 const client = await getConnection();
-                const { sufficient } = await checkBalance(client, session.account.ss58Address);
+                const { sufficient } = await checkBalance(
+                    client,
+                    session.account.ss58Address,
+                    SESSION_MIN_BALANCE,
+                );
                 if (!cancelled) setContractsFundingNeeded(!sufficient);
             } catch {
                 // If the pre-check fails (network blip, etc.), leave the

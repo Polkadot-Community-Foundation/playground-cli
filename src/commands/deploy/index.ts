@@ -25,7 +25,7 @@ import {
 import { buildSummaryView } from "./summary.js";
 import { detectContractsType, type ContractsType } from "../../utils/build/detect.js";
 import { loadDetectInput } from "../../utils/build/runner.js";
-import { readSessionAccount } from "../../utils/deploy/session-account.js";
+import { readSessionAccount, SESSION_MIN_BALANCE } from "../../utils/deploy/session-account.js";
 import { checkBalance } from "../../utils/account/funding.js";
 import { DEFAULT_BUILD_DIR, type Env } from "../../config.js";
 
@@ -337,7 +337,11 @@ async function computeContractsFundingNeeded(args: {
         // No key yet → deploy path will mint one and fund it guaranteed.
         if (session === null) return true;
         const client = await getConnection();
-        const { sufficient } = await checkBalance(client, session.account.ss58Address);
+        const { sufficient } = await checkBalance(
+            client,
+            session.account.ss58Address,
+            SESSION_MIN_BALANCE,
+        );
         return !sufficient;
     } catch {
         return true;

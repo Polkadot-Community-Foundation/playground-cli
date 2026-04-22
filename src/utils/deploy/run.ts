@@ -18,7 +18,11 @@ import {
 import { runStorageDeploy } from "./storage.js";
 import { publishToPlayground, normalizeDomain } from "./playground.js";
 import { runContractsPhase, type ContractsPhaseEvent } from "./contracts.js";
-import { getOrCreateSessionAccount } from "./session-account.js";
+import {
+    getOrCreateSessionAccount,
+    SESSION_FUND_AMOUNT,
+    SESSION_MIN_BALANCE,
+} from "./session-account.js";
 import { resolveSignerSetup, type SignerMode, type DeployApproval } from "./signerMode.js";
 import {
     wrapSignerWithEvents,
@@ -27,7 +31,7 @@ import {
     type SigningEvent,
 } from "./signingProxy.js";
 import type { DeployLogEvent } from "./progress.js";
-import { checkBalance, FUND_AMOUNT } from "../account/funding.js";
+import { checkBalance } from "../account/funding.js";
 import { Enum } from "polkadot-api";
 import { submitAndWatch, createDevSigner } from "@polkadot-apps/tx";
 import type { ResolvedSigner } from "../signer.js";
@@ -332,7 +336,7 @@ async function ensureSessionFunded(opts: {
     const emitInfo = (message: string) =>
         opts.onEvent({ kind: "contracts-event", event: { kind: "info", message } });
 
-    const balance = await checkBalance(opts.client, opts.sessionAddress);
+    const balance = await checkBalance(opts.client, opts.sessionAddress, SESSION_MIN_BALANCE);
     if (balance.sufficient) {
         emitInfo(`session key funded (${opts.sessionAddress})`);
         return;
@@ -354,7 +358,7 @@ async function ensureSessionFunded(opts: {
     await submitAndWatch(
         opts.client.assetHub.tx.Balances.transfer_keep_alive({
             dest: Enum("Id", opts.sessionAddress),
-            value: FUND_AMOUNT,
+            value: SESSION_FUND_AMOUNT,
         }),
         funder,
     );

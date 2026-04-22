@@ -31,6 +31,12 @@ import type { KvStore } from "@polkadot-apps/storage";
 
 export type { SessionKeyInfo };
 
+/** 0.5 PAS — below this the contracts session key needs a top-up. */
+export const SESSION_MIN_BALANCE = 5_000_000_000n;
+
+/** 5 PAS — amount sent to top the session key up. */
+export const SESSION_FUND_AMOUNT = 50_000_000_000n;
+
 /** Root directory for playground-cli user state. Override with `$POLKADOT_ROOT`. */
 export function defaultRoot(): string {
     return process.env.POLKADOT_ROOT ?? resolve(homedir(), ".polkadot");

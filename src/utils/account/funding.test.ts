@@ -52,18 +52,18 @@ function makeClient(free: bigint) {
 }
 
 describe("checkBalance", () => {
-    it("reports sufficient when balance >= MIN_BALANCE (0.5 PAS)", async () => {
-        const { client } = makeClient(5_000_000_000n);
+    it("reports sufficient when balance >= default MIN_BALANCE (1 PAS)", async () => {
+        const { client } = makeClient(10_000_000_000n);
         const result = await checkBalance(
             client,
             "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
         );
         expect(result.sufficient).toBe(true);
-        expect(result.free).toBe(5_000_000_000n);
+        expect(result.free).toBe(10_000_000_000n);
     });
 
-    it("reports insufficient when balance < MIN_BALANCE (0.5 PAS)", async () => {
-        const { client } = makeClient(500_000_000n);
+    it("reports insufficient when balance < default MIN_BALANCE (1 PAS)", async () => {
+        const { client } = makeClient(5_000_000_000n);
         const result = await checkBalance(
             client,
             "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
@@ -79,6 +79,26 @@ describe("checkBalance", () => {
         );
         expect(result.sufficient).toBe(false);
         expect(result.free).toBe(0n);
+    });
+
+    it("respects an explicit minBalance override (below default)", async () => {
+        const { client } = makeClient(6_000_000_000n);
+        const result = await checkBalance(
+            client,
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            5_000_000_000n,
+        );
+        expect(result.sufficient).toBe(true);
+    });
+
+    it("respects an explicit minBalance override (above default)", async () => {
+        const { client } = makeClient(10_000_000_000n);
+        const result = await checkBalance(
+            client,
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            50_000_000_000n,
+        );
+        expect(result.sufficient).toBe(false);
     });
 });
 
@@ -110,5 +130,30 @@ describe("ensureFunded", () => {
         // breaks even though the variable name looks correct.
         expect(callArgs.value).toBe(FUND_AMOUNT);
         expect(callArgs.dest).toMatchObject({ type: "Id" });
+    });
+
+    it("uses caller-supplied minBalance + fundAmount when passed", async () => {
+        mockSubmitAndWatch.mockClear();
+        const { client, transferFactory } = makeClient(3_000_000_000n);
+        await ensureFunded(
+            client,
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            5_000_000_000n,
+            20_000_000_000n,
+        );
+        expect(mockSubmitAndWatch).toHaveBeenCalledTimes(1);
+        const callArgs = transferFactory.mock.calls[0][0] as { value: bigint };
+        expect(callArgs.value).toBe(20_000_000_000n);
+    });
+
+    it("skips funding when balance is above the caller-supplied minBalance", async () => {
+        mockSubmitAndWatch.mockClear();
+        const { client } = makeClient(6_000_000_000n);
+        await ensureFunded(
+            client,
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            5_000_000_000n,
+        );
+        expect(mockSubmitAndWatch).not.toHaveBeenCalled();
     });
 });

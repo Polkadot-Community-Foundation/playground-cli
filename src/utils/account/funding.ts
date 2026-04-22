@@ -10,32 +10,41 @@ import type { PaseoClient } from "../connection.js";
 
 const AT_BEST = { at: "best" as const };
 
-/** 0.5 PAS — below this we consider the account underfunded. */
-export const MIN_BALANCE = 5_000_000_000n;
+/** 1 PAS — below this we consider the account underfunded. */
+export const MIN_BALANCE = 10_000_000_000n;
 
-/** 1 PAS — amount sent when funding. */
-export const FUND_AMOUNT = 50_000_000_000n;
+/** 10 PAS — amount Alice sends when funding. */
+export const FUND_AMOUNT = 100_000_000_000n;
 
 export interface BalanceStatus {
     free: bigint;
     sufficient: boolean;
 }
 
-export async function checkBalance(client: PaseoClient, address: string): Promise<BalanceStatus> {
+export async function checkBalance(
+    client: PaseoClient,
+    address: string,
+    minBalance: bigint = MIN_BALANCE,
+): Promise<BalanceStatus> {
     const account = await client.assetHub.query.System.Account.getValue(address, AT_BEST);
     const free = account.data.free;
-    return { free, sufficient: free >= MIN_BALANCE };
+    return { free, sufficient: free >= minBalance };
 }
 
-export async function ensureFunded(client: PaseoClient, address: string): Promise<void> {
-    const { sufficient } = await checkBalance(client, address);
+export async function ensureFunded(
+    client: PaseoClient,
+    address: string,
+    minBalance: bigint = MIN_BALANCE,
+    fundAmount: bigint = FUND_AMOUNT,
+): Promise<void> {
+    const { sufficient } = await checkBalance(client, address, minBalance);
     if (sufficient) return;
 
     const alice = createDevSigner("Alice");
     await submitAndWatch(
         client.assetHub.tx.Balances.transfer_keep_alive({
             dest: Enum("Id", address),
-            value: FUND_AMOUNT,
+            value: fundAmount,
         }),
         alice,
     );
