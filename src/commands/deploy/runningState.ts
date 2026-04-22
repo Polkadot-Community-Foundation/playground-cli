@@ -1,15 +1,7 @@
 /**
- * Pure reducer + initial-state builder for the running-deploy TUI.
- *
- * Lifted out of `DeployScreen.tsx`'s `RunningStage` so the state-transition
- * logic can be unit-tested without dragging React + Ink into the vitest
- * runner. Keep this file free of React, Ink, and any side effects — the
- * reducer must be a pure function of `(state, event) -> state`.
- *
- * Log-line updates (anything that would call `queueContractsLog` /
- * `queueFrontendLog`) intentionally live in the component: they are
- * throttled via refs + timers and are orthogonal to state transitions.
- * The reducer only touches phase status, contract rows, and error messages.
+ * Pure reducer + initial-state builder for the running-deploy TUI. Must stay
+ * free of React/Ink so it can be unit-tested. Log-line updates are throttled
+ * inside the component and deliberately not handled here.
  */
 
 import type { DeployEvent } from "../../utils/deploy/index.js";
@@ -73,15 +65,6 @@ export function initialRunningState(inputs: RunningStateInputs): RunningState {
     };
 }
 
-/**
- * Pure state transition for the running-deploy UI.
- *
- * Must mirror the `handleEvent` switch inside `RunningStage` in
- * `DeployScreen.tsx` for the status / error slots. Events that only
- * affect log lines (`build-log`, `storage-event`, `signing`, raw
- * `contracts-event` info/compile-log, plus `plan`) are passed through
- * unchanged — the component handles those via its throttled log sinks.
- */
 export function runningReducer(state: RunningState, event: DeployEvent): RunningState {
     switch (event.kind) {
         case "phase-start": {
@@ -168,11 +151,9 @@ export function runningReducer(state: RunningState, event: DeployEvent): Running
         case "contracts-event": {
             const e = event.event;
             if (e.kind === "compile-detected") {
-                // Build just finished producing artifacts; deploy starts
-                // next. Mark every contract as "running" up-front — cdm's
-                // planDeploy + chunk submission can take 10–20s before
-                // the first deploy-chunk event fires, and without a live
-                // spinner on each sub-row it looks like the UI froze.
+                // Mark rows running up-front: cdm can take 10–20s between
+                // compile-detected and the first deploy-chunk, during which
+                // idle rows make the UI look frozen.
                 return {
                     ...state,
                     contracts: {
@@ -184,9 +165,6 @@ export function runningReducer(state: RunningState, event: DeployEvent): Running
                 };
             }
             if (e.kind === "deploy-chunk") {
-                // Each chunk landed — mark its contracts complete with
-                // their on-chain addresses as soon as we know them,
-                // rather than waiting for deploy-done.
                 const byName = new Map(e.contracts.map((c) => [c.name, c.address]));
                 return {
                     ...state,
@@ -215,7 +193,6 @@ export function runningReducer(state: RunningState, event: DeployEvent): Running
                     },
                 };
             }
-            // `info` and `compile-log` are log-only; ignored by the reducer.
             return state;
         }
         case "error": {
@@ -243,8 +220,6 @@ export function runningReducer(state: RunningState, event: DeployEvent): Running
             }
             return state;
         }
-        // Log/signing/plan events are orthogonal to status state — handled
-        // by the component's throttled log sinks, not the reducer.
         default:
             return state;
     }

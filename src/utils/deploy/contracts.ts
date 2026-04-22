@@ -92,9 +92,6 @@ export async function runContractsPhase(
     );
 
     const pvmPaths = artifacts.map((a) => a.pvmPath);
-    // `undefined` → skip CREATE2 salting. v1 ships non-deterministic contract
-    // addresses because we don't publish metadata/registry entries that would
-    // benefit from cross-chain determinism yet.
     let chunkOffset = 0;
     const batchResult = await deployer.deployBatch(pvmPaths, undefined, (chunkResult) => {
         const base = chunkOffset;
@@ -103,8 +100,8 @@ export async function runContractsPhase(
             kind: "deploy-chunk",
             chunk: chunkResult.chunkIndex + 1,
             total: chunkResult.totalChunks,
-            // cdm preserves input order across chunks, so the Nth address of a
-            // chunk maps to `artifacts[base + N]`.
+            // cdm preserves input order across chunks, so the Nth address
+            // of a chunk maps to `artifacts[base + N]`.
             contracts: chunkResult.addresses.map((addr, i) => ({
                 name: artifacts[base + i]?.name ?? `contract-${base + i}`,
                 address: addr as HexString,
@@ -123,13 +120,9 @@ export async function runContractsPhase(
 // ── Compile dispatch ─────────────────────────────────────────────────────────
 
 interface CompiledArtifact {
-    /** Human-readable name (crate name for cdm, contract name for Solidity). */
+    /** Crate name for cdm, contract name for Solidity. */
     name: string;
-    /**
-     * Absolute path to the bytecode file on disk. Named `pvmPath` to match
-     * cdm's `ContractDeployer.deployBatch(pvmPaths)` API; the bytes can be
-     * PVM or EVM — revive's `instantiate_with_code` handles either.
-     */
+    /** Absolute path to the bytecode file (PVM or EVM bytes). */
     pvmPath: string;
 }
 
@@ -185,9 +178,8 @@ function relayCdmBuildEvent(event: CdmBuildEvent, emit: (e: ContractsPhaseEvent)
 async function compileFoundry(opts: RunContractsPhaseOptions): Promise<CompiledArtifact[]> {
     const projectDir = resolve(opts.projectDir);
 
-    // `--resolc` forces PolkaVM codegen regardless of `foundry.toml`. Safer
-    // than depending on user config — per our empirical test, plain
-    // `forge build` emits EVM bytecode by default even on the polkadot fork.
+    // `--resolc` forces PolkaVM codegen regardless of `foundry.toml`; plain
+    // `forge build` defaults to EVM even on the polkadot fork.
     await runStreamed({
         cmd: "forge",
         args: ["build", "--resolc"],
@@ -205,8 +197,6 @@ async function compileFoundry(opts: RunContractsPhaseOptions): Promise<CompiledA
     const artifacts: CompiledArtifact[] = [];
     for (const entry of readdirSync(outDir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
-        // Skip test (`Foo.t.sol`) and script (`Foo.s.sol`) directories —
-        // deploying those would be a footgun.
         if (entry.name.endsWith(".t.sol") || entry.name.endsWith(".s.sol")) continue;
         if (!entry.name.endsWith(".sol")) continue;
 
@@ -217,9 +207,6 @@ async function compileFoundry(opts: RunContractsPhaseOptions): Promise<CompiledA
         const hex = extractFoundryBytecode(JSON.parse(readFileSync(artifactPath, "utf8")));
         if (hex === null) continue;
         const bytes = hexToBytes(hex);
-        // Abstract contracts / interfaces compile to "0x" — skip them
-        // (extractFoundryBytecode already returns null for "0x", but guard
-        // against any other zero-byte hex just in case).
         if (bytes.length === 0) continue;
 
         artifacts.push({
@@ -259,16 +246,12 @@ async function compileHardhat(opts: RunContractsPhaseOptions): Promise<CompiledA
 
         const dir = join(artifactsRoot, entry.name);
         for (const sub of readdirSync(dir)) {
-            // Skip debug files (`Foo.dbg.json`) — they don't have bytecode.
             if (!sub.endsWith(".json") || sub.endsWith(".dbg.json")) continue;
 
             const contractName = sub.slice(0, -".json".length);
             const hex = extractHardhatBytecode(JSON.parse(readFileSync(join(dir, sub), "utf8")));
             if (hex === null) continue;
             const bytes = hexToBytes(hex);
-            // Abstract contracts / interfaces compile to "0x" — skip them
-            // (extractHardhatBytecode already returns null for "0x", but
-            // guard against any other zero-byte hex just in case).
             if (bytes.length === 0) continue;
 
             artifacts.push({
@@ -283,15 +266,7 @@ async function compileHardhat(opts: RunContractsPhaseOptions): Promise<CompiledA
 
 // ── Shared helpers ───────────────────────────────────────────────────────────
 
-/**
- * Pull the deploy bytecode out of a Foundry `<Contract>.json` artifact.
- *
- * Foundry nests the hex under `bytecode.object`. Returns `null` for any
- * shape that isn't a non-empty hex string ("0x" included, since an empty
- * bytecode belongs to an abstract contract / interface we'd skip anyway).
- * Exported so the JSON→hex selection can be unit-tested without spawning
- * `forge`.
- */
+/** Read `bytecode.object` from a Foundry artifact; null for "0x"/missing. */
 export function extractFoundryBytecode(artifactJson: unknown): string | null {
     if (typeof artifactJson !== "object" || artifactJson === null) return null;
     const bytecode = (artifactJson as { bytecode?: unknown }).bytecode;
@@ -303,12 +278,8 @@ export function extractFoundryBytecode(artifactJson: unknown): string | null {
 }
 
 /**
- * Pull the deploy bytecode out of a Hardhat `<Contract>.json` artifact.
- *
- * Hardhat stores the hex as a plain string under `bytecode` — *not* the
- * `{ object: string }` shape Foundry uses. We deliberately refuse the
- * Foundry shape here so a misrouted artifact fails loudly instead of
- * silently producing the wrong bytes.
+ * Read `bytecode` from a Hardhat artifact; null for "0x"/missing. Refuses
+ * the Foundry `{ object }` shape so misrouted artifacts fail loudly.
  */
 export function extractHardhatBytecode(artifactJson: unknown): string | null {
     if (typeof artifactJson !== "object" || artifactJson === null) return null;
@@ -340,10 +311,6 @@ function sessionTmpDir(): string {
     return dir;
 }
 
-/**
- * Persist a contract byte blob to a file that `ContractDeployer.deploy` can
- * read back. Works for PVM and EVM bytes alike — revive auto-dispatches.
- */
 function writeTmpBytecode(stem: string, bytes: Uint8Array): string {
     const path = join(sessionTmpDir(), `${stem}.bin`);
     writeFileSync(path, bytes);

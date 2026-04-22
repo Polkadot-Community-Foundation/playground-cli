@@ -1,12 +1,3 @@
-/**
- * Tests for `runStreamed` + `runShell`.
- *
- * We spawn real processes (`/bin/sh`, `/bin/echo`) — these helpers are thin
- * wrappers around `node:child_process.spawn` and the interesting behaviour
- * (line forwarding, tail truncation, error-message shape) only shows up end
- * to end. Mocking `spawn` would just re-implement it.
- */
-
 import { describe, it, expect } from "vitest";
 import { runStreamed, runShell } from "./process.js";
 

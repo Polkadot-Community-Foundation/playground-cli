@@ -35,8 +35,6 @@ describe("getOrCreateSessionAccount", () => {
         const path = join(tmp, "accounts.json");
         expect(existsSync(path)).toBe(true);
         const stored = JSON.parse(readFileSync(path, "utf8"));
-        // SessionKeyManager persists under its name ("default" by default).
-        // Document the shape so a future rename is a conscious break.
         expect(stored.default).toBe(info.mnemonic);
     });
 
@@ -51,11 +49,8 @@ describe("getOrCreateSessionAccount", () => {
     });
 
     it("ignores garbage in the store and regenerates a valid key", async () => {
-        // Simulate an old/corrupt accounts.json. The FileKvStore is tolerant
-        // of non-object JSON and non-string values — it should treat the
-        // store as empty and generate a fresh key.
         const path = join(tmp, "accounts.json");
-        await getOrCreateSessionAccount(); // ensure dir exists
+        await getOrCreateSessionAccount();
         const { writeFileSync } = await import("node:fs");
         writeFileSync(path, JSON.stringify({ default: { not: "a string" } }));
 
@@ -101,9 +96,6 @@ describe("readSessionAccount", () => {
     it("does not create a file when the store is empty (read-only)", async () => {
         await readSessionAccount();
         const path = join(tmp, "accounts.json");
-        // The read-only path must not leave a partial/empty file behind —
-        // if it did, a subsequent getOrCreate would see a pre-existing file
-        // and potentially skip the `created: true` signal that gates mapping.
         expect(existsSync(path)).toBe(false);
     });
 });

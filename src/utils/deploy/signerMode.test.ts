@@ -1,11 +1,3 @@
-/**
- * Tests for `resolveSignerSetup` — the single source of truth for which
- * signer handles each on-chain step of a deploy. Exhaustive matrix coverage
- * because the function's output drives both the confirm-page approval count
- * and runtime signer routing; a quiet off-by-one or wrong source here
- * surfaces as a mislabelled phone tap during a real deploy.
- */
-
 import { describe, it, expect } from "vitest";
 import { resolveSignerSetup } from "./signerMode.js";
 import type { ResolvedSigner } from "../signer.js";

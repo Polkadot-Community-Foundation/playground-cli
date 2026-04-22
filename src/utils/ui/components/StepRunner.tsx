@@ -10,13 +10,7 @@ import { useState, useEffect, useRef } from "react";
 import { Box } from "ink";
 import { Row, Section, LogTail, type MarkKind } from "../theme/index.js";
 
-/**
- * Coalesce log updates to ≤10 Hz. Firehose sources (bulletin-deploy chunk
- * logs, vite/next build output — thousands of lines/sec) would otherwise
- * fire a setState per line and flood React's reconciler badly enough to
- * blow past 20 GB RSS on a long deploy. See CLAUDE.md "Throttle TUI info
- * updates" for the incident report.
- */
+// Coalesce log updates to ≤10 Hz — see CLAUDE.md "Throttle TUI info updates".
 const LOG_THROTTLE_MS = 100;
 const LOG_LINE_MAX = 160;
 
@@ -67,9 +61,6 @@ export function StepRunner({ title, steps, onDone }: Props) {
     );
     const [output, setOutput] = useState<string[]>([]);
 
-    // Throttled log sink — per-line setState would flood the reconciler on
-    // firehose streams. We keep the rolling buffer in a ref and flush to
-    // state at most every `LOG_THROTTLE_MS`.
     const bufferRef = useRef<string[]>([]);
     const flushTimerRef = useRef<NodeJS.Timeout | null>(null);
     const scheduleFlush = () => {

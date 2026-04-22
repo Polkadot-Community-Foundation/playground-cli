@@ -49,11 +49,8 @@ async function hasCdm(): Promise<boolean> {
 }
 
 async function hasFoundryPolkadot(): Promise<boolean> {
-    // foundry-polkadot installs `forge` at `~/.foundry/bin/forge` — we probe
-    // `forge` on PATH plus the polkadot-versioned binary the foundryup-polkadot
-    // installer drops in. Vanilla foundry also ships `forge` but without the
-    // `--resolc` codegen path, which `dot deploy` needs for Solidity contracts;
-    // `foundryup-polkadot` is the one that wires in the polkadot fork.
+    // Stock `forge` lacks `--resolc`, which we need for PolkaVM codegen;
+    // `foundryup-polkadot` wires in the polkadot fork.
     const home = homedir();
     const foundryupPolkadot = resolve(home, ".foundry/bin/foundryup-polkadot");
     return (await commandExists("forge")) && existsSync(foundryupPolkadot);
@@ -136,9 +133,6 @@ export const TOOL_STEPS: ToolStep[] = [
     {
         name: "foundry (polkadot)",
         check: () => hasFoundryPolkadot(),
-        // `foundryup-polkadot` installs the polkadot fork alongside any stock
-        // foundry the user may already have, so this step is safe to run even
-        // when `forge` already exists on PATH.
         install: (onData) =>
             runPiped(
                 "curl -L https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash && $HOME/.foundry/bin/foundryup-polkadot",

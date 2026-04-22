@@ -71,11 +71,7 @@ export interface RunDeployOptions {
     mode: SignerMode;
     /** Whether to publish to the playground registry after DotNS succeeds. */
     publishToPlayground: boolean;
-    /**
-     * Whether to compile + deploy the project's contracts (foundry / hardhat /
-     * cdm). When true, the contracts phase runs after `build`; when false
-     * (default) the phase emits a `phase-skipped` event and returns immediately.
-     */
+    /** Compile + deploy foundry/hardhat/cdm contracts alongside the frontend. */
     deployContracts?: boolean;
     /** The logged-in phone signer. Required for `mode === "phone"` or `publishToPlayground`. */
     userSigner: ResolvedSigner | null;
@@ -89,13 +85,7 @@ export interface RunDeployOptions {
      * (3 DotNS taps) if absent and auto-corrects at runtime.
      */
     plan?: DeployPlan;
-    /**
-     * Whether the contracts phase will need to top up its session key. Passed
-     * through so the internal `resolveSignerSetup` call produces the same
-     * approvals total the caller (CLI summary / confirm page) already
-     * showed — otherwise the TUI's "step N of M" counter displays the wrong
-     * total until the funding tap auto-extends it mid-flight.
-     */
+    /** Whether the contracts phase needs a phone tap to top up its session key. */
     contractsFundingNeeded?: boolean;
 }
 
@@ -133,11 +123,8 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
 
     const counter = createSigningCounter(setup.approvals.length);
 
-    // Contracts and frontend-build+upload are independent and run concurrently.
-    // Contracts work is network-bound (chain txs); frontend work is CPU-bound
-    // (vite/next) + network-bound (bulletin chunks). They share no state, so
-    // the only coordination needed is that both must finish before playground
-    // publish.
+    // Contracts and frontend build+upload run concurrently; both must finish
+    // before playground publish.
     const buildAbs = options.buildDir;
 
     const contractsPromise = maybeRunContracts(options, counter);
@@ -235,30 +222,8 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
 // ── Contracts orchestration ──────────────────────────────────────────────────
 
 /**
- * Run the contracts phase when `deployContracts` is true and a recognized
- * foundry/hardhat/cdm project is detected. Fires `phase-skipped` in every
- * other case (user said no, nothing detected, etc.) so the UI can collapse
- * the row without leaving it "pending" forever.
- *
- * Signer resolution:
- *   Contract deploys are signed by a persistent on-disk **session key**
- *   (`~/.polkadot/accounts.json`), not the user's main signer. Why: the
- *   mobile signer can't handle the encoded size of a batched contract
- *   deploy today, and its failure mode is miscategorised downstream (the
- *   phone's error message contains "rejected" → `@polkadot-apps/tx` flags
- *   it as a user-cancel, discarding the real cause). A local sr25519 key
- *   funded once per session sidesteps the mobile-signing path entirely.
- *
- *   Funding source for the session key:
- *     - user signer present (phone mode, or `--suri`) → user pays, one
- *       on-phone tap per low-balance top-up.
- *     - pure dev mode (no user signer)               → fund from Alice.
- *
- *   Consequence: contracts are owned by the session H160, not the user's.
- *   Fine for v1 — we're on testnet and there's no contract registry
- *   ownership record yet. Revisit when we either (a) have a mobile signer
- *   that can sign large txs, or (b) publish contracts to the registry with
- *   owner semantics that matter.
+ * Compile + deploy contracts using the on-disk session key. Fires
+ * `phase-skipped` when disabled or no contract project is detected.
  */
 async function maybeRunContracts(
     options: RunDeployOptions,
@@ -291,10 +256,6 @@ async function maybeRunContracts(
         const { info: session, created } = await getOrCreateSessionAccount();
         const client = await getConnection();
 
-        // One-shot top-up — signed by whoever is available (user's signer
-        // in phone/--suri mode, Alice as a dev fallback). Funding only
-        // happens when the session key is below threshold, so day-2 runs
-        // usually skip this step entirely.
         await ensureSessionFunded({
             client,
             sessionAddress: session.account.ss58Address,
@@ -309,9 +270,9 @@ async function maybeRunContracts(
         const result = await runContractsPhase({
             projectDir: options.projectDir,
             contractsType,
-            // @polkadot-apps/chain-client returns `ChainClient<{assetHub,
-            // bulletin, individuality}>`; cdm only needs the first two. The
-            // structural extra field is harmless at runtime.
+            // cdm's PipelineChainClient is a structural subset of our
+            // ChainClient — cast keeps the extra `individuality` field out
+            // of the SDK-surface type without affecting runtime behaviour.
             client: client as unknown as Parameters<typeof runContractsPhase>[0]["client"],
             signer: session.account.signer,
             origin: session.account.ss58Address,
@@ -327,13 +288,7 @@ async function maybeRunContracts(
     }
 }
 
-/**
- * Top up the contracts session key if it's underfunded. Emits
- * `contracts-event` info lines for the TUI and, when the user's own signer
- * pays, wires the `signing` event stream so the "check your phone" prompt
- * shows up like every other phone approval. A no-op when the balance is
- * already above `MIN_BALANCE` — that's the common case after the first deploy.
- */
+/** Top up the contracts session key if it's below `SESSION_MIN_BALANCE`. */
 async function ensureSessionFunded(opts: {
     client: Awaited<ReturnType<typeof getConnection>>;
     sessionAddress: string;
@@ -352,9 +307,6 @@ async function ensureSessionFunded(opts: {
 
     emitInfo(`funding session key ${opts.sessionAddress}…`);
 
-    // User signer (phone session or --suri dev key) pays when available.
-    // Pure dev mode (no userSigner and no --suri) falls back to Alice —
-    // same pattern `dot init` already uses to bootstrap new accounts.
     const funder = opts.userSigner
         ? wrapSignerWithEvents(opts.userSigner.signer, {
               label: "Fund contract deploy session key",

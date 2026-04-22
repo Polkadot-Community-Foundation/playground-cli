@@ -1,26 +1,7 @@
 /**
- * On-disk session key used to sign `Revive.instantiate_with_code` calls for
- * the contracts deploy phase.
- *
- * Why: mobile signing can't handle the wire size of a batched contract deploy
- * today, and the failure mode gets miscategorised (the phone's error message
- * contains "rejected" → `@polkadot-apps/tx` classifies it as a user-cancel,
- * discarding the real cause). A local sr25519 key, funded once by the user's
- * main signer, sidesteps the mobile-signing path entirely for the only phase
- * that currently breaks under it.
- *
- * Persistence:
- *   `$POLKADOT_ROOT/accounts.json` — defaults to `~/.polkadot/accounts.json`.
- *   A single `{ "default": "<bip39 mnemonic>" }` entry (that key name is
- *   `SessionKeyManager`'s default). File written with mode 0600 and a 0700
- *   parent directory so the BIP39 phrase isn't readable by other local users.
- *   Override `POLKADOT_ROOT` in tests and short-lived environments.
- *
- * Scope is deliberately single-account: one key, any network. cdm's
- * `~/.cdm/accounts.json` partitions by chain name ("paseo", "polkadot") —
- * we don't today because (a) the only supported target is paseo-asset-hub,
- * (b) adding `{ "<chain>": { mnemonic } }` later is a trivial schema
- * migration on read. Revisit when mainnet lands.
+ * On-disk session key used to sign contracts-phase extrinsics.
+ * Persisted at `$POLKADOT_ROOT/accounts.json` (default `~/.polkadot/accounts.json`)
+ * with mode 0600 under a 0700 parent so the BIP39 phrase isn't world-readable.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -46,15 +27,7 @@ function accountsPath(root = defaultRoot()): string {
     return resolve(root, "accounts.json");
 }
 
-/**
- * Filesystem-backed KvStore. `@polkadot-apps/storage` ships browser- and
- * host-targeted implementations but not a plain-file one; this fills that
- * gap so `SessionKeyManager` persists into a single JSON document the user
- * can inspect.
- *
- * Implementation is eager-load / full-rewrite on every call. That's fine —
- * the store is tiny and we only touch it at the start of the contracts phase.
- */
+/** Filesystem-backed KvStore for SessionKeyManager. */
 class FileKvStore implements KvStore {
     constructor(private readonly path: string) {}
 
@@ -62,7 +35,6 @@ class FileKvStore implements KvStore {
         if (!existsSync(this.path)) return {};
         try {
             const parsed = JSON.parse(readFileSync(this.path, "utf8"));
-            // Defensive: only accept string-valued objects, ignore anything else.
             if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
                 const out: Record<string, string> = {};
                 for (const [k, v] of Object.entries(parsed)) {
@@ -105,13 +77,7 @@ class FileKvStore implements KvStore {
     }
 }
 
-/**
- * Peek at the persisted session key without generating one on a miss.
- * Returns `null` when no key has been minted yet. Callers that only need
- * the address to read on-chain state (balance, mapping) should use this —
- * creating a key speculatively would burn the one-shot mint-path the real
- * deploy uses to gate `Revive.map_account`.
- */
+/** Read the persisted session key; returns null on a miss (does not mint). */
 export async function readSessionAccount(): Promise<SessionKeyInfo | null> {
     const store = new FileKvStore(accountsPath());
     const manager = new SessionKeyManager({ store });
@@ -119,13 +85,9 @@ export async function readSessionAccount(): Promise<SessionKeyInfo | null> {
 }
 
 /**
- * Load the persisted contracts session key, or generate + save a fresh one
- * on first call. The returned `SessionKeyInfo.info` includes a `PolkadotSigner`
- * that can be passed straight to `ContractDeployer`.
- *
- * `created` is `true` only on the call that minted the key — callers use this
- * to gate one-time on-chain bootstrap (`Revive.map_account`) without having
- * to query chain state to tell cold starts apart from returning users.
+ * Load the persisted session key, or mint + save a fresh one on first call.
+ * `created` is true only on the minting call — callers use it to gate the
+ * one-time `Revive.map_account` bootstrap.
  */
 export async function getOrCreateSessionAccount(): Promise<{
     info: SessionKeyInfo;

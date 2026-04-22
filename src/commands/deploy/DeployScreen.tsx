@@ -99,10 +99,7 @@ export function DeployScreen({
     const [domain, setDomain] = useState<string | null>(initialDomain);
     const [publishToPlayground, setPublishToPlayground] = useState<boolean | null>(initialPublish);
     const [skipBuild, setSkipBuild] = useState<boolean | null>(initialSkipBuild);
-    // When the project has no contracts at all we short-circuit the prompt to
-    // `false` so the confirm stage doesn't wait on a decision that can't be
-    // made. When contracts *are* detected, null means "ask"; anything else is
-    // the resolved choice (from CLI flag or a prior prompt).
+    // null → ask; false short-circuits the prompt when no contracts exist.
     const [deployContracts, setDeployContracts] = useState<boolean | null>(
         contractsType === null ? false : initialDeployContracts,
     );
@@ -458,11 +455,9 @@ function ConfirmStage({
     onProceed: () => void;
     onCancel: () => void;
 }) {
-    // Whether the contracts phase will need to sign a Balances.transfer to
-    // top up the session key. Starts pessimistic (yes, needed) so the
-    // approvals list is populated immediately; resolved asynchronously
-    // by a one-shot balance query below. Only affects phone sessions —
-    // local dev funders run in-process without a user tap.
+    // Start pessimistic so the approvals list populates immediately; a
+    // balance query refines it. Over-estimating one tap is better than
+    // under-counting.
     const needsSessionFunding = inputs.deployContracts && userSigner?.source === "session";
     const [contractsFundingNeeded, setContractsFundingNeeded] =
         useState<boolean>(needsSessionFunding);
@@ -473,12 +468,7 @@ function ConfirmStage({
         (async () => {
             try {
                 const session = await readSessionAccount();
-                if (session === null) {
-                    // No key minted yet → the deploy path will create one
-                    // and fund it, so a tap is guaranteed. Leave
-                    // `contractsFundingNeeded` at its pessimistic default.
-                    return;
-                }
+                if (session === null) return;
                 const client = await getConnection();
                 const { sufficient } = await checkBalance(
                     client,
@@ -486,11 +476,7 @@ function ConfirmStage({
                     SESSION_MIN_BALANCE,
                 );
                 if (!cancelled) setContractsFundingNeeded(!sufficient);
-            } catch {
-                // If the pre-check fails (network blip, etc.), leave the
-                // default `true` in place — overestimating one tap is a
-                // better failure mode than hiding it and surprising the user.
-            }
+            } catch {}
         })();
         return () => {
             cancelled = true;
@@ -594,9 +580,6 @@ function ConfirmStage({
 }
 
 // ── Running stage ────────────────────────────────────────────────────────────
-//
-// State shape + pure reducer live in `./runningState.ts` so they can be
-// unit-tested without React + Ink in the module graph.
 
 function stepMark(status: StepStatus): MarkKind {
     switch (status) {
@@ -643,11 +626,8 @@ function RunningStage({
     const chunkTimingsRef = useRef<number[]>([]);
     const lastChunkAtRef = useRef<number | null>(null);
 
-    // Two independent coalescers — contracts logs and frontend logs run
-    // concurrently and each update its own section's latest-line row. Per
-    // the 20 GB incident in CLAUDE.md: firehose streams can't drive raw
-    // setState-per-line without overwhelming Ink's reconciler. Flush each
-    // sink at ≤10 Hz, keep only the most recent line, cap length at 160.
+    // Flush each section's latest-line row at ≤10 Hz — see CLAUDE.md
+    // "Throttle TUI info updates" for the incident that made this mandatory.
     const INFO_THROTTLE_MS = 100;
     const INFO_MAX_LEN = 160;
     const contractsPendingRef = useRef<string | null>(null);
@@ -705,12 +685,6 @@ function RunningStage({
                     mode: inputs.mode,
                     publishToPlayground: inputs.publishToPlayground,
                     deployContracts: inputs.deployContracts,
-                    // Pessimistic default — if the confirm-stage balance
-                    // check refined this to `false`, the counter still
-                    // auto-clamps at runtime so the only downside is
-                    // showing "step N of N+1" briefly if funding is
-                    // actually skipped. Cheaper than threading a second
-                    // piece of state through the stage transition.
                     contractsFundingNeeded:
                         inputs.deployContracts && userSigner?.source === "session",
                     userSigner,
@@ -727,13 +701,7 @@ function RunningStage({
         })();
 
         function handleEvent(event: DeployEvent) {
-            // Apply the pure state transition first — keeps phase status /
-            // contract rows / error slots in sync with the event stream.
             setRunningState((s) => runningReducer(s, event));
-
-            // Everything below is log-bearing / UI-only plumbing the
-            // reducer doesn't own: window-title pings, the throttled
-            // log sinks, signing-prompt toggling, and chunk-timing refs.
             if (event.kind === "phase-start") {
                 if (event.phase === "build") {
                     setWindowTitle(`dot deploy · ${inputs.domain} · building`);

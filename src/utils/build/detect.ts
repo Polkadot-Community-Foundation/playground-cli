@@ -141,16 +141,10 @@ const HARDHAT_CONFIGS = [
 ] as const;
 
 /**
- * Decide which contract-project toolchain (if any) the user is using. We only
- * gate the "deploy contracts?" prompt on this — the actual build & deploy
- * helpers re-detect at their own granularity, so a false-positive here is
- * harmless (user sees the prompt, picks "no").
- *
- * Detection rules:
- *   - foundry → `foundry.toml` at the root.
- *   - hardhat → any `hardhat.config.{ts,js,cjs,mjs}` at the root.
- *   - cdm     → `Cargo.toml` at the root that mentions `pvm_contract`
- *               (matches either snake_case or kebab-case, dep or workspace dep).
+ * Detect which contract toolchain is in use at the project root:
+ *   foundry → `foundry.toml`
+ *   hardhat → `hardhat.config.{ts,js,cjs,mjs}`
+ *   cdm     → `Cargo.toml` mentioning `pvm_contract` (snake or kebab case)
  */
 export function detectContractsType(input: DetectInput): ContractsType | null {
     if (input.configFiles.has("foundry.toml")) return "foundry";

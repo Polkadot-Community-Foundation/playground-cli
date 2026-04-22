@@ -303,12 +303,7 @@ async function runHeadless(ctx: {
     printFinalResult(outcome);
 }
 
-/**
- * Best-effort contract-project detection for the deploy flow. Swallows I/O
- * errors (unreadable project dir, malformed package.json, etc.) by returning
- * null — a false negative just means the "deploy contracts?" prompt doesn't
- * appear, which is the safer fallback.
- */
+/** Best-effort contract-project detection; null on any I/O error. */
 export function safeDetectContractsType(projectDir: string): ContractsType | null {
     try {
         return detectContractsType(loadDetectInput(projectDir));
@@ -317,15 +312,7 @@ export function safeDetectContractsType(projectDir: string): ContractsType | nul
     }
 }
 
-/**
- * Decide whether the contracts phase will need a phone tap to top up its
- * session key. Used by both the headless summary and the interactive
- * confirm page so the announced approval count matches reality.
- *
- * Only phone sessions count — local dev funders (suri or Alice fallback)
- * sign in-process with no human in the loop. If the balance query fails
- * we default to `true` on the "overestimate one tap" principle.
- */
+/** Whether the contracts phase will need a phone tap to top up the session key. */
 export async function computeContractsFundingNeeded(args: {
     deployContracts: boolean;
     userSigner: ResolvedSigner | null;
@@ -334,7 +321,6 @@ export async function computeContractsFundingNeeded(args: {
     if (args.userSigner?.source !== "session") return false;
     try {
         const session = await readSessionAccount();
-        // No key yet → deploy path will mint one and fund it guaranteed.
         if (session === null) return true;
         const client = await getConnection();
         const { sufficient } = await checkBalance(
@@ -369,9 +355,6 @@ function runInteractive(ctx: {
                 // otherwise show the prompt so they can hit Enter on the default "yes".
                 skipBuild: ctx.opts.build === false ? true : null,
                 contractsType,
-                // --contracts on the CLI pre-answers the prompt; omitting it
-                // leaves null so the interactive flow asks when contracts are
-                // detected (and short-circuits to false when they aren't).
                 deployContracts: ctx.opts.contracts !== undefined ? ctx.opts.contracts : null,
                 userSigner: ctx.userSigner,
                 onDone: (outcome: DeployOutcome | null) => {

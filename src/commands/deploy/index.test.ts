@@ -1,15 +1,3 @@
-/**
- * Tests for the two pure-ish helpers exported from `./index.ts`.
- *
- * `safeDetectContractsType` is fixture-driven — we set up real tmp dirs on
- * disk and let the production `loadDetectInput` + `detectContractsType`
- * pipeline run end-to-end. No mocks needed.
- *
- * `computeContractsFundingNeeded` touches the chain and the session-key
- * store, so we stub those at the MODULE boundary (not the polkadot-api
- * layer): `readSessionAccount`, `checkBalance`, `getConnection`.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,8 +10,6 @@ const mockGetConnection = vi.fn();
 vi.mock("../../utils/deploy/session-account.js", () => ({
     readSessionAccount: (...args: unknown[]) => mockReadSessionAccount(...args),
     SESSION_MIN_BALANCE: 5_000_000_000n,
-    // `index.ts` doesn't use any of the other exports, but stub them so the
-    // module shape stays valid if an incidental future import sneaks in.
     getOrCreateSessionAccount: vi.fn(),
 }));
 
@@ -140,8 +126,6 @@ describe("computeContractsFundingNeeded", () => {
     });
 
     it("returns true for a session signer when no key is persisted yet", async () => {
-        // No key on disk → the deploy path will mint + fund one. Funding is
-        // guaranteed, so the summary must reflect "one tap required".
         mockReadSessionAccount.mockResolvedValue(null);
         const result = await computeContractsFundingNeeded({
             deployContracts: true,
@@ -150,7 +134,6 @@ describe("computeContractsFundingNeeded", () => {
         expect(result).toBe(true);
         expect(mockReadSessionAccount).toHaveBeenCalledTimes(1);
         expect(mockCheckBalance).not.toHaveBeenCalled();
-        // No need to open a chain client when we already know the answer.
         expect(mockGetConnection).not.toHaveBeenCalled();
     });
 
@@ -182,8 +165,6 @@ describe("computeContractsFundingNeeded", () => {
     });
 
     it("returns true (pessimistic fallback) when the balance query throws", async () => {
-        // If we can't tell, announcing one more tap is the right call —
-        // under-counting approvals surprises the user mid-deploy.
         mockReadSessionAccount.mockResolvedValue({
             account: { ss58Address: "5Ses" },
         });
