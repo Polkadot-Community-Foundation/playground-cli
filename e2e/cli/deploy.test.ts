@@ -181,7 +181,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		}
 	});
 
-	test("re-deploy same domain succeeds for same owner", async () => {
+	test("re-deploy same domain succeeds for same owner", { timeout: 300_000 }, async () => {
 		const first = await dot([
 			"deploy",
 			"--signer", "dev",

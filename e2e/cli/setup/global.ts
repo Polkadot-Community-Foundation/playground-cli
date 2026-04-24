@@ -28,5 +28,10 @@ export async function setup() {
 }
 
 export async function teardown() {
-	destroyTestClient();
+	try {
+		destroyTestClient();
+	} catch {
+		// The WebSocket may already be torn down (heartbeat timeout, DisjointError).
+		// Best-effort cleanup — nothing to do if it's already gone.
+	}
 }
