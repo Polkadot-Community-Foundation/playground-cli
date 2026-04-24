@@ -24,7 +24,6 @@ const foundry = fixturePath("foundry");
 const hardhat = fixturePath("hardhat");
 const rustCdm = fixturePath("rust-cdm");
 const multiContract = fixturePath("multi-contract");
-const contractsOnly = fixturePath("contracts-only");
 
 /** buildDir must be absolute — it's resolved relative to cwd, not --dir */
 function absBuildDir(fixture: string, dir = "dist"): string {
