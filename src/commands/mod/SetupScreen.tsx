@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Box } from "ink";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getGateway, fetchJson } from "@polkadot-apps/bulletin";
 import { StepRunner, type Step } from "../../utils/ui/components/StepRunner.js";
@@ -23,7 +23,7 @@ interface Props {
     registry: any;
     targetDir: string;
     canFork: boolean;
-    onDone: (ok: boolean) => void;
+    onDone: (result: { ok: boolean; setupRan: boolean }) => void;
 }
 
 export function SetupScreen({
@@ -36,6 +36,15 @@ export function SetupScreen({
 }: Props) {
     // Metadata is fetched in step 1 and shared with later steps via this ref
     let meta: AppMetadata = initial ?? {};
+    // Tracks whether `setup.sh` actually ran to completion in this session.
+    // Used by the parent to decide whether to print the generic "Next steps"
+    // fallback footer (only when there was no script-provided footer).
+    // Lives in a ref because StepRunner captures `onDone` once on mount —
+    // a useState value would be stale by the time the runner reports back.
+    // The matching `Hint` is driven off the state setter for re-render.
+    const setupRanRef = useRef(false);
+    const [setupRanVisible, setSetupRanVisible] = useState(false);
+    const logFile = resolve(targetDir, ".dot-mod-setup.log");
 
     const steps: Step[] = [
         {
@@ -66,15 +75,19 @@ export function SetupScreen({
                 }
                 stripPostinstall(targetDir);
                 writeDotJson(targetDir, meta.name ?? domain.replace(/\.dot$/, ""), meta);
+                ignoreModSetupLog(targetDir);
             },
         },
         {
             name: "run setup.sh",
+            keepLogOnSuccess: true,
             run: async (log) => {
                 if (!existsSync(resolve(targetDir, "setup.sh"))) {
                     throw new StepWarning("no setup.sh found");
                 }
-                await runCommand("bash setup.sh", { cwd: targetDir, log });
+                await runCommand("bash setup.sh", { cwd: targetDir, log, logFile });
+                setupRanRef.current = true;
+                setSetupRanVisible(true);
             },
         },
     ];
@@ -90,11 +103,12 @@ export function SetupScreen({
                 steps={steps}
                 onDone={(result) => {
                     if (result.error) setError(result.error);
-                    onDone(result.ok);
+                    onDone({ ok: result.ok, setupRan: setupRanRef.current });
                 }}
             />
 
             <Hint>→ {targetDir}</Hint>
+            {setupRanVisible && <Hint>full setup log: {logFile}</Hint>}
 
             {error && (
                 <Section>
@@ -122,6 +136,27 @@ function stripPostinstall(dir: string) {
             writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
         }
     } catch {}
+}
+
+/**
+ * Append `.dot-mod-setup.log` to the cloned repo's `.gitignore` so the per-run
+ * setup log we tee for the user can't be accidentally committed. Idempotent —
+ * checks for an existing entry before writing, and creates the file if it
+ * doesn't yet exist.
+ */
+function ignoreModSetupLog(dir: string) {
+    const entry = ".dot-mod-setup.log";
+    const path = resolve(dir, ".gitignore");
+    try {
+        const existing = existsSync(path) ? readFileSync(path, "utf-8") : "";
+        const lines = existing.split("\n").map((l) => l.trim());
+        if (lines.includes(entry)) return;
+        const prefix = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+        appendFileSync(path, `${prefix}${entry}\n`);
+    } catch {
+        // best-effort — if we can't write .gitignore (perms etc.) the log
+        // file still works, the user just needs to ignore it manually.
+    }
 }
 
 function writeDotJson(dir: string, name: string, meta: AppMetadata) {
