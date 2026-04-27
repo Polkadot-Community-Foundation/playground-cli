@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.11.1
+
+### Patch Changes
+
+- 0dfb9b5: `dot mod` no longer leaves an `upstream` remote behind after fork+clone, so `git checkout quest/level-N` (and the commands printed by tutorial `setup.sh` scripts) work without `--track origin/<name>` workarounds.
+
 ## 0.11.0
 
 ### Minor Changes
