@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.13.1
+
+### Patch Changes
+
+- f2e09bd: Bump `@w3s/playground-registry` to v6 to match the first release of playground.dot.
+
 ## 0.13.0
 
 ### Minor Changes
