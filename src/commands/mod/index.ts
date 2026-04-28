@@ -9,7 +9,7 @@ import { isGhAuthenticated } from "../../utils/git.js";
 import { Input } from "../../utils/ui/theme/index.js";
 import { AppBrowser, type AppEntry } from "./AppBrowser.js";
 import { SetupScreen } from "./SetupScreen.js";
-import { defaultRepoName, validateRepoName } from "./repoName.js";
+import { defaultRepoName, validateRepoName } from "../../utils/git/repoName.js";
 
 export const modCommand = new Command("mod")
     .description("Fork a playground app to customize")
