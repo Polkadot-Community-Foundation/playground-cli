@@ -128,7 +128,6 @@ export function normalizeDomain(domain: string): { label: string; fullDomain: st
     return { label, fullDomain: `${label}.dot` };
 }
 
-
 export function buildMetadata(input: {
     repositoryUrl: string | null;
     readme: ReadmeStatus | null;

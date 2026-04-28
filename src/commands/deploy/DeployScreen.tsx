@@ -172,8 +172,26 @@ export function DeployScreen({
             modable === null
         )
             return null;
-        return { mode, buildDir, domain, publishToPlayground, skipBuild, deployContracts, modable, repositoryUrl };
-    }, [mode, buildDir, domain, publishToPlayground, skipBuild, deployContracts, modable, repositoryUrl]);
+        return {
+            mode,
+            buildDir,
+            domain,
+            publishToPlayground,
+            skipBuild,
+            deployContracts,
+            modable,
+            repositoryUrl,
+        };
+    }, [
+        mode,
+        buildDir,
+        domain,
+        publishToPlayground,
+        skipBuild,
+        deployContracts,
+        modable,
+        repositoryUrl,
+    ]);
 
     // Dynamic terminal tab title: subtitle becomes the domain once we know it.
     const headerSubtitle = resolved?.domain ?? domain ?? undefined;
@@ -287,7 +305,15 @@ export function DeployScreen({
                     onSelect={(yes) => {
                         setPublishToPlayground(yes);
                         if (!yes) setModable(false);
-                        advance(skipBuild, mode, buildDir, domain, yes, deployContracts, yes ? modable : false);
+                        advance(
+                            skipBuild,
+                            mode,
+                            buildDir,
+                            domain,
+                            yes,
+                            deployContracts,
+                            yes ? modable : false,
+                        );
                     }}
                 />
             )}
@@ -296,7 +322,11 @@ export function DeployScreen({
                 <Select<boolean>
                     label="make this app modable? (anyone in the playground can dot mod it)"
                     options={[
-                        { value: false, label: "no", hint: "metadata will not include a source repo" },
+                        {
+                            value: false,
+                            label: "no",
+                            hint: "metadata will not include a source repo",
+                        },
                         { value: true, label: "yes", hint: "publishes your source repo URL" },
                     ]}
                     initialIndex={0}
@@ -305,7 +335,15 @@ export function DeployScreen({
                         if (yes) {
                             setStage({ kind: "modable-preflight" });
                         } else {
-                            advance(skipBuild, mode, buildDir, domain, publishToPlayground, deployContracts, false);
+                            advance(
+                                skipBuild,
+                                mode,
+                                buildDir,
+                                domain,
+                                publishToPlayground,
+                                deployContracts,
+                                false,
+                            );
                         }
                     }}
                 />
@@ -317,7 +355,15 @@ export function DeployScreen({
                     repoName={null}
                     onResolved={(url) => {
                         setRepositoryUrl(url);
-                        advance(skipBuild, mode, buildDir, domain, publishToPlayground, deployContracts, true);
+                        advance(
+                            skipBuild,
+                            mode,
+                            buildDir,
+                            domain,
+                            publishToPlayground,
+                            deployContracts,
+                            true,
+                        );
                     }}
                     onError={(msg) => {
                         setStage({ kind: "error", message: msg });
@@ -473,7 +519,9 @@ function ModablePreflightStage({
                 onError(msg);
             }
         })();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+        };
     }, [projectDir, repoName]);
 
     return (

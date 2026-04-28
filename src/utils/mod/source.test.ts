@@ -9,19 +9,31 @@ import { parseGitHubRepoUrl, resolveDefaultBranch, downloadGitHubTarball } from 
 
 describe("parseGitHubRepoUrl", () => {
     it("parses https github URL", () => {
-        expect(parseGitHubRepoUrl("https://github.com/foo/bar")).toEqual({ owner: "foo", repo: "bar" });
+        expect(parseGitHubRepoUrl("https://github.com/foo/bar")).toEqual({
+            owner: "foo",
+            repo: "bar",
+        });
     });
 
     it("parses https github URL with .git suffix", () => {
-        expect(parseGitHubRepoUrl("https://github.com/foo/bar.git")).toEqual({ owner: "foo", repo: "bar" });
+        expect(parseGitHubRepoUrl("https://github.com/foo/bar.git")).toEqual({
+            owner: "foo",
+            repo: "bar",
+        });
     });
 
     it("parses ssh github URL", () => {
-        expect(parseGitHubRepoUrl("git@github.com:foo/bar.git")).toEqual({ owner: "foo", repo: "bar" });
+        expect(parseGitHubRepoUrl("git@github.com:foo/bar.git")).toEqual({
+            owner: "foo",
+            repo: "bar",
+        });
     });
 
     it("parses URL with trailing slash", () => {
-        expect(parseGitHubRepoUrl("https://github.com/foo/bar/")).toEqual({ owner: "foo", repo: "bar" });
+        expect(parseGitHubRepoUrl("https://github.com/foo/bar/")).toEqual({
+            owner: "foo",
+            repo: "bar",
+        });
     });
 
     it("returns null for non-GitHub URLs", () => {
@@ -41,18 +53,26 @@ describe("resolveDefaultBranch", () => {
             expect(String(url)).toBe("https://api.github.com/repos/foo/bar");
             return new Response(JSON.stringify({ default_branch: "develop" }), { status: 200 });
         };
-        const branch = await resolveDefaultBranch({ owner: "foo", repo: "bar" }, { fetch: fetchImpl });
+        const branch = await resolveDefaultBranch(
+            { owner: "foo", repo: "bar" },
+            { fetch: fetchImpl },
+        );
         expect(branch).toBe("develop");
     });
 
     it("falls back to main when API GET fails and main exists", async () => {
         const fetchImpl: typeof fetch = async (url) => {
             const u = String(url);
-            if (u.startsWith("https://api.github.com")) return new Response("rate limit", { status: 403 });
-            if (u === "https://github.com/foo/bar/tree/main") return new Response("ok", { status: 200 });
+            if (u.startsWith("https://api.github.com"))
+                return new Response("rate limit", { status: 403 });
+            if (u === "https://github.com/foo/bar/tree/main")
+                return new Response("ok", { status: 200 });
             return new Response("not found", { status: 404 });
         };
-        const branch = await resolveDefaultBranch({ owner: "foo", repo: "bar" }, { fetch: fetchImpl });
+        const branch = await resolveDefaultBranch(
+            { owner: "foo", repo: "bar" },
+            { fetch: fetchImpl },
+        );
         expect(branch).toBe("main");
     });
 
@@ -60,11 +80,16 @@ describe("resolveDefaultBranch", () => {
         const fetchImpl: typeof fetch = async (url) => {
             const u = String(url);
             if (u.startsWith("https://api.github.com")) return new Response("err", { status: 500 });
-            if (u === "https://github.com/foo/bar/tree/main") return new Response("nf", { status: 404 });
-            if (u === "https://github.com/foo/bar/tree/master") return new Response("ok", { status: 200 });
+            if (u === "https://github.com/foo/bar/tree/main")
+                return new Response("nf", { status: 404 });
+            if (u === "https://github.com/foo/bar/tree/master")
+                return new Response("ok", { status: 200 });
             return new Response("nope", { status: 404 });
         };
-        const branch = await resolveDefaultBranch({ owner: "foo", repo: "bar" }, { fetch: fetchImpl });
+        const branch = await resolveDefaultBranch(
+            { owner: "foo", repo: "bar" },
+            { fetch: fetchImpl },
+        );
         expect(branch).toBe("master");
     });
 
@@ -99,9 +124,7 @@ describe("downloadGitHubTarball", () => {
         const webStream = Readable.toWeb(tarStream as unknown as Readable);
 
         const fetchImpl: typeof fetch = async (url) => {
-            expect(String(url)).toBe(
-                "https://codeload.github.com/foo/bar/tar.gz/refs/heads/main",
-            );
+            expect(String(url)).toBe("https://codeload.github.com/foo/bar/tar.gz/refs/heads/main");
             return new Response(webStream as unknown as ReadableStream, { status: 200 });
         };
 

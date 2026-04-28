@@ -290,7 +290,9 @@ async function runHeadless(ctx: {
     let repositoryUrl: string | null = null;
     if (modable) {
         if (!publishToPlayground) {
-            throw new Error("--modable requires --playground (no metadata is published without it).");
+            throw new Error(
+                "--modable requires --playground (no metadata is published without it).",
+            );
         }
         await ensureGitInstalled();
         await ensureGhInstalled();

@@ -6,7 +6,11 @@ import { getGateway, fetchJson } from "@polkadot-apps/bulletin";
 import { StepRunner, type Step } from "../../utils/ui/components/StepRunner.js";
 import { Header, Hint, Row, Section } from "../../utils/ui/theme/index.js";
 import { runCommand } from "../../utils/git.js";
-import { downloadGitHubTarball, parseGitHubRepoUrl, resolveDefaultBranch } from "../../utils/mod/source.js";
+import {
+    downloadGitHubTarball,
+    parseGitHubRepoUrl,
+    resolveDefaultBranch,
+} from "../../utils/mod/source.js";
 import { commandExists } from "../../utils/toolchain.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 
@@ -27,13 +31,7 @@ interface Props {
     onDone: (result: { ok: boolean; setupRan: boolean }) => void;
 }
 
-export function SetupScreen({
-    domain,
-    metadata: initial,
-    registry,
-    targetDir,
-    onDone,
-}: Props) {
+export function SetupScreen({ domain, metadata: initial, registry, targetDir, onDone }: Props) {
     // Metadata is fetched in step 1 and shared with later steps via this ref
     let meta: AppMetadata = initial ?? {};
     // Tracks whether `setup.sh` actually ran to completion in this session.
@@ -68,7 +66,10 @@ export function SetupScreen({
             name: "download source",
             run: async (log) => {
                 const repoUrl = meta.repository;
-                if (!repoUrl) throw new Error(`App "${domain}" is not modable — no source repository published.`);
+                if (!repoUrl)
+                    throw new Error(
+                        `App "${domain}" is not modable — no source repository published.`,
+                    );
                 const ref = parseGitHubRepoUrl(repoUrl);
                 if (!ref) {
                     throw new Error(
@@ -77,7 +78,12 @@ export function SetupScreen({
                 }
                 const branch = meta.branch ?? (await resolveDefaultBranch(ref));
                 log(`downloading github.com/${ref.owner}/${ref.repo} (${branch})…`);
-                await downloadGitHubTarball({ owner: ref.owner, repo: ref.repo, branch, targetDir });
+                await downloadGitHubTarball({
+                    owner: ref.owner,
+                    repo: ref.repo,
+                    branch,
+                    targetDir,
+                });
 
                 if (await commandExists("git")) {
                     log("initializing fresh git history…");
@@ -88,7 +94,9 @@ export function SetupScreen({
                         log,
                     });
                 } else {
-                    log("git not on PATH — skipping git init (mod still works, you can init later)");
+                    log(
+                        "git not on PATH — skipping git init (mod still works, you can init later)",
+                    );
                 }
 
                 stripPostinstall(targetDir);

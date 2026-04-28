@@ -18,7 +18,10 @@ export interface GitHubRepoRef {
 
 export function parseGitHubRepoUrl(url: string): GitHubRepoRef | null {
     if (!url) return null;
-    const trimmed = url.trim().replace(/\.git$/, "").replace(/\/$/, "");
+    const trimmed = url
+        .trim()
+        .replace(/\.git$/, "")
+        .replace(/\/$/, "");
     const m = trimmed.match(/^(?:https?:\/\/github\.com\/|git@github\.com:)([^/]+)\/([^/]+)$/);
     if (!m) return null;
     return { owner: m[1], repo: m[2] };

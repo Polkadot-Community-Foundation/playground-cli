@@ -13,56 +13,51 @@ export const modCommand = new Command("mod")
     .description("Mod a playground app — clone the source as a fresh project to customise")
     .argument("[domain]", "App domain (interactive picker if omitted)")
     .option("--suri <suri>", "Signer secret URI (e.g. //Alice for dev)")
-    .action(
-        async (
-            rawDomain: string | undefined,
-            opts: { suri?: string },
-        ) => {
-            const resolved = await resolveSigner({ suri: opts.suri });
-            const client = await getConnection();
-            const registry = await getRegistryContract(client.raw.assetHub, resolved);
+    .action(async (rawDomain: string | undefined, opts: { suri?: string }) => {
+        const resolved = await resolveSigner({ suri: opts.suri });
+        const client = await getConnection();
+        const registry = await getRegistryContract(client.raw.assetHub, resolved);
 
-            try {
-                let domain: string;
-                let metadata: AppEntry | null = null;
+        try {
+            let domain: string;
+            let metadata: AppEntry | null = null;
 
-                if (rawDomain) {
-                    domain = rawDomain.endsWith(".dot") ? rawDomain : `${rawDomain}.dot`;
-                } else {
-                    const picked = await browseAndPick(registry);
-                    domain = picked.domain;
-                    metadata = picked;
-                }
-
-                const targetDir = await resolveTargetDir({ domain });
-                if (!targetDir) return;
-
-                const { ok, setupRan } = await runSetup({
-                    domain,
-                    metadata: metadata
-                        ? {
-                              name: metadata.name ?? undefined,
-                              description: metadata.description ?? undefined,
-                              repository: metadata.repository ?? undefined,
-                          }
-                        : null,
-                    registry,
-                    targetDir,
-                });
-
-                console.log();
-                if (ok && !setupRan) {
-                    console.log("  Next steps:");
-                    console.log(`  1. cd ${targetDir}`);
-                    console.log("  2. edit with claude");
-                    console.log("  3. dot deploy --playground");
-                }
-            } finally {
-                resolved.destroy();
-                destroyConnection();
+            if (rawDomain) {
+                domain = rawDomain.endsWith(".dot") ? rawDomain : `${rawDomain}.dot`;
+            } else {
+                const picked = await browseAndPick(registry);
+                domain = picked.domain;
+                metadata = picked;
             }
-        },
-    );
+
+            const targetDir = await resolveTargetDir({ domain });
+            if (!targetDir) return;
+
+            const { ok, setupRan } = await runSetup({
+                domain,
+                metadata: metadata
+                    ? {
+                          name: metadata.name ?? undefined,
+                          description: metadata.description ?? undefined,
+                          repository: metadata.repository ?? undefined,
+                      }
+                    : null,
+                registry,
+                targetDir,
+            });
+
+            console.log();
+            if (ok && !setupRan) {
+                console.log("  Next steps:");
+                console.log(`  1. cd ${targetDir}`);
+                console.log("  2. edit with claude");
+                console.log("  3. dot deploy --playground");
+            }
+        } finally {
+            resolved.destroy();
+            destroyConnection();
+        }
+    });
 
 async function resolveTargetDir(args: { domain: string }): Promise<string | null> {
     const fallback = defaultRepoName(args.domain);
