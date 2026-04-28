@@ -296,7 +296,7 @@ async function runHeadless(ctx: {
         }
         await ensureGitInstalled();
         await ensureGhInstalled();
-        await ensureGhAuthed({ interactive: false });
+        await ensureGhAuthed();
         repositoryUrl = await resolveRepositoryUrl({
             cwd: ctx.projectDir,
             repoName: ctx.opts.repoName ?? null,
@@ -402,6 +402,9 @@ function runInteractive(ctx: {
                 skipBuild: ctx.opts.build === false ? true : null,
                 contractsType,
                 deployContracts: ctx.opts.contracts !== undefined ? ctx.opts.contracts : null,
+                modable:
+                    ctx.opts.modable === true ? true : ctx.opts.modable === false ? false : null,
+                repoName: ctx.opts.repoName ?? null,
                 userSigner: ctx.userSigner,
                 onDone: (outcome: DeployOutcome | null) => {
                     if (settled) return;

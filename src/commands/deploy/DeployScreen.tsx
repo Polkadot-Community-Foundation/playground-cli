@@ -48,8 +48,11 @@ import {
     ensureGitInstalled,
     ensureGhInstalled,
     ensureGhAuthed,
+    readOrigin,
     resolveRepositoryUrl,
 } from "../../utils/deploy/modable.js";
+import { basename } from "node:path";
+import { validateRepoName } from "../../utils/git/repoName.js";
 
 export interface DeployScreenInputs {
     projectDir: string;
@@ -64,6 +67,10 @@ export interface DeployScreenInputs {
     contractsType: ContractsType | null;
     /** Whether to deploy the project's contracts. null = ask the user. */
     deployContracts: boolean | null;
+    /** Pre-set modable from `--modable` / `--no-modable`. null = ask. */
+    modable: boolean | null;
+    /** Pre-set repo name from `--repo-name`. null = use cwd basename / prompt when needed. */
+    repoName: string | null;
     userSigner: ResolvedSigner | null;
     onDone: (outcome: DeployOutcome | null) => void;
 }
@@ -104,6 +111,8 @@ export function DeployScreen({
     skipBuild: initialSkipBuild,
     contractsType,
     deployContracts: initialDeployContracts,
+    modable: initialModable,
+    repoName: initialRepoName,
     userSigner,
     onDone,
 }: DeployScreenInputs) {
@@ -116,7 +125,7 @@ export function DeployScreen({
     const [deployContracts, setDeployContracts] = useState<boolean | null>(
         contractsType === null ? false : initialDeployContracts,
     );
-    const [modable, setModable] = useState<boolean | null>(null);
+    const [modable, setModable] = useState<boolean | null>(initialModable);
     const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
     const [domainError, setDomainError] = useState<string | null>(null);
     // Captured from the availability check; feeds `resolveSignerSetup` so
@@ -131,6 +140,7 @@ export function DeployScreen({
             initialDomain,
             initialPublish,
             contractsType === null ? false : initialDeployContracts,
+            initialModable,
             null,
         ),
     );
@@ -148,6 +158,7 @@ export function DeployScreen({
         nextPublish: boolean | null = publishToPlayground,
         nextDeployContracts: boolean | null = deployContracts,
         nextModable: boolean | null = modable,
+        nextRepoUrl: string | null = repositoryUrl,
     ) => {
         const s = pickNextStage(
             nextSkipBuild,
@@ -157,6 +168,7 @@ export function DeployScreen({
             nextPublish,
             nextDeployContracts,
             nextModable,
+            nextRepoUrl,
         );
         setStage(s);
     };
@@ -333,6 +345,8 @@ export function DeployScreen({
                     onSelect={(yes) => {
                         setModable(yes);
                         if (yes) {
+                            // ModablePreflightStage probes origin internally
+                            // and only asks for a repo name when one is needed.
                             setStage({ kind: "modable-preflight" });
                         } else {
                             advance(
@@ -352,7 +366,7 @@ export function DeployScreen({
             {stage.kind === "modable-preflight" && (
                 <ModablePreflightStage
                     projectDir={projectDir}
-                    repoName={null}
+                    repoName={initialRepoName}
                     onResolved={(url) => {
                         setRepositoryUrl(url);
                         advance(
@@ -451,8 +465,18 @@ function pickInitialStage(
     publish: boolean | null,
     deployContracts: boolean | null,
     modable: boolean | null,
+    repositoryUrl: string | null,
 ): Stage {
-    return pickNextStage(skipBuild, mode, buildDir, domain, publish, deployContracts, modable);
+    return pickNextStage(
+        skipBuild,
+        mode,
+        buildDir,
+        domain,
+        publish,
+        deployContracts,
+        modable,
+        repositoryUrl,
+    );
 }
 
 function pickNextStage(
@@ -463,6 +487,7 @@ function pickNextStage(
     publish: boolean | null,
     deployContracts: boolean | null,
     modable: boolean | null,
+    repositoryUrl: string | null,
 ): Stage {
     if (skipBuild === null) return { kind: "prompt-build" };
     if (mode === null) return { kind: "prompt-signer" };
@@ -470,6 +495,10 @@ function pickNextStage(
     if (domain === null) return { kind: "prompt-domain" };
     if (publish === null) return { kind: "prompt-publish" };
     if (publish && modable === null) return { kind: "prompt-modable" };
+    // --modable=true via flag: skip the prompt and drive into the preflight.
+    if (publish && modable === true && repositoryUrl === null) {
+        return { kind: "modable-preflight" };
+    }
     if (deployContracts === null) return { kind: "prompt-contracts" };
     return { kind: "confirm" };
 }
@@ -478,7 +507,7 @@ function pickNextStage(
 
 function ModablePreflightStage({
     projectDir,
-    repoName,
+    repoName: initialRepoName,
     onResolved,
     onError,
 }: {
@@ -487,8 +516,14 @@ function ModablePreflightStage({
     onResolved: (url: string) => void;
     onError: (message: string) => void;
 }) {
+    type Phase = "preparing" | "needs-repo-name" | "resolving";
+    const [phase, setPhase] = useState<Phase>("preparing");
     const [status, setStatus] = useState<string>("checking git…");
 
+    // Run install/auth checks once, then either prompt for a repo name (when
+    // origin is missing AND no `--repo-name` was supplied) or proceed directly
+    // to resolving the URL. Wrapping in a single effect keeps the cancel
+    // semantics simple — we only have one effect to clean up.
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -502,17 +537,18 @@ function ModablePreflightStage({
                 if (cancelled) return;
 
                 setStatus("checking gh authentication…");
-                await ensureGhAuthed({ interactive: true });
+                await ensureGhAuthed();
                 if (cancelled) return;
 
-                setStatus("resolving repository…");
-                const url = await resolveRepositoryUrl({
-                    cwd: projectDir,
-                    repoName,
-                });
-                if (cancelled) return;
-
-                onResolved(url);
+                // Decide whether to prompt for a repo name. We prompt only
+                // when origin doesn't already point somewhere AND the caller
+                // didn't pre-supply one via --repo-name.
+                const origin = readOrigin(projectDir);
+                if (origin === null && initialRepoName === null) {
+                    setPhase("needs-repo-name");
+                    return;
+                }
+                runResolve(initialRepoName);
             } catch (err) {
                 if (cancelled) return;
                 const msg = err instanceof Error ? err.message : String(err);
@@ -522,7 +558,36 @@ function ModablePreflightStage({
         return () => {
             cancelled = true;
         };
-    }, [projectDir, repoName]);
+        // We deliberately exclude `runResolve` from deps — it closes over
+        // `cancelled` via the effect's lexical scope, and we want the same
+        // closure to fire whether the user supplied a name up front or via
+        // the prompt below.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectDir, initialRepoName]);
+
+    function runResolve(repoName: string | null) {
+        setPhase("resolving");
+        setStatus("resolving repository…");
+        resolveRepositoryUrl({ cwd: projectDir, repoName })
+            .then((url) => onResolved(url))
+            .catch((err) => onError(err instanceof Error ? err.message : String(err)));
+    }
+
+    if (phase === "needs-repo-name") {
+        return (
+            <Box flexDirection="column">
+                <Section>
+                    <Row mark="ok" label="git + gh ready" tone="muted" />
+                </Section>
+                <Input
+                    label="github repo name"
+                    initial={basename(projectDir)}
+                    validate={validateRepoName}
+                    onSubmit={(name) => runResolve(name)}
+                />
+            </Box>
+        );
+    }
 
     return (
         <Section>

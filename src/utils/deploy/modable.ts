@@ -7,7 +7,7 @@
  * the branching logic is unit-testable without mocking child_process.
  */
 
-import { execFile, execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { commandExists, TOOL_STEPS } from "../toolchain.js";
 
@@ -48,28 +48,27 @@ export async function ensureGhInstalled(onLog?: (line: string) => void): Promise
     await step.install(onLog);
 }
 
-export async function ensureGhAuthed(opts: { interactive: boolean }): Promise<void> {
+/**
+ * Ensure `gh` is authenticated. We deliberately do NOT shell out to
+ * `gh auth login` from here — even when called from the interactive deploy,
+ * Ink owns stdout/stdin and a `stdio: "inherit"` child would race Ink for
+ * keystrokes and produce a garbled UI. Instead, both interactive and
+ * non-interactive paths fail with the same actionable message: run
+ * `gh auth login` once outside `dot`, then retry. The auth persists across
+ * runs, so this is a one-time speedbump per machine.
+ */
+export async function ensureGhAuthed(): Promise<void> {
     try {
         await execFileAsync("gh", ["auth", "status"]);
         return;
-    } catch {}
-    if (!opts.interactive) {
+    } catch {
         throw new ModablePreflightError(
             'gh is not authenticated. Run "gh auth login" and retry, or pass --no-modable to skip publishing source.',
         );
     }
-    await new Promise<void>((resolveP, rejectP) => {
-        const child = spawn("gh", ["auth", "login"], { stdio: "inherit" });
-        child.on("exit", (code) =>
-            code === 0
-                ? resolveP()
-                : rejectP(new ModablePreflightError(`gh auth login exited with code ${code}`)),
-        );
-        child.on("error", rejectP);
-    });
 }
 
-function readOrigin(cwd: string): string | null {
+export function readOrigin(cwd: string): string | null {
     try {
         const raw = execFileSync("git", ["remote", "get-url", "origin"], {
             encoding: "utf8",

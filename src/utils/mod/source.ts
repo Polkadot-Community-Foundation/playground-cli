@@ -8,6 +8,7 @@
 
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import { extract } from "tar";
 
@@ -82,11 +83,11 @@ export async function downloadGitHubTarball(
     }
 
     const nodeStream = Readable.fromWeb(res.body as unknown as import("stream/web").ReadableStream);
-    await new Promise<void>((resolveP, rejectP) => {
-        nodeStream
-            .pipe(createGunzip())
-            .pipe(extract({ cwd: opts.targetDir, strip: 1 }))
-            .on("finish", () => resolveP())
-            .on("error", rejectP);
-    });
+    // `pipeline` rejects on any stream error and auto-destroys every stream
+    // in the chain on failure — so a network drop, a corrupted gzip stream,
+    // or a tar parse error all propagate cleanly without leaking the open
+    // socket or buffered chunks. Hand-rolled `.pipe()` chains miss this:
+    // attaching `.on("error")` to only the last stream lets an upstream
+    // error bubble up as `unhandledRejection` while the promise hangs.
+    await pipeline(nodeStream, createGunzip(), extract({ cwd: opts.targetDir, strip: 1 }));
 }

@@ -8,12 +8,23 @@ import { getRegistryContract } from "../../utils/registry.js";
 import { AppBrowser, type AppEntry } from "./AppBrowser.js";
 import { SetupScreen } from "./SetupScreen.js";
 import { defaultRepoName } from "../../utils/git/repoName.js";
+import {
+    onProcessShutdown,
+    scheduleHardExit,
+    startMemoryWatchdog,
+} from "../../utils/process-guard.js";
 
 export const modCommand = new Command("mod")
     .description("Mod a playground app — clone the source as a fresh project to customise")
     .argument("[domain]", "App domain (interactive picker if omitted)")
     .option("--suri <suri>", "Signer secret URI (e.g. //Alice for dev)")
     .action(async (rawDomain: string | undefined, opts: { suri?: string }) => {
+        // Same defense-in-depth as `dot deploy`: a leaky tar/gzip stream or a
+        // stuck IPFS gateway request can climb into GB territory if left
+        // unattended. Cap RSS at 4 GB and force-exit cleanly otherwise.
+        const stopWatchdog = startMemoryWatchdog();
+        onProcessShutdown(stopWatchdog);
+
         const resolved = await resolveSigner({ suri: opts.suri });
         const client = await getConnection();
         const registry = await getRegistryContract(client.raw.assetHub, resolved);
@@ -56,6 +67,13 @@ export const modCommand = new Command("mod")
         } finally {
             resolved.destroy();
             destroyConnection();
+            stopWatchdog();
+            // Same hard-exit safety net as deploy — mod opens an IPFS HTTP
+            // fetch + a polkadot-api WebSocket, either of which can stay
+            // ref'd past the visible work and turn the process into a
+            // zombie.
+            const exitCode = typeof process.exitCode === "number" ? process.exitCode : 0;
+            scheduleHardExit(exitCode);
         }
     });
 
