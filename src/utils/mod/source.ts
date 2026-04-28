@@ -6,6 +6,11 @@
  * — no React/Ink imports.
  */
 
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { Readable } from "node:stream";
+import { createGunzip } from "node:zlib";
+import { extract } from "tar";
+
 export interface GitHubRepoRef {
     owner: string;
     repo: string;
@@ -48,4 +53,37 @@ export async function resolveDefaultBranch(
     throw new Error(
         `Could not resolve a default branch for ${ref.owner}/${ref.repo} — pin one in metadata.branch`,
     );
+}
+
+export interface DownloadOpts {
+    owner: string;
+    repo: string;
+    branch: string;
+    targetDir: string;
+}
+
+export async function downloadGitHubTarball(
+    opts: DownloadOpts,
+    fetchOpts: FetchOpts = {},
+): Promise<void> {
+    if (existsSync(opts.targetDir) && readdirSync(opts.targetDir).length > 0) {
+        throw new Error(`Directory "${opts.targetDir}" already exists`);
+    }
+    mkdirSync(opts.targetDir, { recursive: true });
+
+    const f = fetchOpts.fetch ?? fetch;
+    const url = `https://codeload.github.com/${opts.owner}/${opts.repo}/tar.gz/refs/heads/${opts.branch}`;
+    const res = await f(url);
+    if (!res.ok || !res.body) {
+        throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`);
+    }
+
+    const nodeStream = Readable.fromWeb(res.body as unknown as import("stream/web").ReadableStream);
+    await new Promise<void>((resolveP, rejectP) => {
+        nodeStream
+            .pipe(createGunzip())
+            .pipe(extract({ cwd: opts.targetDir, strip: 1 }))
+            .on("finish", () => resolveP())
+            .on("error", rejectP);
+    });
 }
