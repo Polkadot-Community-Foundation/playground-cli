@@ -79,6 +79,7 @@ function browseAndPick(registry: any): Promise<AppEntry> {
         const app = render(
             React.createElement(AppBrowser, {
                 registry,
+                modableOnly: true,
                 onSelect: (selected: AppEntry) => {
                     app.unmount();
                     resolve(selected);
