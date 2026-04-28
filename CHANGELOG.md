@@ -1,5 +1,12 @@
 # playground-cli
 
+## 0.13.2
+
+### Patch Changes
+
+- 6715aa2: Bumped `bulletin-deploy` 0.7.2 → 0.7.6. The new release ships heartbeat-consistency fixes on the WS clients used during preflight tx submission (eliminates the no-heartbeat `withAliceApi` path) plus a new bounded reconnect-status handler. Includes a temporary `pnpm.overrides` workaround for a transitive publish bug in `@parity/dotns-cli@0.5.6` that prevents pnpm from installing 0.7.4+ cleanly; see CLAUDE.md for context and removal criteria.
+- 9d3be83: The memory-watchdog abort message now reliably reaches stderr when the output is redirected to a file. Previously, on a SIGKILL-on-memory-cap path, the `✖ Memory use exceeded …` message could be lost from a redirected stderr buffer because `process.stderr.write()` queues through the writable-stream layer. The watchdog now uses `fs.writeSync(2, …)`, a blocking syscall that completes before the kill, so users diagnosing memory issues see the full abort context.
+
 ## 0.13.1
 
 ### Patch Changes
