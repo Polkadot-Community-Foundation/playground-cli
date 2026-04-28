@@ -44,6 +44,12 @@ import type { ResolvedSigner } from "../../utils/signer.js";
 import type { ContractsType } from "../../utils/build/detect.js";
 import { DEFAULT_BUILD_DIR } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
+import {
+    ensureGitInstalled,
+    ensureGhInstalled,
+    ensureGhAuthed,
+    resolveRepositoryUrl,
+} from "../../utils/deploy/modable.js";
 
 export interface DeployScreenInputs {
     projectDir: string;
@@ -69,6 +75,8 @@ type Stage =
     | { kind: "prompt-domain" }
     | { kind: "validate-domain"; domain: string }
     | { kind: "prompt-publish" }
+    | { kind: "prompt-modable" }
+    | { kind: "modable-preflight" }
     | { kind: "prompt-contracts" }
     | { kind: "confirm" }
     | { kind: "running" }
@@ -82,6 +90,8 @@ interface Resolved {
     publishToPlayground: boolean;
     skipBuild: boolean;
     deployContracts: boolean;
+    modable: boolean;
+    repositoryUrl: string | null;
 }
 
 export function DeployScreen({
@@ -106,6 +116,8 @@ export function DeployScreen({
     const [deployContracts, setDeployContracts] = useState<boolean | null>(
         contractsType === null ? false : initialDeployContracts,
     );
+    const [modable, setModable] = useState<boolean | null>(null);
+    const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
     const [domainError, setDomainError] = useState<string | null>(null);
     // Captured from the availability check; feeds `resolveSignerSetup` so
     // the summary card shows the correct phone-approval count (register +
@@ -119,6 +131,7 @@ export function DeployScreen({
             initialDomain,
             initialPublish,
             contractsType === null ? false : initialDeployContracts,
+            null,
         ),
     );
 
@@ -134,6 +147,7 @@ export function DeployScreen({
         nextDomain: string | null = domain,
         nextPublish: boolean | null = publishToPlayground,
         nextDeployContracts: boolean | null = deployContracts,
+        nextModable: boolean | null = modable,
     ) => {
         const s = pickNextStage(
             nextSkipBuild,
@@ -142,6 +156,7 @@ export function DeployScreen({
             nextDomain,
             nextPublish,
             nextDeployContracts,
+            nextModable,
         );
         setStage(s);
     };
@@ -153,11 +168,12 @@ export function DeployScreen({
             domain === null ||
             publishToPlayground === null ||
             skipBuild === null ||
-            deployContracts === null
+            deployContracts === null ||
+            modable === null
         )
             return null;
-        return { mode, buildDir, domain, publishToPlayground, skipBuild, deployContracts };
-    }, [mode, buildDir, domain, publishToPlayground, skipBuild, deployContracts]);
+        return { mode, buildDir, domain, publishToPlayground, skipBuild, deployContracts, modable, repositoryUrl };
+    }, [mode, buildDir, domain, publishToPlayground, skipBuild, deployContracts, modable, repositoryUrl]);
 
     // Dynamic terminal tab title: subtitle becomes the domain once we know it.
     const headerSubtitle = resolved?.domain ?? domain ?? undefined;
@@ -270,7 +286,41 @@ export function DeployScreen({
                     initialIndex={0}
                     onSelect={(yes) => {
                         setPublishToPlayground(yes);
-                        advance(skipBuild, mode, buildDir, domain, yes);
+                        if (!yes) setModable(false);
+                        advance(skipBuild, mode, buildDir, domain, yes, deployContracts, yes ? modable : false);
+                    }}
+                />
+            )}
+
+            {stage.kind === "prompt-modable" && (
+                <Select<boolean>
+                    label="make this app modable? (anyone in the playground can dot mod it)"
+                    options={[
+                        { value: false, label: "no", hint: "metadata will not include a source repo" },
+                        { value: true, label: "yes", hint: "publishes your source repo URL" },
+                    ]}
+                    initialIndex={0}
+                    onSelect={(yes) => {
+                        setModable(yes);
+                        if (yes) {
+                            setStage({ kind: "modable-preflight" });
+                        } else {
+                            advance(skipBuild, mode, buildDir, domain, publishToPlayground, deployContracts, false);
+                        }
+                    }}
+                />
+            )}
+
+            {stage.kind === "modable-preflight" && (
+                <ModablePreflightStage
+                    projectDir={projectDir}
+                    repoName={null}
+                    onResolved={(url) => {
+                        setRepositoryUrl(url);
+                        advance(skipBuild, mode, buildDir, domain, publishToPlayground, deployContracts, true);
+                    }}
+                    onError={(msg) => {
+                        setStage({ kind: "error", message: msg });
                     }}
                 />
             )}
@@ -354,8 +404,9 @@ function pickInitialStage(
     domain: string | null,
     publish: boolean | null,
     deployContracts: boolean | null,
+    modable: boolean | null,
 ): Stage {
-    return pickNextStage(skipBuild, mode, buildDir, domain, publish, deployContracts);
+    return pickNextStage(skipBuild, mode, buildDir, domain, publish, deployContracts, modable);
 }
 
 function pickNextStage(
@@ -365,14 +416,71 @@ function pickNextStage(
     domain: string | null,
     publish: boolean | null,
     deployContracts: boolean | null,
+    modable: boolean | null,
 ): Stage {
     if (skipBuild === null) return { kind: "prompt-build" };
     if (mode === null) return { kind: "prompt-signer" };
     if (buildDir === null) return { kind: "prompt-buildDir" };
     if (domain === null) return { kind: "prompt-domain" };
     if (publish === null) return { kind: "prompt-publish" };
+    if (publish && modable === null) return { kind: "prompt-modable" };
     if (deployContracts === null) return { kind: "prompt-contracts" };
     return { kind: "confirm" };
+}
+
+// ── Modable preflight ────────────────────────────────────────────────────────
+
+function ModablePreflightStage({
+    projectDir,
+    repoName,
+    onResolved,
+    onError,
+}: {
+    projectDir: string;
+    repoName: string | null;
+    onResolved: (url: string) => void;
+    onError: (message: string) => void;
+}) {
+    const [status, setStatus] = useState<string>("checking git…");
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                setStatus("ensuring git is installed…");
+                await ensureGitInstalled();
+                if (cancelled) return;
+
+                setStatus("ensuring gh is installed…");
+                await ensureGhInstalled();
+                if (cancelled) return;
+
+                setStatus("checking gh authentication…");
+                await ensureGhAuthed({ interactive: true });
+                if (cancelled) return;
+
+                setStatus("resolving repository…");
+                const url = await resolveRepositoryUrl({
+                    cwd: projectDir,
+                    repoName,
+                });
+                if (cancelled) return;
+
+                onResolved(url);
+            } catch (err) {
+                if (cancelled) return;
+                const msg = err instanceof Error ? err.message : String(err);
+                onError(msg);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [projectDir, repoName]);
+
+    return (
+        <Section>
+            <Row mark="run" label={status} tone="muted" />
+        </Section>
+    );
 }
 
 // ── Domain validation ────────────────────────────────────────────────────────
@@ -519,6 +627,8 @@ function ConfirmStage({
         buildDir: inputs.buildDir,
         skipBuild: inputs.skipBuild,
         publishToPlayground: inputs.publishToPlayground,
+        modable: inputs.modable,
+        repositoryUrl: inputs.repositoryUrl,
         approvals: "approvals" in setup ? setup.approvals : [],
         contracts: contractsType
             ? { type: contractsType, deploy: inputs.deployContracts }
@@ -691,6 +801,8 @@ function RunningStage({
                     mode: inputs.mode,
                     publishToPlayground: inputs.publishToPlayground,
                     playgroundPrivate,
+                    modable: inputs.modable,
+                    repositoryUrl: inputs.repositoryUrl,
                     deployContracts: inputs.deployContracts,
                     contractsFundingNeeded:
                         inputs.deployContracts && userSigner?.source === "session",
