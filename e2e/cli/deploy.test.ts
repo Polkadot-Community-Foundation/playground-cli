@@ -41,7 +41,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--env", "mainnet",
 			"--suri", ALICE.suri,
 			"--dir", frontendOnly,
-		]);
+		], { timeout: 280_000 });
 		const output = result.stdout + result.stderr;
 		expect(output).toMatch(/mainnet/i);
 		expect(output).toMatch(/not.*supported/i);
@@ -128,12 +128,12 @@ describe("dot deploy — preflight and validation", () => {
 			"--playground",
 			"--suri", ALICE.suri,
 			"--dir", frontendOnly,
-		]);
+		], { timeout: 280_000 });
 		const output = result.stdout + result.stderr;
 		expect(output).toContain("no foundry/hardhat/cdm project was detected");
 	});
 
-	test("domain availability check runs before build/upload", async () => {
+	test("domain availability check runs before build/upload", { timeout: 300_000 }, async () => {
 		const domain = uniqueDomain();
 		const result = await dot([
 			"deploy",
@@ -143,7 +143,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--playground",
 			"--suri", ALICE.suri,
 			"--dir", frontendOnly,
-		]);
+		], { timeout: 280_000 });
 		const output = result.stdout + result.stderr;
 		expect(output).toContain("Checking availability");
 		expect(output).toContain(domain);
@@ -157,7 +157,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		domain = uniqueDomain();
 	});
 
-	test("frontend-only deploy reaches storage phase", async () => {
+	test("frontend-only deploy completes end-to-end", { timeout: 300_000 }, async () => {
 		const result = await dot([
 			"deploy",
 			"--signer", "dev",
@@ -166,19 +166,15 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", ALICE.suri,
 			"--dir", frontendOnly,
-		]);
+		], { timeout: 280_000 });
 
-		const output = result.stdout + result.stderr;
-		if (result.exitCode === 0) {
-			// Full success — IPFS was running and testnet was funded
-			expect(result.stdout).toContain("Deploy complete");
-			expect(result.stdout).toContain("URL");
-			expect(result.stdout).toContain(domain);
-		} else {
-			// Partial progress — got past preflight but IPFS or funding blocked it
-			expect(output).toContain("Checking availability");
-			expect(output).toMatch(/storage|chunk|ipfs|bulletin/i);
-		}
+		expect(
+			result.exitCode,
+			`deploy failed: ${result.stdout}\n${result.stderr}`,
+		).toBe(0);
+		expect(result.stdout).toContain("Deploy complete");
+		expect(result.stdout).toContain("URL");
+		expect(result.stdout).toContain(domain);
 	});
 
 	test("re-deploy same domain succeeds for same owner", { timeout: 300_000 }, async () => {
@@ -190,13 +186,9 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", ALICE.suri,
 			"--dir", frontendOnly,
-		]);
-
-		// Skip if first deploy didn't complete (infra not available)
-		if (first.exitCode !== 0) {
-			expect.soft(first.stdout + first.stderr).toContain("Checking availability");
-			return; // infra-dependent — can't test re-deploy without a first deploy
-		}
+		], { timeout: 280_000 });
+		expect(first.exitCode, `first deploy failed: ${first.stdout}\n${first.stderr}`).toBe(0);
+		expect(first.stdout).toContain("Deploy complete");
 
 		const second = await dot([
 			"deploy",
@@ -207,7 +199,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", ALICE.suri,
 			"--dir", frontendOnly,
-		]);
+		], { timeout: 280_000 });
 		expect(second.exitCode).toBe(0);
 		expect(second.stdout).toContain("Deploy complete");
 	});
@@ -221,13 +213,11 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", ALICE.suri,
 			"--dir", frontendOnly,
-		]);
-
-		// Skip if first deploy didn't complete (infra not available)
-		if (aliceDeploy.exitCode !== 0) {
-			expect.soft(aliceDeploy.stdout + aliceDeploy.stderr).toContain("Checking availability");
-			return; // infra-dependent — can't test collision without a first deploy
-		}
+		], { timeout: 280_000 });
+		expect(
+			aliceDeploy.exitCode,
+			`alice deploy failed: ${aliceDeploy.stdout}\n${aliceDeploy.stderr}`,
+		).toBe(0);
 
 		const bobDeploy = await dot([
 			"deploy",
@@ -237,7 +227,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", BOB.suri,
 			"--dir", frontendOnly,
-		]);
+		], { timeout: 280_000 });
 		// Must fail — domain is owned by Alice's dev signer, not Bob's
 		expect(bobDeploy.exitCode).not.toBe(0);
 		const output = bobDeploy.stdout + bobDeploy.stderr;
