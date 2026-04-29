@@ -19,6 +19,7 @@
     },
     "dependencies": {
         "@dotdm/contracts": "latest",
+        "@parity/dotns-cli": "0.5.6",
         "@polkadot-api/sdk-ink": "^0.6.2",
         "@polkadot-apps/address": "latest",
         "@polkadot-apps/bulletin": "latest",
@@ -51,6 +52,18 @@
     "pnpm": {
         "overrides": {
             "@parity/dotns-cli>@polkadot-api/descriptors": "file:stubs/polkadot-api-descriptors"
+        },
+        "packageExtensions": {
+            "bulletin-deploy@0.7.6": {
+                "dependencies": {
+                    "@polkadot/util": "13.5.9"
+                }
+            },
+            "@parity/dotns-cli@0.5.6": {
+                "dependencies": {
+                    "@polkadot/util": "14.0.3"
+                }
+            }
         },
         "onlyBuiltDependencies": [
             "@biomejs/biome"
