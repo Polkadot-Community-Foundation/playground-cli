@@ -53,4 +53,4 @@ program.addCommand(deployCommand);
 program.addCommand(logoutCommand);
 program.addCommand(updateCommand);
 
-program.parseAsync().then(() => process.exit(0));
+program.parseAsync().then(() => process.exit(process.exitCode ?? 0));
