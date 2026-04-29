@@ -23,5 +23,7 @@ describe("DotNS CLI runtime dependency", () => {
             'from "../node_modules/@parity/dotns-cli/dist/cli.js" with { type: "file" }',
         );
         expect(dispatcherSource).toContain("pathToFileURL(dotnsCliPath)");
+        expect(dispatcherSource).toContain('[process.argv[0] ?? "dot", scriptPath, ...argv]');
+        expect(dispatcherSource).not.toContain('"dotns", ...argv');
     });
 });
