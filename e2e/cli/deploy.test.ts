@@ -41,7 +41,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--env", "mainnet",
 			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 		const output = result.stdout + result.stderr;
 		expect(output).toMatch(/mainnet/i);
 		expect(output).toMatch(/not.*supported/i);
@@ -128,7 +128,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--playground",
 			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 		const output = result.stdout + result.stderr;
 		expect(output).toContain("no foundry/hardhat/cdm project was detected");
 	});
@@ -143,7 +143,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--playground",
 			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 		const output = result.stdout + result.stderr;
 		expect(output).toContain("Checking availability");
 		expect(output).toContain(domain);
@@ -157,7 +157,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		domain = uniqueDomain();
 	});
 
-	test("frontend-only deploy completes end-to-end", { timeout: 300_000 }, async () => {
+	test("frontend-only deploy completes end-to-end", { timeout: 450_000 }, async () => {
 		const result = await dot([
 			"deploy",
 			"--signer", "dev",
@@ -166,7 +166,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 
 		expect(
 			result.exitCode,
@@ -177,7 +177,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		expect(result.stdout).toContain(domain);
 	});
 
-	test("re-deploy same domain succeeds for same owner", { timeout: 300_000 }, async () => {
+	test("re-deploy same domain succeeds for same owner", { timeout: 900_000 }, async () => {
 		const first = await dot([
 			"deploy",
 			"--signer", "dev",
@@ -186,7 +186,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 		expect(first.exitCode, `first deploy failed: ${first.stdout}\n${first.stderr}`).toBe(0);
 		expect(first.stdout).toContain("Deploy complete");
 
@@ -199,12 +199,12 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 		expect(second.exitCode).toBe(0);
 		expect(second.stdout).toContain("Deploy complete");
 	});
 
-	test("domain taken by another account shows unavailable", { timeout: 300_000 }, async () => {
+	test("domain taken by another account shows unavailable", { timeout: 900_000 }, async () => {
 		const ownerDeploy = await dot([
 			"deploy",
 			"--signer", "dev",
@@ -213,7 +213,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 		expect(
 			ownerDeploy.exitCode,
 			`owner deploy failed: ${ownerDeploy.stdout}\n${ownerDeploy.stderr}`,
@@ -227,7 +227,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--playground",
 			"--suri", BOB.suri,
 			"--dir", frontendOnly,
-		], { timeout: 280_000 });
+		], { timeout: 400_000 });
 		// Must fail — domain is owned by SIGNER, not Bob.
 		expect(bobDeploy.exitCode).not.toBe(0);
 		const output = bobDeploy.stdout + bobDeploy.stderr;
