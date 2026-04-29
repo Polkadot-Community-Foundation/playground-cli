@@ -66,10 +66,10 @@ export const BOB: TestAccount = devAccount("Bob");
 
 /**
  * Generate a unique .dot domain name for deploy tests.
- * Uses timestamp + random suffix to avoid DotNS collisions across runs.
+ * Format mirrors `<word>-dev<NN>`.
  */
 export function uniqueDomain(): string {
-	const ts = Date.now();
 	const rand = Math.random().toString(36).slice(2, 6);
-	return `e2e-${ts}-${rand}`;
+	const suffix = String(Date.now()).slice(-2);
+	return `e2e${rand}-dev${suffix}`;
 }
