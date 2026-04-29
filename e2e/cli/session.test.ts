@@ -45,8 +45,10 @@ describe("session management", () => {
 			["deploy", "--signer", "phone", "--domain", "test", "--playground", "--buildDir", "dist"],
 			{ home: tempHome, timeout: 30_000 },
 		);
-		// A corrupted session must never lead to a successful deploy
-		expect(result.stdout).not.toContain("Deploy complete");
+		// Must fail with a signer/session error
+		expect(result.exitCode).not.toBe(0);
+		const output = (result.stdout + result.stderr).toLowerCase();
+		expect(output).toMatch(/no signer|no.*session|signer.*not|run.*dot init/);
 	});
 
 	test("build does not create or modify session files", async () => {
