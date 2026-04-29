@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.14.1
+
+### Patch Changes
+
+- 90f51d4: Fix bundled DotNS CLI dispatch so compiled deploys can run DotNS subprocess commands.
+
 ## 0.14.0
 
 ### Minor Changes
