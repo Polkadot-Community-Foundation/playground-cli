@@ -64,6 +64,7 @@ export const modCommand = new Command("mod")
                 console.log("  2. edit with claude");
                 console.log("  3. dot deploy --playground");
             }
+            if (!ok) process.exitCode = 1;
         } finally {
             resolved.destroy();
             destroyConnection();

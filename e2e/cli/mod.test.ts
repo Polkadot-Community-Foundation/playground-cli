@@ -66,9 +66,7 @@ describe("dot mod", () => {
 			{ cwd },
 		);
 		const output = result.stdout + result.stderr;
-		// TODO: dot mod exits 0 on a registry miss because StepRunner errors
-		// don't propagate to process.exitCode. Add `expect(result.exitCode).not.toBe(0)`
-		// once that's fixed in src/commands/mod/index.ts.
+		expect(result.exitCode).not.toBe(0);
 		expect(output).toMatch(/not found/i);
 	});
 
