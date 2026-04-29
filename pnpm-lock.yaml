@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@parity/dotns-cli>@polkadot-api/descriptors': file:stubs/polkadot-api-descriptors
+  '@parity/dotns-cli>@polkadot-api/descriptors': file:./stubs/papi-descriptors-stub
 
 packageExtensionsChecksum: sha256-oMEmOn6/gh31fPcPAoVQ/IzD+qg89O0LjR6VDPc8YnE=
 
@@ -1208,8 +1208,8 @@ packages:
       polkadot-api: '>=1.22.0'
       rxjs: '>=7.8.1'
 
-  '@polkadot-api/descriptors@file:stubs/polkadot-api-descriptors':
-    resolution: {directory: stubs/polkadot-api-descriptors, type: directory}
+  '@polkadot-api/descriptors@file:stubs/papi-descriptors-stub':
+    resolution: {directory: stubs/papi-descriptors-stub, type: directory}
 
   '@polkadot-api/ink-contracts@0.4.6':
     resolution: {integrity: sha512-wpFPa8CnGnmq+cFYMzuTEDmtt3ElBM0UWgTz4RpmI9E7knZ1ctWBhO7amXxOWcILqIG6sqWIE95x0cfF1PRcQg==}
@@ -6231,7 +6231,7 @@ snapshots:
       '@multiformats/blake2': 2.0.2
       '@multiformats/multiaddr': 13.0.1
       '@noble/hashes': 2.2.0
-      '@polkadot-api/descriptors': file:stubs/polkadot-api-descriptors
+      '@polkadot-api/descriptors': file:stubs/papi-descriptors-stub
       '@polkadot-labs/hdkd': 0.0.26
       '@polkadot-labs/hdkd-helpers': 0.0.27
       '@polkadot/keyring': 14.0.3(@polkadot/util-crypto@14.0.3(@polkadot/util@14.0.3))(@polkadot/util@14.0.3)
@@ -6473,7 +6473,7 @@ snapshots:
       polkadot-api: 1.23.3(postcss@8.5.10)(rxjs@7.8.2)(yaml@2.8.3)
       rxjs: 7.8.2
 
-  '@polkadot-api/descriptors@file:stubs/polkadot-api-descriptors': {}
+  '@polkadot-api/descriptors@file:stubs/papi-descriptors-stub': {}
 
   '@polkadot-api/ink-contracts@0.4.6':
     dependencies:
@@ -7379,7 +7379,7 @@ snapshots:
 
   '@scure/bip32@1.7.0':
     dependencies:
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
 

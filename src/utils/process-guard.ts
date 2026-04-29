@@ -194,6 +194,7 @@ export function scheduleHardExit(exitCode: number): void {
  */
 const WATCHDOG_WORKER_SOURCE = `
 const { parentPort, workerData } = require('node:worker_threads');
+const fs = require('node:fs');
 const { limit, pollMs, trace } = workerData;
 
 const fmt = (n) => {
@@ -201,6 +202,16 @@ const fmt = (n) => {
   if (n >= 1024 ** 2) return (n / (1024 ** 2)).toFixed(2) + ' MB';
   if (n >= 1024) return (n / 1024).toFixed(2) + ' KB';
   return n + ' B';
+};
+
+// Use fs.writeSync(2, ...) for the abort message instead of
+// process.stderr.write(): when stderr is redirected to a pipe (e.g.
+// '2> dot-stderr.log'), Node buffers writes through its stream layer.
+// Issuing SIGKILL immediately after process.stderr.write() can drop the
+// last-message buffer before it reaches the file. fs.writeSync is a
+// blocking write(2) syscall and completes before we kill ourselves.
+const writeStderr = (s) => {
+  try { fs.writeSync(2, s); } catch (_) { /* best-effort */ }
 };
 
 const started = Date.now();
@@ -212,7 +223,7 @@ const interval = setInterval(() => {
 
   if (trace) {
     const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-    process.stderr.write(
+    writeStderr(
       '[mem +' + elapsed + 's] rss=' + fmt(mem.rss) +
       ' heap=' + fmt(mem.heapUsed) + '/' + fmt(mem.heapTotal) +
       ' external=' + fmt(mem.external) +
@@ -221,7 +232,7 @@ const interval = setInterval(() => {
   }
 
   if (mem.rss > limit) {
-    process.stderr.write(
+    writeStderr(
       '\\n\\u2716 Memory use exceeded ' + fmt(limit) +
       ' (RSS \\u2248 ' + fmt(mem.rss) + '). Watchdog killing process.\\n' +
       'This is almost certainly a leaked subscription or runaway retry loop. ' +

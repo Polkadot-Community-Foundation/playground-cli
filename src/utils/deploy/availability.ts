@@ -27,44 +27,49 @@ const POP_STATUS_RESERVED = 3;
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-function countTrailingDigits(label: string): number {
-    const match = label.match(/\d+$/);
-    return match ? match[0].length : 0;
-}
-
 /**
- * Mirror of `classifyDotnsLabel` from bulletin-deploy. It is intentionally
- * local because bulletin-deploy@0.7.6 exports the helper from its internal
- * `dotns.js` build artifact but not from the package root.
+ * Mirror of `classifyDotnsLabel` from bulletin-deploy 0.7.6. The function
+ * exists in `dist/dotns.js` but is not re-exported from the package root,
+ * and bulletin-deploy's `exports` map blocks deep imports. Reproduced here
+ * with the same logic — if the upstream rule set changes (governance
+ * threshold tweaks, PoP-tier remap), this needs to track it. Pure function,
+ * no RPC.
  */
 function classifyLabel(label: string): { status: number; message: string } {
-    const trailingDigits = countTrailingDigits(label);
+    const totalLength = label.length;
+    const trailingDigits = countTrailing(label, /[0-9]/);
     if (trailingDigits > 2) {
         return {
             status: POP_STATUS_RESERVED,
-            message: `Name has ${trailingDigits} trailing digits; DotNS allows at most 2 trailing digits. Use a base name with 0-2 trailing digits.`,
+            message: `Name has ${trailingDigits} trailing digits; DotNS allows at most 2.`,
         };
     }
-
-    const baseLength = label.length - trailingDigits;
+    const baseLength = totalLength - trailingDigits;
     if (baseLength <= 5) {
         return {
             status: POP_STATUS_RESERVED,
-            message: `Base name is ${baseLength} char${
-                baseLength === 1 ? "" : "s"
-            }; DotNS reserves base names of 5 chars or fewer for governance (PopRules). Use a base name of 6+ chars — role prefixes like 'rc<N>pool' / 'rc<N>dir' / 'nightly-<role>' work well.`,
+            message: `Base name is ${baseLength} char${baseLength === 1 ? "" : "s"}; DotNS reserves base names of 5 chars or fewer for governance.`,
         };
     }
-
     if (baseLength >= 6 && baseLength <= 8) {
-        return trailingDigits === 2
-            ? { status: POP_STATUS_LITE, message: "Requires Light personhood verification" }
-            : { status: POP_STATUS_FULL, message: "Requires Full personhood verification" };
+        if (trailingDigits === 2) {
+            return { status: POP_STATUS_LITE, message: "Requires Light personhood verification" };
+        }
+        return { status: POP_STATUS_FULL, message: "Requires Full personhood verification" };
     }
+    if (trailingDigits === 2) {
+        return { status: POP_STATUS_NO_STATUS, message: "Available to all" };
+    }
+    return { status: POP_STATUS_FULL, message: "Requires Full personhood verification" };
+}
 
-    return trailingDigits === 2
-        ? { status: POP_STATUS_NO_STATUS, message: "Available to all" }
-        : { status: POP_STATUS_FULL, message: "Requires Full personhood verification" };
+function countTrailing(s: string, re: RegExp): number {
+    let n = 0;
+    for (let i = s.length - 1; i >= 0; i--) {
+        if (re.test(s[i])) n++;
+        else break;
+    }
+    return n;
 }
 
 /**
@@ -182,6 +187,11 @@ export async function checkDomainAvailability(
             "DotNS connect",
         );
 
+        // bulletin-deploy 0.7.6 removed `dotns.classifyName(label)` and moved
+        // the logic into a top-level `classifyDotnsLabel`. The function is in
+        // `dist/dotns.js` but the package's `exports` map blocks deep imports
+        // and the root `dist/index.js` doesn't re-export it. Mirror it locally
+        // (see `classifyLabel` above) — same pattern as `simulateUserStatus`.
         const classification = classifyLabel(label);
         if (classification.status === POP_STATUS_RESERVED) {
             return {
