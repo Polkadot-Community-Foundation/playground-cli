@@ -9,7 +9,6 @@ import { createDevSigner, getDevPublicKey } from "@polkadot-apps/tx";
 import { ss58Encode } from "@polkadot-apps/address";
 import { getTestClient } from "../helpers/chain.js";
 
-// @ts-expect-error — vitest doesn't support `import ... with { type: "json" }` (Bun-only syntax)
 import cdmJson from "../../../cdm.json";
 
 export interface AppEntry {

@@ -16,7 +16,7 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import { resolve } from "node:path";
 import { dot } from "./helpers/dot.js";
-import { ALICE, BOB, uniqueDomain } from "./fixtures/accounts.js";
+import { SIGNER, BOB, uniqueDomain } from "./fixtures/accounts.js";
 import { fixturePath } from "./fixtures/templates.js";
 
 const frontendOnly = fixturePath("frontend-only");
@@ -39,7 +39,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--buildDir", absBuildDir(frontendOnly),
 			"--playground",
 			"--env", "mainnet",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
 		const output = result.stdout + result.stderr;
@@ -56,7 +56,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--no-build",
 			"--contracts",
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", foundry,
 		]);
 		const output = result.stdout + result.stderr;
@@ -75,7 +75,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--no-build",
 			"--contracts",
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", hardhat,
 		]);
 		const output = result.stdout + result.stderr;
@@ -92,7 +92,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--no-build",
 			"--contracts",
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", rustCdm,
 		]);
 		const output = result.stdout + result.stderr;
@@ -109,7 +109,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--no-build",
 			"--contracts",
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", multiContract,
 		]);
 		const output = result.stdout + result.stderr;
@@ -126,7 +126,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--no-build",
 			"--contracts",
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
 		const output = result.stdout + result.stderr;
@@ -141,7 +141,7 @@ describe("dot deploy — preflight and validation", () => {
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
 		const output = result.stdout + result.stderr;
@@ -164,7 +164,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
 
@@ -184,7 +184,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
 		expect(first.exitCode, `first deploy failed: ${first.stdout}\n${first.stderr}`).toBe(0);
@@ -197,7 +197,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--buildDir", absBuildDir(frontendOnly),
 			"--no-build",
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
 		expect(second.exitCode).toBe(0);
@@ -205,18 +205,18 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 	});
 
 	test("domain taken by another account shows unavailable", { timeout: 300_000 }, async () => {
-		const aliceDeploy = await dot([
+		const ownerDeploy = await dot([
 			"deploy",
 			"--signer", "dev",
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
 			"--playground",
-			"--suri", ALICE.suri,
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
 		expect(
-			aliceDeploy.exitCode,
-			`alice deploy failed: ${aliceDeploy.stdout}\n${aliceDeploy.stderr}`,
+			ownerDeploy.exitCode,
+			`owner deploy failed: ${ownerDeploy.stdout}\n${ownerDeploy.stderr}`,
 		).toBe(0);
 
 		const bobDeploy = await dot([
@@ -228,7 +228,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			"--suri", BOB.suri,
 			"--dir", frontendOnly,
 		], { timeout: 280_000 });
-		// Must fail — domain is owned by Alice's dev signer, not Bob's
+		// Must fail — domain is owned by SIGNER, not Bob.
 		expect(bobDeploy.exitCode).not.toBe(0);
 		const output = bobDeploy.stdout + bobDeploy.stderr;
 		expect(output.toLowerCase()).toMatch(/taken|registered|owned|unavailable|already/);

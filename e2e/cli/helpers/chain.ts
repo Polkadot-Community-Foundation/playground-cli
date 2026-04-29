@@ -6,7 +6,6 @@
  */
 
 import { getChainAPI } from "@polkadot-apps/chain-client";
-import { h160ToSs58, type HexString } from "@polkadot-apps/address";
 
 type PaseoClient = Awaited<ReturnType<typeof getChainAPI<"paseo">>>;
 
@@ -61,14 +60,3 @@ export async function queryBalance(address: string): Promise<bigint> {
 	return account.data.free;
 }
 
-/**
- * Query the free balance of an h160 address on Asset Hub (Revive/EVM-side).
- *
- * Maps h160 → ss58 via the standard Revive address mapping, then queries
- * System.Account. This is the side that pays gas for Revive contract calls
- * (deploy, registry.publish, etc.), so it's the right balance for an e2e
- * canary.
- */
-export async function queryH160Balance(h160: HexString): Promise<bigint> {
-	return queryBalance(h160ToSs58(h160));
-}

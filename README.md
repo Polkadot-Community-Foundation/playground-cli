@@ -127,7 +127,7 @@ Live alongside the code as `*.test.ts`. They avoid mocking so deeply that they j
 
 #### E2E tests
 
-Live under `e2e/cli/*.test.ts`, with a separate `e2e/vitest.config.ts`. Each test spawns the CLI via `bun run src/index.ts` (execa wrapper in `e2e/cli/helpers/dot.ts`) and asserts on stdout/stderr/exit code. Files run serially — they share Alice's testnet h160 and would race otherwise.
+Live under `e2e/cli/*.test.ts`, with a separate `e2e/vitest.config.ts`. Each test spawns the CLI via `bun run src/index.ts` (execa wrapper in `e2e/cli/helpers/dot.ts`) and asserts on stdout/stderr/exit code. Files run serially — they share a single deployer account on Paseo and would race otherwise.
 
 Prerequisite: run `dot init` once to install the required local deps (mainly Kubo IPFS for the deploy pipeline). Tests also reach Paseo Asset Hub and `codeload.github.com` over the internet, so they need network.
 
