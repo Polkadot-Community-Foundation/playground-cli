@@ -72,10 +72,20 @@ export const BOB: TestAccount = devAccount("Bob");
  *
  * Use a separate domain per test that exercises a meaningfully different
  * publish path (storage / re-deploy / cross-owner collision); reuse a single
- * domain for the preflight tests, which never reach publish.
+ * domain for the preflight / validation tests.
+ *
+ * NOTE: do not assert on the registry state of `preflight` — it's shared by
+ * six tests in the same file and the metadata at any moment reflects whichever
+ * one ran last. Stdout assertions are fine. If you need to assert on registry
+ * state for a new test, give it its own dedicated domain here.
  */
 export const E2E_DOMAINS = {
-	/** Used by all preflight / validation tests — they exit before publish. */
+	/**
+	 * Shared by the validation tests in `dot deploy — preflight and validation`.
+	 * `--no-build` only skips the build step, not the publish — so some of these
+	 * tests do reach `registry.publish`. SIGNER ends up owning this domain
+	 * regardless; subsequent runs are same-owner re-publishes.
+	 */
 	preflight: "e2e-cli-preflight",
 	/** Used by the storage-phase happy path. */
 	storage: "e2e-cli-storage",

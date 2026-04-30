@@ -35,7 +35,7 @@ describe("dot deploy — preflight and validation", () => {
 		const result = await dot([
 			"deploy",
 			"--signer", "dev",
-			"--domain", "test",
+			"--domain", E2E_DOMAINS.preflight,
 			"--buildDir", absBuildDir(frontendOnly),
 			"--playground",
 			"--env", "mainnet",
