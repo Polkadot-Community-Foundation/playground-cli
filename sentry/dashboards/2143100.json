@@ -14,7 +14,7 @@
         "dateJoined": "2026-04-15T16:06:03.281704Z",
         "lastLogin": "2026-04-22T12:48:09.478383Z",
         "has2fa": true,
-        "lastActive": "2026-04-30T06:42:16.825378Z",
+        "lastActive": "2026-04-30T13:07:23.770433Z",
         "isSuperuser": false,
         "isStaff": false,
         "emails": [],
@@ -27,17 +27,17 @@
     },
     "widgets": [
         {
-            "id": "451326",
+            "id": "451732",
             "title": "Total Commands",
             "description": null,
             "displayType": "big_number",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.580596Z",
+            "dateCreated": "2026-04-30T13:16:59.615657Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696637",
+                    "id": "697263",
                     "name": "",
                     "fields": [
                         "count()"
@@ -49,7 +49,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
                     "orderby": "",
-                    "widgetId": "451326",
+                    "widgetId": "451732",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -71,17 +71,17 @@
             "changedReason": null
         },
         {
-            "id": "451327",
+            "id": "451733",
             "title": "Deploys",
             "description": null,
             "displayType": "big_number",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.584858Z",
+            "dateCreated": "2026-04-30T13:16:59.619729Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696638",
+                    "id": "697264",
                     "name": "",
                     "fields": [
                         "count()"
@@ -93,7 +93,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.deploy !cli.tag:e2e-*",
                     "orderby": "",
-                    "widgetId": "451327",
+                    "widgetId": "451733",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -115,17 +115,17 @@
             "changedReason": null
         },
         {
-            "id": "451328",
+            "id": "451734",
             "title": "Unexpected Failures",
             "description": null,
             "displayType": "big_number",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.588464Z",
+            "dateCreated": "2026-04-30T13:16:59.623063Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696639",
+                    "id": "697265",
                     "name": "",
                     "fields": [
                         "count()"
@@ -137,7 +137,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error cli.expected:false",
                     "orderby": "",
-                    "widgetId": "451328",
+                    "widgetId": "451734",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -159,17 +159,17 @@
             "changedReason": null
         },
         {
-            "id": "451329",
+            "id": "451735",
             "title": "%SAD Commands",
             "description": null,
             "displayType": "big_number",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.591967Z",
+            "dateCreated": "2026-04-30T13:16:59.626112Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696640",
+                    "id": "697266",
                     "name": "",
                     "fields": [
                         "count_if(cli.sad,equals,true)",
@@ -185,7 +185,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
                     "orderby": "",
-                    "widgetId": "451329",
+                    "widgetId": "451735",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": 2,
@@ -207,17 +207,17 @@
             "changedReason": null
         },
         {
-            "id": "451330",
+            "id": "451736",
             "title": "Avg Command Duration",
             "description": null,
             "displayType": "big_number",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.595566Z",
+            "dateCreated": "2026-04-30T13:16:59.629320Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696641",
+                    "id": "697267",
                     "name": "",
                     "fields": [
                         "avg(span.duration)"
@@ -229,7 +229,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
                     "orderby": "",
-                    "widgetId": "451330",
+                    "widgetId": "451736",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -251,17 +251,17 @@
             "changedReason": null
         },
         {
-            "id": "451331",
+            "id": "451737",
             "title": "Active Repos",
             "description": null,
             "displayType": "big_number",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.599017Z",
+            "dateCreated": "2026-04-30T13:16:59.632187Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696642",
+                    "id": "697268",
                     "name": "",
                     "fields": [
                         "count_unique(cli.repo)"
@@ -273,7 +273,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
                     "orderby": "",
-                    "widgetId": "451331",
+                    "widgetId": "451737",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -295,17 +295,17 @@
             "changedReason": null
         },
         {
-            "id": "451332",
+            "id": "451738",
             "title": "Commands by Source",
             "description": null,
             "displayType": "table",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.602458Z",
+            "dateCreated": "2026-04-30T13:16:59.635182Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696643",
+                    "id": "697269",
                     "name": "",
                     "fields": [
                         "span.op",
@@ -326,7 +326,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
                     "orderby": "-count()",
-                    "widgetId": "451332",
+                    "widgetId": "451738",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -348,17 +348,17 @@
             "changedReason": null
         },
         {
-            "id": "451333",
+            "id": "451739",
             "title": "Command Duration Over Time",
             "description": null,
             "displayType": "line",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.605871Z",
+            "dateCreated": "2026-04-30T13:16:59.638120Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696644",
+                    "id": "697270",
                     "name": "p50 ci",
                     "fields": [
                         "p50(span.duration)"
@@ -370,14 +370,14 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:ci",
                     "orderby": "",
-                    "widgetId": "451333",
+                    "widgetId": "451739",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696645",
+                    "id": "697271",
                     "name": "p95 ci",
                     "fields": [
                         "p95(span.duration)"
@@ -389,14 +389,14 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:ci",
                     "orderby": "",
-                    "widgetId": "451333",
+                    "widgetId": "451739",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696646",
+                    "id": "697272",
                     "name": "p50 local",
                     "fields": [
                         "p50(span.duration)"
@@ -408,14 +408,14 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:local",
                     "orderby": "",
-                    "widgetId": "451333",
+                    "widgetId": "451739",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696647",
+                    "id": "697273",
                     "name": "p95 local",
                     "fields": [
                         "p95(span.duration)"
@@ -427,7 +427,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:local",
                     "orderby": "",
-                    "widgetId": "451333",
+                    "widgetId": "451739",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -449,17 +449,17 @@
             "changedReason": null
         },
         {
-            "id": "451334",
+            "id": "451740",
             "title": "Command Volume Over Time",
             "description": null,
             "displayType": "bar",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.609828Z",
+            "dateCreated": "2026-04-30T13:16:59.641567Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696648",
+                    "id": "697274",
                     "name": "CI",
                     "fields": [
                         "count()"
@@ -471,14 +471,14 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:ci",
                     "orderby": "",
-                    "widgetId": "451334",
+                    "widgetId": "451740",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696649",
+                    "id": "697275",
                     "name": "Local",
                     "fields": [
                         "count()"
@@ -490,7 +490,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:local",
                     "orderby": "",
-                    "widgetId": "451334",
+                    "widgetId": "451740",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -512,17 +512,17 @@
             "changedReason": null
         },
         {
-            "id": "451335",
+            "id": "451741",
             "title": "Success vs Failure",
             "description": null,
             "displayType": "area",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.613473Z",
+            "dateCreated": "2026-04-30T13:16:59.644790Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696650",
+                    "id": "697276",
                     "name": "success",
                     "fields": [
                         "count()"
@@ -534,14 +534,14 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* !cli.status:error",
                     "orderby": "",
-                    "widgetId": "451335",
+                    "widgetId": "451741",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696651",
+                    "id": "697277",
                     "name": "expected failure",
                     "fields": [
                         "count()"
@@ -553,14 +553,14 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error cli.expected:true",
                     "orderby": "",
-                    "widgetId": "451335",
+                    "widgetId": "451741",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696652",
+                    "id": "697278",
                     "name": "unexpected failure",
                     "fields": [
                         "count()"
@@ -572,7 +572,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error cli.expected:false",
                     "orderby": "",
-                    "widgetId": "451335",
+                    "widgetId": "451741",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -594,17 +594,17 @@
             "changedReason": null
         },
         {
-            "id": "451336",
+            "id": "451742",
             "title": "Deploy Phase Breakdown",
             "description": null,
             "displayType": "table",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.617146Z",
+            "dateCreated": "2026-04-30T13:16:59.648378Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696653",
+                    "id": "697279",
                     "name": "",
                     "fields": [
                         "span.op",
@@ -625,7 +625,7 @@
                     "fieldAliases": [],
                     "conditions": "span.op:cli.deploy.* !cli.tag:e2e-*",
                     "orderby": "-avg(span.duration)",
-                    "widgetId": "451336",
+                    "widgetId": "451742",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -647,17 +647,17 @@
             "changedReason": null
         },
         {
-            "id": "451337",
+            "id": "451743",
             "title": "Deploy Options",
             "description": null,
             "displayType": "table",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.620513Z",
+            "dateCreated": "2026-04-30T13:16:59.651585Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696654",
+                    "id": "697280",
                     "name": "",
                     "fields": [
                         "cli.deploy.mode",
@@ -680,7 +680,7 @@
                     "fieldAliases": [],
                     "conditions": "span.op:cli.deploy.orchestrator !cli.tag:e2e-*",
                     "orderby": "-count()",
-                    "widgetId": "451337",
+                    "widgetId": "451743",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -702,17 +702,17 @@
             "changedReason": null
         },
         {
-            "id": "451338",
+            "id": "451744",
             "title": "Playground Publish Phases",
             "description": null,
             "displayType": "table",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.623950Z",
+            "dateCreated": "2026-04-30T13:16:59.654497Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696655",
+                    "id": "697281",
                     "name": "",
                     "fields": [
                         "span.op",
@@ -731,7 +731,7 @@
                     "fieldAliases": [],
                     "conditions": "span.op:cli.deploy.playground* !cli.tag:e2e-*",
                     "orderby": "-avg(span.duration)",
-                    "widgetId": "451338",
+                    "widgetId": "451744",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -753,17 +753,17 @@
             "changedReason": null
         },
         {
-            "id": "451339",
+            "id": "451745",
             "title": "Failures by Error",
             "description": null,
             "displayType": "table",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.627538Z",
+            "dateCreated": "2026-04-30T13:16:59.657407Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696656",
+                    "id": "697282",
                     "name": "",
                     "fields": [
                         "span.op",
@@ -784,7 +784,7 @@
                     "fieldAliases": [],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error",
                     "orderby": "-count()",
-                    "widgetId": "451339",
+                    "widgetId": "451745",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -806,17 +806,17 @@
             "changedReason": null
         },
         {
-            "id": "451340",
+            "id": "451746",
             "title": "Recent Failures",
             "description": null,
             "displayType": "table",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.631128Z",
+            "dateCreated": "2026-04-30T13:16:59.660370Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696657",
+                    "id": "697283",
                     "name": "",
                     "fields": [
                         "timestamp",
@@ -845,7 +845,7 @@
                     ],
                     "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error",
                     "orderby": "-timestamp",
-                    "widgetId": "451340",
+                    "widgetId": "451746",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -867,17 +867,17 @@
             "changedReason": null
         },
         {
-            "id": "451341",
+            "id": "451747",
             "title": "Warning Events",
             "description": null,
             "displayType": "table",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.634588Z",
+            "dateCreated": "2026-04-30T13:16:59.663390Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696658",
+                    "id": "697284",
                     "name": "",
                     "fields": [
                         "title",
@@ -892,7 +892,7 @@
                     "fieldAliases": [],
                     "conditions": "level:warning",
                     "orderby": "-count()",
-                    "widgetId": "451341",
+                    "widgetId": "451747",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -903,7 +903,7 @@
             "widgetType": "error-events",
             "layout": {
                 "x": 0,
-                "y": 15,
+                "y": 18,
                 "w": 2,
                 "h": 2,
                 "minH": 2
@@ -914,17 +914,17 @@
             "changedReason": null
         },
         {
-            "id": "451342",
+            "id": "451748",
             "title": "Warnings Over Time",
             "description": null,
             "displayType": "line",
             "thresholds": null,
             "interval": "5m",
-            "dateCreated": "2026-04-30T06:41:39.637796Z",
+            "dateCreated": "2026-04-30T13:16:59.666475Z",
             "dashboardId": "2143100",
             "queries": [
                 {
-                    "id": "696659",
+                    "id": "697285",
                     "name": "registry publish retry",
                     "fields": [
                         "count()"
@@ -936,14 +936,14 @@
                     "fieldAliases": [],
                     "conditions": "level:warning title:\"Playground registry publish failed, retrying\"",
                     "orderby": "",
-                    "widgetId": "451342",
+                    "widgetId": "451748",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696660",
+                    "id": "697286",
                     "name": "chunk retry failed",
                     "fields": [
                         "count()"
@@ -955,14 +955,14 @@
                     "fieldAliases": [],
                     "conditions": "level:warning title:\"Chunk retry failed\"",
                     "orderby": "",
-                    "widgetId": "451342",
+                    "widgetId": "451748",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696661",
+                    "id": "697287",
                     "name": "ws reconnect",
                     "fields": [
                         "count()"
@@ -974,14 +974,14 @@
                     "fieldAliases": [],
                     "conditions": "level:warning title:\"WebSocket connection lost, reconnecting\"",
                     "orderby": "",
-                    "widgetId": "451342",
+                    "widgetId": "451748",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
                     "linkedDashboards": []
                 },
                 {
-                    "id": "696662",
+                    "id": "697288",
                     "name": "chunk upload retry",
                     "fields": [
                         "count()"
@@ -993,7 +993,7 @@
                     "fieldAliases": [],
                     "conditions": "level:warning title:\"Chunk upload failed, retrying\"",
                     "orderby": "",
-                    "widgetId": "451342",
+                    "widgetId": "451748",
                     "onDemand": [],
                     "isHidden": false,
                     "selectedAggregate": null,
@@ -1004,9 +1004,76 @@
             "widgetType": "error-events",
             "layout": {
                 "x": 2,
-                "y": 15,
+                "y": 18,
                 "w": 4,
                 "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451749",
+            "title": "Recent Commands",
+            "description": null,
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.670160Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697289",
+                    "name": "",
+                    "fields": [
+                        "timestamp",
+                        "span.op",
+                        "cli.source",
+                        "cli.repo",
+                        "cli.tag",
+                        "cli.status",
+                        "cli.expected",
+                        "span.duration"
+                    ],
+                    "aggregates": [],
+                    "columns": [
+                        "timestamp",
+                        "span.op",
+                        "cli.source",
+                        "cli.repo",
+                        "cli.tag",
+                        "cli.status",
+                        "cli.expected",
+                        "span.duration"
+                    ],
+                    "fieldAliases": [
+                        "when",
+                        "command",
+                        "source",
+                        "repo",
+                        "tag",
+                        "status",
+                        "expected",
+                        "duration"
+                    ],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
+                    "orderby": "-timestamp",
+                    "widgetId": "451749",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 15,
+                "w": 6,
+                "h": 3,
                 "minH": 2
             },
             "axisRange": null,
