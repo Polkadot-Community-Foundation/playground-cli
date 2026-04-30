@@ -105,11 +105,7 @@ export function installSignalHandlers(): void {
     // Unhandled rejections should not silently keep the event loop alive.
     process.on("unhandledRejection", (reason) => {
         if (isBenignUnsubscriptionError(reason)) {
-            if (process.env.DOT_DEPLOY_VERBOSE === "1") {
-                process.stderr.write(
-                    "(suppressed benign post-destroy UnsubscriptionError: Not connected)\n",
-                );
-            }
+            logSuppressedBenign(reason);
             return;
         }
         process.stderr.write(`\nUnhandled promise rejection: ${String(reason)}\n`);
@@ -124,16 +120,29 @@ export function installSignalHandlers(): void {
     // `Required status: ProofOfPersonhoodFull`.
     process.on("uncaughtException", (err) => {
         if (isBenignUnsubscriptionError(err)) {
-            if (process.env.DOT_DEPLOY_VERBOSE === "1") {
-                process.stderr.write(
-                    "(suppressed benign post-destroy UnsubscriptionError: Not connected)\n",
-                );
-            }
+            logSuppressedBenign(err);
             return;
         }
         process.stderr.write(`\nUncaught exception: ${err?.stack ?? String(err)}\n`);
         runAllCleanupAndExit(1);
     });
+}
+
+/**
+ * When DOT_DEPLOY_VERBOSE=1, mirror a one-line note to stderr identifying
+ * the actual error shape that was suppressed. Otherwise silent — the user's
+ * work succeeded and a scary stack trace on the way out would be misleading.
+ *
+ * Telemetry hook for "benign teardown happened" deliberately skipped here
+ * because `captureWarning` marks the run as `cli.sad=true`, which would
+ * misclassify a successful deploy. Add a breadcrumb-only telemetry helper
+ * upstream first, then wire it in.
+ */
+function logSuppressedBenign(reason: unknown): void {
+    if (process.env.DOT_DEPLOY_VERBOSE !== "1") return;
+    const name = reason instanceof Error ? reason.name : "unknown";
+    const message = reason instanceof Error ? reason.message : String(reason);
+    process.stderr.write(`(suppressed benign post-destroy ${name}: ${message})\n`);
 }
 
 /**
