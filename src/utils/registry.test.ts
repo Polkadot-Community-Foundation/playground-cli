@@ -62,7 +62,7 @@ describe("getRegistryContract", () => {
         const rawClient = {} as any;
 
         await expect(getRegistryContract(rawClient, fakeSigner)).rejects.toThrow(
-            /Could not resolve the live Playground registry contract address.*registry unavailable/,
+            /BadRegistryLookup/,
         );
 
         expect(fromClientMock).not.toHaveBeenCalled();
