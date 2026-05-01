@@ -37,6 +37,7 @@ describe("expected CLI errors", () => {
         expect(isExpectedCliError("GitHub CLI is not authenticated")).toBe(true);
         expect(isExpectedCliError('Invalid domain "bad_domain"')).toBe(true);
         expect(isExpectedCliError("No foundry/hardhat/cdm project was detected")).toBe(true);
+        expect(isExpectedCliError("BadRegistryLookup: CDM registry unavailable")).toBe(true);
     });
 
     it("treats ambiguous runtime failures as unexpected", async () => {
