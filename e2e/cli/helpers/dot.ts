@@ -65,7 +65,11 @@ export async function dotWithSuri(
 // ── Internal ────────────────────────────────────────────────────────────────
 
 async function run(args: string[], options?: DotOptions): Promise<DotResult> {
-	const env: Record<string, string> = { ...options?.env };
+	const env: Record<string, string> = {
+		DOT_TAG: process.env.DOT_TAG ?? "e2e-local",
+		DOT_TELEMETRY: process.env.DOT_TELEMETRY ?? "1",
+		...options?.env,
+	};
 	if (options?.home) {
 		env.HOME = options.home;
 	}
