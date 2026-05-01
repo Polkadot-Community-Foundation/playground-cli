@@ -65,3 +65,9 @@ Read `CLAUDE.md` alongside this file when you need the full rationale for repo-s
 - `ensureGhAuthed()` must not shell out to `gh auth login` from inside Ink. Fail with the existing actionable message instead.
 - `metadata.repository` is written only when `--modable` is explicitly opted in.
 - When `--modable` needs a repository, deploy either pushes to existing `origin` or creates a public repo with `gh repo create --public --push`; failed pushes must fail the deploy.
+
+## Sentry Telemetry
+
+- Helpers in `src/telemetry.ts`, `src/utils/deploy/phase.ts`, `src/cli-runtime.ts`. Every command wraps with `runCliCommand`; every deploy phase wraps with `withDeployPhase`. Don't reimplement the boilerplate.
+- Dashboards are JSON snapshots in `sentry/dashboards/`. Run `./sentry/backup-dashboards.sh` before any change. Use `./sentry/patch-dashboard.py` and `./sentry/create-dashboard.py` for edits and new dashboards.
+- E2E test runs are tagged `cli.tag:e2e-ci` (CI) or `cli.tag:e2e-local` (helper default). Production widgets exclude `cli.tag:e2e-*`; the E2E Health dashboard (id 2216096) targets it.
