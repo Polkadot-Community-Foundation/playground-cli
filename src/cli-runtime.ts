@@ -43,7 +43,8 @@ export async function runCliCommand(
         try {
             stopWatchdog?.();
         } catch {
-            // best-effort
+            // Defence-in-depth: stopWatchdog already swallows worker.postMessage errors
+            // internally. This guards against an unexpected throw from the worker handle.
         }
         if (hardExit) {
             const exitCode = typeof process.exitCode === "number" ? process.exitCode : 0;

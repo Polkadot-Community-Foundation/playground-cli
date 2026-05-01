@@ -54,4 +54,13 @@ describe("runCliCommand", () => {
         ).rejects.toThrow("boom");
         expect(scheduleHardExit).toHaveBeenCalledWith(1);
     });
+
+    it("stops watchdog even when the action throws", async () => {
+        await expect(
+            runCliCommand("deploy", { watchdog: true, hardExit: false }, async () => {
+                throw new Error("boom");
+            }),
+        ).rejects.toThrow("boom");
+        expect(stopWatchdog).toHaveBeenCalledTimes(1);
+    });
 });
