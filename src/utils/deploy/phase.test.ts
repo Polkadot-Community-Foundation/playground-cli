@@ -32,9 +32,15 @@ describe("withDeployPhase", () => {
     it("emits error and rethrows on failure", async () => {
         const events: DeployEvent[] = [];
         await expect(
-            withDeployPhase("build", "cli.deploy.build", {}, (e) => events.push(e), async () => {
-                throw new Error("boom");
-            }),
+            withDeployPhase(
+                "build",
+                "cli.deploy.build",
+                {},
+                (e) => events.push(e),
+                async () => {
+                    throw new Error("boom");
+                },
+            ),
         ).rejects.toThrow("boom");
         expect(events.map((e) => e.kind)).toEqual(["phase-start", "error"]);
         const err = events[1];
