@@ -155,7 +155,10 @@ export const updateCommand = new Command("update")
                     { "cli.update.asset": asset },
                     async () => {
                         atomicInstall(dest, binary);
+
                         if (platform() === "darwin") {
+                            // Re-sign so Gatekeeper doesn't quarantine the fresh binary.
+                            // Both calls are best-effort — an unsigned binary still runs.
                             try {
                                 execSync(`codesign --sign - --force "${dest}"`, {
                                     stdio: "ignore",
