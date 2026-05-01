@@ -18,7 +18,7 @@ export async function getRegistryContract(
     rawClient: Parameters<typeof ContractManager.fromClient>[1],
     signer: ResolvedSigner,
 ) {
-    let manifest: CdmJson = cdmJson;
+    let manifest: CdmJson;
     try {
         manifest = await withRequiredLiveContractAddresses(cdmJson, rawClient, [
             PLAYGROUND_REGISTRY_CONTRACT,
