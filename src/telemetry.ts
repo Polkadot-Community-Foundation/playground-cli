@@ -248,6 +248,24 @@ export function setTelemetryTag(key: string, value: string): void {
     }
 }
 
+/**
+ * Emit a warning event tied to the current root span.
+ *
+ * The `message` is path-scrubbed and truncated to 200 chars. The `context`
+ * object is recursively sanitised — strings inside it are also scrubbed and
+ * truncated. Callers must NOT pre-truncate; double-truncation creates jagged
+ * suffixes and indicates the helper's contract isn't trusted. High-cardinality
+ * variants (CIDs, addresses, full URLs) embedded into the `message` itself
+ * will fragment the Sentry issue group — keep `message` a stable prefix and
+ * push variable values into `context`.
+ *
+ * Side effects:
+ *   1. Adds a breadcrumb to the trace timeline.
+ *   2. Captures a standalone warning event (queryable as `level:warning`).
+ *   3. Flips the active root span's `cli.sad` attribute and the `cli.sad`
+ *      Sentry scope tag to `"true"` so SAD% calculations include retries
+ *      that ultimately succeeded.
+ */
 export function captureWarning(message: string, context?: Record<string, unknown>): void {
     if (!Sentry) return;
     try {
