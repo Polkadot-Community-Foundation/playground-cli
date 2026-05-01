@@ -2,10 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("../../telemetry.js", () => ({
     withSpan: vi.fn(async (_op: string, _name: string, _attrs: any, fn: any) => fn()),
-    sanitizedErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+    errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
 
 import { withDeployPhase } from "./phase.js";
+import { withSpan } from "../../telemetry.js";
 import type { DeployEvent } from "./run.js";
 
 describe("withDeployPhase", () => {
@@ -20,6 +21,12 @@ describe("withDeployPhase", () => {
         );
         expect(result).toBe(7);
         expect(events.map((e) => e.kind)).toEqual(["phase-start", "phase-complete"]);
+        expect(vi.mocked(withSpan)).toHaveBeenCalledWith(
+            "cli.deploy.build",
+            "build",
+            { "cli.deploy.x": "y" },
+            expect.any(Function),
+        );
     });
 
     it("emits error and rethrows on failure", async () => {
