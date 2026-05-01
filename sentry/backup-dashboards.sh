@@ -11,7 +11,9 @@ BASE="https://de.sentry.io/api/0/organizations/paritytech"
 
 # Known dashboard IDs. Append new IDs after creating new dashboards.
 DASHBOARDS=(
-    "2143100"
+    "2143100"   # Playground CLI Health
+    "2216067"   # Failures Detail
+    # "<id>"    # E2E Health (added in Phase 9)
 )
 
 mkdir -p sentry/dashboards
