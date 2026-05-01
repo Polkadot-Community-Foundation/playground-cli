@@ -29,6 +29,29 @@ const CDM_REGISTRY_ABI: AbiEntry[] = [
 
 type OptionAddress = { isSome: boolean; value: HexString };
 
+const REVIVE_TRACE_CALL_COMPAT_ERROR =
+    "Incompatible runtime entry RuntimeCall(ReviveApi_trace_call)";
+
+/**
+ * sdk-ink dry-runs Revive contract calls with `ReviveApi.call`, then also tries
+ * `ReviveApi.trace_call` to recover emitted events. Paseo Asset Hub currently
+ * rejects that trace runtime entry, but the actual dry-run result still works,
+ * so sdk-ink catches the trace failure and continues after printing the stack.
+ * Registry calls do not need trace-derived events, so hide this known noise.
+ */
+export async function withoutReviveTraceNoise<T>(fn: () => Promise<T>): Promise<T> {
+    const error = console.error;
+    console.error = (...args: unknown[]) => {
+        if (args.some((arg) => String(arg).includes(REVIVE_TRACE_CALL_COMPAT_ERROR))) return;
+        error(...args);
+    };
+    try {
+        return await fn();
+    } finally {
+        console.error = error;
+    }
+}
+
 function defaultTargetHash(manifest: CdmJson): string {
     const [targetHash] = Object.keys(manifest.targets);
     if (!targetHash) throw new Error("No targets found in cdm.json");
@@ -62,13 +85,15 @@ export async function resolveLiveContractAddresses(
         CDM_REGISTRY_ADDRESS,
         CDM_REGISTRY_ABI,
     );
-    const entries = await Promise.all(
-        libraries.map(async (library): Promise<readonly [string, HexString | null]> => {
-            const result = await registry.getAddress.query(library);
-            if (!result.success) return [library, null];
-            const address = result.value as OptionAddress;
-            return [library, address.isSome ? address.value : null];
-        }),
+    const entries = await withoutReviveTraceNoise(() =>
+        Promise.all(
+            libraries.map(async (library): Promise<readonly [string, HexString | null]> => {
+                const result = await registry.getAddress.query(library);
+                if (!result.success) return [library, null];
+                const address = result.value as OptionAddress;
+                return [library, address.isSome ? address.value : null];
+            }),
+        ),
     );
 
     const addresses: Record<string, HexString> = {};
