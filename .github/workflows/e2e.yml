@@ -81,7 +81,128 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 5
         steps:
-            - name: Placeholder — implemented in Tasks 6–8
+            - name: Download JUnit + forensic artefacts
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: e2e-reports-*
+                  path: artefacts/
+                  merge-multiple: true
+
+            - name: Install xmlstarlet (for JUnit parsing)
+              run: sudo apt-get update -q && sudo apt-get install -y -q xmlstarlet
+
+            - name: Fetch per-leg job conclusions
+              id: legs
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              shell: /usr/bin/bash -euo pipefail {0}
               run: |
-                  echo "test job result: ${{ needs.test.result }}"
-                  echo "(report job logic added in subsequent tasks)"
+                  curl -fsSL \
+                      -H "Authorization: bearer $GITHUB_TOKEN" \
+                      -H "Accept: application/vnd.github+json" \
+                      "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
+                      | jq -r '.jobs[] | select(.name | startswith("E2E · ")) | "\(.name)\t\(.conclusion)\t\((.completed_at // now | fromdateiso8601) - (.started_at | fromdateiso8601))"' \
+                      > /tmp/legs.tsv
+                  if [ ! -s /tmp/legs.tsv ]; then
+                      echo "::error::No 'E2E · …' jobs found in run ${{ github.run_id }}; matrix-job naming may have changed."
+                      exit 1
+                  fi
+                  echo "Per-leg conclusions:"
+                  cat /tmp/legs.tsv
+
+            - name: Parse JUnit and render report body
+              env:
+                  AGGREGATE: ${{ needs.test.result }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                  TAG: ${{ needs.test.outputs.tag }}
+              shell: /usr/bin/bash -euo pipefail {0}
+              run: |
+                  emoji() { case "$1" in
+                      success)   echo "✅ PASS";;
+                      failure)   echo "❌ FAIL";;
+                      skipped)   echo "⏭️ SKIP";;
+                      cancelled) echo "🚫 CANCEL";;
+                      *)         echo "❓ $1";;
+                  esac; }
+
+                  BRANCH="${{ github.head_ref || github.ref_name }}"
+                  SHA_SHORT="${GITHUB_SHA:0:7}"
+                  TAG_LABEL="${TAG:-e2e-ci-pr}"
+
+                  # ---- Part 1: per-cell summary table ----
+                  {
+                      echo "<!-- e2e-pr-report -->"
+                      echo "## E2E Test Pass · $(emoji "$AGGREGATE")"
+                      echo ""
+                      echo "Tag: \`$TAG_LABEL\` · Branch: \`$BRANCH\` · Commit: \`$SHA_SHORT\` · [Run logs]($RUN_URL)"
+                      echo ""
+                      echo "| Cell | Result | Time |"
+                      echo "|------|--------|------|"
+                      while IFS=$'\t' read -r name conclusion duration; do
+                          dur_min=$(awk -v d="$duration" 'BEGIN{ printf "%dm%02ds", int(d/60), int(d%60) }')
+                          echo "| \`${name#E2E · }\` | $(emoji "$conclusion") | $dur_min |"
+                      done < /tmp/legs.tsv
+                      echo ""
+                  } > /tmp/body.md
+
+                  # ---- Part 2: failures detail block (only if any test failed) ----
+                  FAILS_FILE=/tmp/failures.tsv
+                  : > "$FAILS_FILE"
+
+                  # nullglob so non-matching globs expand to nothing.
+                  shopt -s nullglob
+                  XML_FILES=( artefacts/junit*.xml artefacts/*/junit*.xml )
+                  shopt -u nullglob
+
+                  if command -v xmlstarlet >/dev/null 2>&1; then
+                      for xml in "${XML_FILES[@]}"; do
+                          xmlstarlet sel -t -m "//testcase[failure or error]" \
+                              -v "concat(@classname, ' › ', @name)" -o $'\t' \
+                              -v "failure/@message | error/@message" -n "$xml" \
+                              >> "$FAILS_FILE" || true
+                      done
+                  else
+                      for xml in "${XML_FILES[@]}"; do
+                          grep -E '<testcase|<failure|<error' "$xml" \
+                              | awk '/<testcase/{name=$0} /<failure|<error/{print name "\t" $0}' \
+                              >> "$FAILS_FILE" || true
+                      done
+                  fi
+
+                  if [ -s "$FAILS_FILE" ]; then
+                      FAIL_COUNT=$(wc -l < "$FAILS_FILE")
+                      MAX_LINES=100
+                      TRUNCATED=$([ "$FAIL_COUNT" -gt "$MAX_LINES" ] && echo "1" || echo "0")
+                      {
+                          echo "<details><summary>❌ Failed tests ($FAIL_COUNT)</summary>"
+                          echo ""
+                          head -n "$MAX_LINES" "$FAILS_FILE" | while IFS=$'\t' read -r name msg; do
+                              msg_clean=$(echo "$msg" | sed -E 's/<[^>]+>//g; s/&quot;/"/g; s/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g')
+                              msg_first3=$(echo "$msg_clean" | head -3 | sed 's/^/  /')
+                              echo "- \`$name\`"
+                              echo "$msg_first3"
+                          done
+                          if [ "$TRUNCATED" = "1" ]; then
+                              REMAINING=$((FAIL_COUNT - MAX_LINES))
+                              echo ""
+                              echo "... and $REMAINING more failures (see [run logs]($RUN_URL))"
+                          fi
+                          echo ""
+                          echo "</details>"
+                          echo ""
+                      } >> /tmp/body.md
+                  fi
+
+                  # ---- Part 3: Sentry traces link ----
+                  # Only the traces URL — works against any cli.tag value.
+                  # The "E2E Health dashboard" link is intentionally NOT emitted in
+                  # Phase 1 (requires manual one-time dashboard creation per spec §9a).
+                  {
+                      echo "**Sentry traces:** [view spans for this run](https://paritytech.sentry.io/explore/traces/?project=4511298552135760&query=cli.tag%3A$TAG_LABEL)"
+                  } >> /tmp/body.md
+
+                  echo "Rendered body:"
+                  cat /tmp/body.md
+                  echo ""
+                  echo "---- writing to step summary ----"
+                  cat /tmp/body.md >> "$GITHUB_STEP_SUMMARY"
