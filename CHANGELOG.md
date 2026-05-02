@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.15.4
+
+### Patch Changes
+
+- 7151157: Avoid GitHub auth and `git push` during `dot deploy --modable` when the project already has an `origin`; the existing repository URL is recorded directly.
+
 ## 0.15.3
 
 ### Patch Changes
