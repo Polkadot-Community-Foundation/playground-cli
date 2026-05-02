@@ -137,8 +137,9 @@ async function registerOne(fixture: Fixture, signer: Awaited<ReturnType<typeof r
 async function main(): Promise<number> {
 	const args = parseArgs(process.argv.slice(2));
 
+	const normalize = (s: string): string => s.replace(/\.dot$/i, "");
 	const targets = args.onlyDomain
-		? FIXTURES.filter((f) => f.domain === args.onlyDomain || f.domain === `${args.onlyDomain}.dot`)
+		? FIXTURES.filter((f) => normalize(f.domain) === normalize(args.onlyDomain ?? ""))
 		: FIXTURES;
 
 	if (targets.length === 0) {
@@ -157,6 +158,8 @@ async function main(): Promise<number> {
 
 	try {
 		const client = await getConnection();
+		// Balance checked once; TOPUP_TARGET (500 DOT) gives ~1000× headroom
+		// for the ~0.1 DOT/publish cost across all 5 fixtures.
 		await topUpIfLow(client, signer.address);
 		for (const fixture of targets) {
 			await registerOne(fixture, signer);
