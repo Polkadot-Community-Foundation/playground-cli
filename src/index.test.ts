@@ -26,9 +26,9 @@ import { readFileSync } from "node:fs";
  * later, tighten this regex.
  */
 test("src/index.ts contains the stdin warm-up listener", () => {
-  const source = readFileSync("src/index.ts", "utf-8");
-  // Use a negative lookbehind to reject occurrences that appear inside a
-  // single-line comment (// …). A commented-out warm-up is the same as no
-  // warm-up from Bun's runtime perspective.
-  expect(source).toMatch(/(?<!\/\/.*)process\.stdin\.on\(\s*["']readable["']/m);
+    const source = readFileSync("src/index.ts", "utf-8");
+    // Use a negative lookbehind to reject occurrences that appear inside a
+    // single-line comment (// …). A commented-out warm-up is the same as no
+    // warm-up from Bun's runtime perspective.
+    expect(source).toMatch(/(?<!\/\/.*)process\.stdin\.on\(\s*["']readable["']/m);
 });
