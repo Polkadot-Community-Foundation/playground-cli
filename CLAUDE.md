@@ -49,5 +49,16 @@ These are things that aren't self-evident from reading the code and have bitten 
   - `2216067.json` — **Playground CLI Failures** (per-error-type drill-downs).
   - `2216096.json` — **Playground CLI E2E Health** (inverse filter, `cli.tag:e2e-*`).
 - **Workflow:** run `./sentry/backup-dashboards.sh` BEFORE any change. Use `./sentry/patch-dashboard.py <id> <patch.json>` for surgical edits (supports `replace`, `patch_query`, `set_description` ops) or full widget replacement. Use `./sentry/create-dashboard.py <payload.json>` for new dashboards. Per spec §15f, do NOT include a `projects` field in POST payloads. Per spec §15g, PUT replaces the whole widget list — backup first.
-- **E2E tagging:** every spawn from `e2e/cli/helpers/dot.ts` injects `DOT_TAG=e2e-local` (default) and `DOT_TELEMETRY=1`. CI sets `DOT_TAG=e2e-ci` in `.github/workflows/e2e.yml` so production health widgets filter cleanly via `!cli.tag:e2e-*`.
+- **E2E tagging:** every spawn from `e2e/cli/helpers/dot.ts` injects `DOT_TAG=e2e-local` (fallback) and `DOT_TELEMETRY=1`. `tools/e2e-local.sh` overrides that to `e2e-local-{smoke|pr|nightly}` based on the mode argument. CI sets `DOT_TAG=e2e-ci-{pr|nightly|dispatch}` in `.github/workflows/e2e.yml` so production health widgets filter cleanly via `!cli.tag:e2e-*`.
 - **SAD% propagation** is verified by a regression test in `src/telemetry.test.ts` ("SAD% propagation through transaction envelope"). It confirms `captureWarning` flips `cli.sad="true"` on the root transaction. If that test fails, the SAD% dashboard widget on Dashboard 1 will silently degrade to a duplicate of the unexpected-failure rate.
+
+## E2E Tests
+
+- **Local launcher:** `tools/e2e-local.sh [smoke|pr|nightly]` — also callable via `pnpm test:e2e:smoke`, `pnpm test:e2e:pr`, `pnpm test:e2e:nightly`.
+- **CI workflow:** `.github/workflows/e2e.yml` — runs on PR / push:main / cron 06:00 UTC / workflow_dispatch.
+- **Test files:** `e2e/cli/*.test.ts` (vitest, spawned via `bun run src/index.ts`).
+- **Reports directory:** `e2e-reports/junit.xml` + `e2e-reports/dot-runs.log` (gitignored).
+- **Tag prefix:** `DOT_TAG=e2e-{ci|local}-{trigger}` so Sentry dashboards filter test traffic. The CLI plumbs `DOT_TAG` into the `cli.tag` root-span attribute via `src/telemetry-config.ts`.
+- **CI report job name:** `E2E Report` — aggregates per-leg conclusions, posts a sticky PR comment with marker `<!-- e2e-pr-report -->`, opens an auto-issue on schedule/release fail.
+- **Bootstrap:** see `tools/register-mod-fixture.ts` for the mod-test fixture; full bootstrap doc TBD in a later phase.
+- **Design spec:** `docs-internal/2026-05-02-e2e-test-suite-design.md`.

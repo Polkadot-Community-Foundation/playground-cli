@@ -9,11 +9,22 @@ on:
         - cron: "0 6 * * *"
     workflow_dispatch:
 
+permissions:
+    pull-requests: write     # sticky PR comment posting
+    issues: write            # auto-issue on schedule fail
+    actions: read            # /runs/{id}/jobs API for per-leg fetch
+
+concurrency:
+    group: e2e-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-    e2e:
-        name: E2E Tests
+    test:
+        name: "E2E · current"
         runs-on: ubuntu-latest
-        timeout-minutes: 30
+        timeout-minutes: 55
+        outputs:
+            tag: ${{ steps.tag.outputs.tag }}
         steps:
             - uses: actions/checkout@v4
 
@@ -37,11 +48,244 @@ jobs:
 
             - run: pnpm install
 
-            - name: Run E2E tests
-              run: pnpm test:e2e
+            - name: Resolve DOT_TAG from trigger
+              id: tag
+              shell: bash
+              run: |
+                  # Phase 1 triggers: pull_request / push:main / schedule / workflow_dispatch.
+                  # Phase 7 will add `release` (with TAG=e2e-ci-release).
+                  case "${{ github.event_name }}" in
+                      schedule)            TAG=e2e-ci-nightly  ;;
+                      workflow_dispatch)   TAG=e2e-ci-dispatch ;;
+                      *)                   TAG=e2e-ci-pr       ;;
+                  esac
+                  echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+                  echo "Resolved DOT_TAG=$TAG (event=${{ github.event_name }})"
+
+            - name: Run E2E tests (one retry on transient testnet failures)
+              uses: nick-fields/retry@v3
+              with:
+                  timeout_minutes: 25
+                  max_attempts: 2
+                  retry_wait_seconds: 30
+                  command: pnpm test:e2e
               env:
                   TEST_TEMPLATE_DOMAIN: dot-cli-mod-fixture.dot
                   TEST_TEMPLATE_REPO: https://github.com/paritytech/Rock-Paper-Scissors
                   DOT_DEPLOY_VERBOSE: "1"
-                  DOT_TAG: e2e-ci
+                  DOT_TAG: ${{ steps.tag.outputs.tag }}
                   DOT_TELEMETRY: "1"
+
+            - name: Upload forensic artefacts
+              if: always()
+              continue-on-error: true
+              uses: actions/upload-artifact@v4
+              with:
+                  name: e2e-reports-current
+                  path: e2e-reports/
+                  retention-days: 7
+                  if-no-files-found: ignore
+
+    report:
+        name: E2E Report
+        needs: [test]
+        if: always()
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - name: Download JUnit + forensic artefacts
+              # Phase 1 has one upload (e2e-reports-current). When Phase 4 adds
+              # the matrix, drop `merge-multiple: true` and parse per-cell sub-dirs
+              # so per-leg junit.xml don't collide on the same flat path.
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: e2e-reports-*
+                  path: artefacts/
+                  merge-multiple: true
+
+            - name: Install xmlstarlet (for JUnit parsing)
+              run: sudo apt-get update -q && sudo apt-get install -y -q xmlstarlet
+
+            - name: Fetch per-leg job conclusions
+              id: legs
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              shell: /usr/bin/bash -euo pipefail {0}
+              run: |
+                  curl -fsSL \
+                      -H "Authorization: bearer $GITHUB_TOKEN" \
+                      -H "Accept: application/vnd.github+json" \
+                      "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
+                      | jq -r '.jobs[] | select(.name | startswith("E2E · ")) | "\(.name)\t\(.conclusion)\t\((.completed_at // now | fromdateiso8601) - (.started_at // now | fromdateiso8601))"' \
+                      > /tmp/legs.tsv
+                  if [ ! -s /tmp/legs.tsv ]; then
+                      echo "::error::No 'E2E · …' jobs found in run ${{ github.run_id }}; matrix-job naming may have changed."
+                      exit 1
+                  fi
+                  echo "Per-leg conclusions:"
+                  cat /tmp/legs.tsv
+
+            - name: Parse JUnit and render report body
+              env:
+                  AGGREGATE: ${{ needs.test.result }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                  TAG: ${{ needs.test.outputs.tag }}
+              shell: /usr/bin/bash -euo pipefail {0}
+              run: |
+                  emoji() { case "$1" in
+                      success)   echo "✅ PASS";;
+                      failure)   echo "❌ FAIL";;
+                      skipped)   echo "⏭️ SKIP";;
+                      cancelled) echo "🚫 CANCEL";;
+                      *)         echo "❓ $1";;
+                  esac; }
+
+                  BRANCH="${{ github.head_ref || github.ref_name }}"
+                  SHA_SHORT="${GITHUB_SHA:0:7}"
+                  TAG_LABEL="${TAG:-e2e-ci-pr}"
+
+                  # ---- Part 1: per-cell summary table ----
+                  {
+                      echo "<!-- e2e-pr-report -->"
+                      echo "## E2E Test Pass · $(emoji "$AGGREGATE")"
+                      echo ""
+                      echo "Tag: \`$TAG_LABEL\` · Branch: \`$BRANCH\` · Commit: \`$SHA_SHORT\` · [Run logs]($RUN_URL)"
+                      echo ""
+                      echo "| Cell | Result | Time |"
+                      echo "|------|--------|------|"
+                      while IFS=$'\t' read -r name conclusion duration; do
+                          dur_min=$(awk -v d="$duration" 'BEGIN{ printf "%dm%02ds", int(d/60), int(d%60) }')
+                          echo "| \`${name#E2E · }\` | $(emoji "$conclusion") | $dur_min |"
+                      done < /tmp/legs.tsv
+                      echo ""
+                  } > /tmp/body.md
+
+                  # ---- Part 2: failures detail block (only if any test failed) ----
+                  FAILS_FILE=/tmp/failures.tsv
+                  : > "$FAILS_FILE"
+
+                  # nullglob so non-matching globs expand to nothing.
+                  shopt -s nullglob
+                  XML_FILES=( artefacts/junit*.xml artefacts/*/junit*.xml )
+                  shopt -u nullglob
+
+                  if command -v xmlstarlet >/dev/null 2>&1; then
+                      for xml in "${XML_FILES[@]}"; do
+                          xmlstarlet sel -t -m "//testcase[failure or error]" \
+                              -v "concat(@classname, ' › ', @name)" -o $'\t' \
+                              -v "failure/@message | error/@message" -n "$xml" \
+                              >> "$FAILS_FILE" || true
+                      done
+                  else
+                      for xml in "${XML_FILES[@]}"; do
+                          grep -E '<testcase|<failure|<error' "$xml" \
+                              | awk '/<testcase/{name=$0} /<failure|<error/{print name "\t" $0}' \
+                              >> "$FAILS_FILE" || true
+                      done
+                  fi
+
+                  if [ -s "$FAILS_FILE" ]; then
+                      FAIL_COUNT=$(wc -l < "$FAILS_FILE")
+                      MAX_LINES=100
+                      TRUNCATED=$([ "$FAIL_COUNT" -gt "$MAX_LINES" ] && echo "1" || echo "0")
+                      {
+                          echo "<details><summary>❌ Failed tests ($FAIL_COUNT)</summary>"
+                          echo ""
+                          head -n "$MAX_LINES" "$FAILS_FILE" | while IFS=$'\t' read -r name msg; do
+                              msg_clean=$(echo "$msg" | sed -E 's/<[^>]+>//g; s/&quot;/"/g; s/&lt;/</g; s/&gt;/>/g; s/&amp;/\&/g')
+                              msg_first3=$(echo "$msg_clean" | head -3 | sed 's/^/  /')
+                              echo "- \`$name\`"
+                              echo "$msg_first3"
+                          done
+                          if [ "$TRUNCATED" = "1" ]; then
+                              REMAINING=$((FAIL_COUNT - MAX_LINES))
+                              echo ""
+                              echo "... and $REMAINING more failures (see [run logs]($RUN_URL))"
+                          fi
+                          echo ""
+                          echo "</details>"
+                          echo ""
+                      } >> /tmp/body.md
+                  fi
+
+                  # ---- Part 3: Sentry traces link ----
+                  # Project ID 4511298552135760 mirrors src/telemetry-config.ts (PLAYGROUND_SENTRY_DSN
+                  # → o4511059872841728 / 4511298552135760) and sentry/dashboards/2143100.json.
+                  # If the project is ever rotated, update all three together.
+                  # Only the traces URL is emitted — it works against any cli.tag value.
+                  # The "E2E Health dashboard" link is intentionally NOT emitted in
+                  # Phase 1 (requires manual one-time dashboard creation per spec §9a).
+                  {
+                      echo "**Sentry traces:** [view spans for this run](https://paritytech.sentry.io/explore/traces/?project=4511298552135760&query=cli.tag%3A$TAG_LABEL)"
+                  } >> /tmp/body.md
+
+                  echo "Rendered body:"
+                  cat /tmp/body.md
+                  echo ""
+                  echo "---- writing to step summary ----"
+                  cat /tmp/body.md >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Post or update PR comment
+              if: github.event_name == 'pull_request'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const fs = require('fs');
+                      const body = fs.readFileSync('/tmp/body.md', 'utf8');
+                      const marker = '<!-- e2e-pr-report -->';
+                      const prNumber = context.issue.number;
+                      const { data: comments } = await github.rest.issues.listComments({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: prNumber,
+                      });
+                      const existing = comments.find(c => c.body && c.body.includes(marker));
+                      if (existing) {
+                          await github.rest.issues.updateComment({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              comment_id: existing.id,
+                              body,
+                          });
+                          console.log(`Updated existing comment ${existing.id}`);
+                      } else {
+                          await github.rest.issues.createComment({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              issue_number: prNumber,
+                              body,
+                          });
+                          console.log("Created new comment");
+                      }
+
+            - name: Open failure issue
+              if: >
+                  (github.event_name == 'schedule' || github.event_name == 'release') &&
+                  needs.test.result != 'success'
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ needs.test.outputs.tag }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                  API_URL: ${{ github.api_url }}
+                  REPO: ${{ github.repository }}
+              shell: /usr/bin/bash -euo pipefail {0}
+              run: |
+                  TODAY=$(date -u +%Y-%m-%d)
+                  TITLE="Nightly E2E failure: $TODAY"
+                  CONTEXT="Nightly E2E failed on $TODAY (tag \`$TAG\`)."
+                  # Release-trigger branches will be added in Phase 7 (post-Phase-4).
+
+                  {
+                      echo "$CONTEXT"
+                      echo ""
+                      cat /tmp/body.md
+                      echo ""
+                      echo "- Run: $RUN_URL"
+                  } > /tmp/issue-body.md
+
+                  BODY=$(cat /tmp/issue-body.md)
+                  curl -fsSL -X POST \
+                      -H "Authorization: bearer $GITHUB_TOKEN" \
+                      -H "Accept: application/vnd.github+json" \
+                      "$API_URL/repos/$REPO/issues" \
+                      -d "$(jq -n --arg title "$TITLE" --arg body "$BODY" '{title: $title, body: $body}')"
