@@ -37,3 +37,17 @@ These are things that aren't self-evident from reading the code and have bitten 
 - Do NOT commit design docs, brainstorming notes, or context dumps (e.g. `context.md`) to the repo. They belong in tickets or scratch files outside the tree.
 - Don't mock primitives from `polkadot-api` (`Enum`, encoders) in tests — doing so turns intended coverage into tautology.
 - Long-lived resources (`TerminalAdapter`, `PaseoClient`) have explicit `destroy()` / `destroyConnection()` — always release them, especially from React `useEffect` cleanups. The WebSocket keeps the event loop alive; forgetting a destroy manifests as `dot <cmd>` hanging after its work is visibly finished.
+
+## Sentry telemetry
+
+- DSN: `src/telemetry-config.ts::PLAYGROUND_SENTRY_DSN`. Region: EU (`https://de.sentry.io`).
+- Org slug: `paritytech`. API token: macOS keychain service `sentry-api-token` (member of paritytech org with `org:read` + `org:write`).
+- Attribute prefix: `cli.` (see `getCliRootAttributes` in `src/telemetry-config.ts`). Spec: `sentry-instrumentation-spec.md` at the repo root (untracked — keep there).
+- **Helpers (don't reimplement):** `src/telemetry.ts` exports `withCommandTelemetry`, `withRootSpan`, `withSpan` (2-arg + 4-arg overloads), `captureWarning`, `captureException`, `errorMessage`, `sanitizedErrorMessage`. `src/utils/deploy/phase.ts` exports `withDeployPhase` for deploy-phase orchestration. `src/cli-runtime.ts` exports `runCliCommand` for the standard CLI scaffolding (telemetry + watchdog + hard-exit). Every command's `.action()` body should be one `runCliCommand(name, options, async () => { ... })` call — do not re-add try/finally + `scheduleHardExit` boilerplate.
+- **Dashboards** live as JSON snapshots under `sentry/dashboards/<id>.json`:
+  - `2143100.json` — **Playground CLI Health** (production filter `!cli.tag:e2e-*`).
+  - `2216067.json` — **Playground CLI Failures** (per-error-type drill-downs).
+  - `2216096.json` — **Playground CLI E2E Health** (inverse filter, `cli.tag:e2e-*`).
+- **Workflow:** run `./sentry/backup-dashboards.sh` BEFORE any change. Use `./sentry/patch-dashboard.py <id> <patch.json>` for surgical edits (supports `replace`, `patch_query`, `set_description` ops) or full widget replacement. Use `./sentry/create-dashboard.py <payload.json>` for new dashboards. Per spec §15f, do NOT include a `projects` field in POST payloads. Per spec §15g, PUT replaces the whole widget list — backup first.
+- **E2E tagging:** every spawn from `e2e/cli/helpers/dot.ts` injects `DOT_TAG=e2e-local` (default) and `DOT_TELEMETRY=1`. CI sets `DOT_TAG=e2e-ci` in `.github/workflows/e2e.yml` so production health widgets filter cleanly via `!cli.tag:e2e-*`.
+- **SAD% propagation** is verified by a regression test in `src/telemetry.test.ts` ("SAD% propagation through transaction envelope"). It confirms `captureWarning` flips `cli.sad="true"` on the root transaction. If that test fails, the SAD% dashboard widget on Dashboard 1 will silently degrade to a duplicate of the unexpected-failure rate.

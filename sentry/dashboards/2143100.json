@@ -1,0 +1,1042 @@
+{
+    "id": "2143100",
+    "title": "Playground CLI Health",
+    "dateCreated": "2026-04-30T06:41:39.573048Z",
+    "createdBy": {
+        "id": "4441470",
+        "name": "Ionut",
+        "username": "ionut@parity.io",
+        "email": "ionut@parity.io",
+        "avatarUrl": "https://gravatar.com/avatar/aa4182266e7ce720e29e841ef51d3673fd5b007f0a892fdd38b99a435c8ea618?s=32&d=mm",
+        "isActive": true,
+        "isSuspended": false,
+        "hasPasswordAuth": true,
+        "isManaged": false,
+        "dateJoined": "2026-04-15T16:06:03.281704Z",
+        "lastLogin": "2026-04-22T12:48:09.478383Z",
+        "has2fa": true,
+        "lastActive": "2026-05-01T15:59:08.742757Z",
+        "isSuperuser": false,
+        "isStaff": false,
+        "emails": [],
+        "experiments": {},
+        "avatar": {
+            "avatarType": "letter_avatar",
+            "avatarUuid": null,
+            "avatarUrl": null
+        }
+    },
+    "widgets": [
+        {
+            "id": "451732",
+            "title": "Total Commands",
+            "description": "Total CLI commands captured in the production filter (excludes e2e-* tags).",
+            "displayType": "big_number",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.615657Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697263",
+                    "name": "",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
+                    "orderby": "",
+                    "widgetId": "451732",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 0,
+                "w": 1,
+                "h": 1,
+                "minH": 1
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451733",
+            "title": "Deploys",
+            "description": "Root-span count for `dot deploy`. Drops if telemetry is disabled or the binary version is too old to instrument deploy.",
+            "displayType": "big_number",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.619729Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697264",
+                    "name": "",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.deploy !cli.tag:e2e-*",
+                    "orderby": "",
+                    "widgetId": "451733",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 1,
+                "y": 0,
+                "w": 1,
+                "h": 1,
+                "minH": 1
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451734",
+            "title": "Unexpected Failures",
+            "description": "Hard failures the tool itself broke (cli.status:error AND cli.expected:false). Expected user-input failures (invalid domain, missing PoP) are excluded \u2014 those live in the Failures Detail dashboard.",
+            "displayType": "big_number",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.623063Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697265",
+                    "name": "",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error cli.expected:false",
+                    "orderby": "",
+                    "widgetId": "451734",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 2,
+                "y": 0,
+                "w": 1,
+                "h": 1,
+                "minH": 1
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451735",
+            "title": "%SAD Commands",
+            "description": "Percentage of commands that emitted any captureWarning or hard error. The propagation path is verified (telemetry.test.ts). Most production warnings occur on runs that fail; gap widens as retries succeed cleanly.",
+            "displayType": "big_number",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.626112Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697266",
+                    "name": "",
+                    "fields": [
+                        "count_if(cli.sad,equals,true)",
+                        "count()",
+                        "equation|count_if(cli.sad,equals,true) * 100 / count()"
+                    ],
+                    "aggregates": [
+                        "count_if(cli.sad,equals,true)",
+                        "count()",
+                        "equation|count_if(cli.sad,equals,true) * 100 / count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
+                    "orderby": "",
+                    "widgetId": "451735",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": 2,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 3,
+                "y": 0,
+                "w": 1,
+                "h": 1,
+                "minH": 1
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451736",
+            "title": "Avg Command Duration",
+            "description": "Average wall-clock duration of root spans, in ms. Slow trends usually point at chain RPC latency.",
+            "displayType": "big_number",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.629320Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697267",
+                    "name": "",
+                    "fields": [
+                        "avg(span.duration)"
+                    ],
+                    "aggregates": [
+                        "avg(span.duration)"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
+                    "orderby": "",
+                    "widgetId": "451736",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 4,
+                "y": 0,
+                "w": 1,
+                "h": 1,
+                "minH": 1
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451737",
+            "title": "Active Repos",
+            "description": "count_unique(cli.repo) for the production filter. Watch for unexpected churn \u2014 a sudden drop suggests internal-org regex changes or telemetry being disabled in CI.",
+            "displayType": "big_number",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.632187Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697268",
+                    "name": "",
+                    "fields": [
+                        "count_unique(cli.repo)"
+                    ],
+                    "aggregates": [
+                        "count_unique(cli.repo)"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
+                    "orderby": "",
+                    "widgetId": "451737",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 5,
+                "y": 0,
+                "w": 1,
+                "h": 1,
+                "minH": 1
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451738",
+            "title": "Commands by Source",
+            "description": "Per-command, per-source breakdown. CI vs local activity is the most useful split here. If self-hosted runner volume drops without an org change, suspect runner naming.",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.635182Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697269",
+                    "name": "",
+                    "fields": [
+                        "span.op",
+                        "cli.source",
+                        "cli.runner_type",
+                        "count()",
+                        "avg(span.duration)"
+                    ],
+                    "aggregates": [
+                        "count()",
+                        "avg(span.duration)"
+                    ],
+                    "columns": [
+                        "span.op",
+                        "cli.source",
+                        "cli.runner_type"
+                    ],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
+                    "orderby": "-count()",
+                    "widgetId": "451738",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 1,
+                "w": 2,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451739",
+            "title": "Command Duration Over Time",
+            "description": "p50/p95 of command duration, split by source. The CI/local divergence reflects testnet vs local chain RPC latency.",
+            "displayType": "line",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.638120Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697270",
+                    "name": "p50 ci",
+                    "fields": [
+                        "p50(span.duration)"
+                    ],
+                    "aggregates": [
+                        "p50(span.duration)"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:ci",
+                    "orderby": "",
+                    "widgetId": "451739",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                },
+                {
+                    "id": "697271",
+                    "name": "p95 ci",
+                    "fields": [
+                        "p95(span.duration)"
+                    ],
+                    "aggregates": [
+                        "p95(span.duration)"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:ci",
+                    "orderby": "",
+                    "widgetId": "451739",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                },
+                {
+                    "id": "697272",
+                    "name": "p50 local",
+                    "fields": [
+                        "p50(span.duration)"
+                    ],
+                    "aggregates": [
+                        "p50(span.duration)"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:local",
+                    "orderby": "",
+                    "widgetId": "451739",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                },
+                {
+                    "id": "697273",
+                    "name": "p95 local",
+                    "fields": [
+                        "p95(span.duration)"
+                    ],
+                    "aggregates": [
+                        "p95(span.duration)"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:local",
+                    "orderby": "",
+                    "widgetId": "451739",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 2,
+                "y": 1,
+                "w": 4,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451740",
+            "title": "Command Volume Over Time",
+            "description": "Command volume over time. Use this to confirm a release shipped (a step-up in volume after release date) and to spot drop-offs.",
+            "displayType": "bar",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.641567Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697274",
+                    "name": "CI",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:ci",
+                    "orderby": "",
+                    "widgetId": "451740",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                },
+                {
+                    "id": "697275",
+                    "name": "Local",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.source:local",
+                    "orderby": "",
+                    "widgetId": "451740",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 3,
+                "w": 3,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451741",
+            "title": "Success vs Failure",
+            "description": "Three-way split: success, expected failure, unexpected failure. Expected failures are user-input mistakes (the spec calls these isExpectedCliError matches). Unexpected failures are bugs.",
+            "displayType": "area",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.644790Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697276",
+                    "name": "success",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* !cli.status:error",
+                    "orderby": "",
+                    "widgetId": "451741",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                },
+                {
+                    "id": "697277",
+                    "name": "expected failure",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error cli.expected:true",
+                    "orderby": "",
+                    "widgetId": "451741",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                },
+                {
+                    "id": "697278",
+                    "name": "unexpected failure",
+                    "fields": [
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error cli.expected:false",
+                    "orderby": "",
+                    "widgetId": "451741",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 3,
+                "y": 3,
+                "w": 3,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451742",
+            "title": "Deploy Phase Breakdown",
+            "description": "Phase breakdown for cli.deploy.*. Order by avg duration to find which phase is the bottleneck. Storage-and-DotNS dominates by design \u2014 chunk uploads + DotNS commit-reveal both span seconds.",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.648378Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697279",
+                    "name": "",
+                    "fields": [
+                        "span.op",
+                        "count()",
+                        "avg(span.duration)",
+                        "p90(span.duration)",
+                        "p95(span.duration)"
+                    ],
+                    "aggregates": [
+                        "count()",
+                        "avg(span.duration)",
+                        "p90(span.duration)",
+                        "p95(span.duration)"
+                    ],
+                    "columns": [
+                        "span.op"
+                    ],
+                    "fieldAliases": [],
+                    "conditions": "span.op:cli.deploy.* !cli.tag:e2e-*",
+                    "orderby": "-avg(span.duration)",
+                    "widgetId": "451742",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 5,
+                "w": 6,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451743",
+            "title": "Deploy Options",
+            "description": "Deploy options matrix \u2014 combinations of mode/playground/modable/contracts. Useful to find a regression that only appears in one combination.",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.651585Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697280",
+                    "name": "",
+                    "fields": [
+                        "cli.deploy.mode",
+                        "cli.deploy.playground",
+                        "cli.deploy.modable",
+                        "cli.deploy.contracts",
+                        "count()",
+                        "avg(span.duration)"
+                    ],
+                    "aggregates": [
+                        "count()",
+                        "avg(span.duration)"
+                    ],
+                    "columns": [
+                        "cli.deploy.mode",
+                        "cli.deploy.playground",
+                        "cli.deploy.modable",
+                        "cli.deploy.contracts"
+                    ],
+                    "fieldAliases": [],
+                    "conditions": "span.op:cli.deploy.orchestrator !cli.tag:e2e-*",
+                    "orderby": "-count()",
+                    "widgetId": "451743",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 7,
+                "w": 3,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451744",
+            "title": "Playground Publish Phases",
+            "description": "Sub-phase breakdown of the playground publish \u2014 metadata upload vs registry contract publish. Registry publish has a 3-attempt retry loop; high counts here without proportional warning events suggest the retry path is not hitting captureWarning.",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.654497Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697281",
+                    "name": "",
+                    "fields": [
+                        "span.op",
+                        "count()",
+                        "avg(span.duration)",
+                        "p95(span.duration)"
+                    ],
+                    "aggregates": [
+                        "count()",
+                        "avg(span.duration)",
+                        "p95(span.duration)"
+                    ],
+                    "columns": [
+                        "span.op"
+                    ],
+                    "fieldAliases": [],
+                    "conditions": "span.op:cli.deploy.playground* !cli.tag:e2e-*",
+                    "orderby": "-avg(span.duration)",
+                    "widgetId": "451744",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 3,
+                "y": 7,
+                "w": 3,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451745",
+            "title": "Failures by Error",
+            "description": "Top error messages grouped by phase. Use this to prioritise expected-error copy improvements (cli.expected:true) vs bug fixes (cli.expected:false).",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.657407Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697282",
+                    "name": "",
+                    "fields": [
+                        "span.op",
+                        "cli.expected",
+                        "cli.error",
+                        "count()",
+                        "avg(span.duration)"
+                    ],
+                    "aggregates": [
+                        "count()",
+                        "avg(span.duration)"
+                    ],
+                    "columns": [
+                        "span.op",
+                        "cli.expected",
+                        "cli.error"
+                    ],
+                    "fieldAliases": [],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error",
+                    "orderby": "-count()",
+                    "widgetId": "451745",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 9,
+                "w": 6,
+                "h": 3,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451746",
+            "title": "Recent Failures",
+            "description": "Most recent failures. Use the timestamp + repo to pull the offending PR or runner.",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.660370Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697283",
+                    "name": "",
+                    "fields": [
+                        "timestamp",
+                        "span.op",
+                        "cli.source",
+                        "cli.repo",
+                        "cli.tool_version",
+                        "cli.error"
+                    ],
+                    "aggregates": [],
+                    "columns": [
+                        "timestamp",
+                        "span.op",
+                        "cli.source",
+                        "cli.repo",
+                        "cli.tool_version",
+                        "cli.error"
+                    ],
+                    "fieldAliases": [
+                        "when",
+                        "command",
+                        "source",
+                        "repo",
+                        "version",
+                        "error"
+                    ],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-* cli.status:error",
+                    "orderby": "-timestamp",
+                    "widgetId": "451746",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 12,
+                "w": 6,
+                "h": 3,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451747",
+            "title": "Warning Events",
+            "description": "All warnings in the playground-cli project, excluding e2e-* tagged runs. Each row is a unique warning title \u2014 captureWarning callsites should keep titles stable so this groups cleanly.",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.663390Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697284",
+                    "name": "",
+                    "fields": [
+                        "title",
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [
+                        "title"
+                    ],
+                    "fieldAliases": [],
+                    "conditions": "project:playground-cli level:warning !cli.tag:e2e-*",
+                    "orderby": "-count()",
+                    "widgetId": "451747",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "error-events",
+            "layout": {
+                "x": 0,
+                "y": 18,
+                "w": 2,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451748",
+            "title": "Warnings Over Time (by title)",
+            "description": "Warnings over time, automatically grouped by title (no hard-coded list). Any new captureWarning string will surface here without a dashboard change.",
+            "displayType": "line",
+            "thresholds": null,
+            "interval": "5m",
+            "dateCreated": "2026-04-30T13:16:59.666475Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697285",
+                    "name": "",
+                    "fields": [
+                        "title",
+                        "count()"
+                    ],
+                    "aggregates": [
+                        "count()"
+                    ],
+                    "columns": [
+                        "title"
+                    ],
+                    "fieldAliases": [],
+                    "conditions": "project:playground-cli level:warning !cli.tag:e2e-*",
+                    "orderby": "-count()",
+                    "widgetId": "451748",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": 10,
+            "widgetType": "error-events",
+            "layout": {
+                "x": 2,
+                "y": 18,
+                "w": 4,
+                "h": 2,
+                "minH": 2
+            },
+            "axisRange": null,
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        },
+        {
+            "id": "451749",
+            "title": "Recent Commands",
+            "description": "Most recent commands across the production filter. Useful for ad-hoc 'what did this PR do' lookups by repo + timestamp.",
+            "displayType": "table",
+            "thresholds": null,
+            "interval": "1h",
+            "dateCreated": "2026-04-30T13:16:59.670160Z",
+            "dashboardId": "2143100",
+            "queries": [
+                {
+                    "id": "697320",
+                    "name": "",
+                    "fields": [
+                        "timestamp",
+                        "span.op",
+                        "cli.source",
+                        "cli.repo",
+                        "cli.tag",
+                        "cli.status",
+                        "cli.expected",
+                        "span.duration",
+                        "cli.branch"
+                    ],
+                    "aggregates": [],
+                    "columns": [
+                        "timestamp",
+                        "span.op",
+                        "cli.source",
+                        "cli.repo",
+                        "cli.tag",
+                        "cli.status",
+                        "cli.expected",
+                        "span.duration",
+                        "cli.branch"
+                    ],
+                    "fieldAliases": [
+                        "when",
+                        "command",
+                        "source",
+                        "repo",
+                        "tag",
+                        "status",
+                        "expected",
+                        "duration",
+                        "branch"
+                    ],
+                    "conditions": "is_transaction:true span.op:cli.* !cli.tag:e2e-*",
+                    "orderby": "-timestamp",
+                    "widgetId": "451749",
+                    "onDemand": [],
+                    "isHidden": false,
+                    "selectedAggregate": null,
+                    "linkedDashboards": []
+                }
+            ],
+            "limit": null,
+            "widgetType": "spans",
+            "layout": {
+                "x": 0,
+                "y": 15,
+                "w": 6,
+                "h": 3,
+                "minH": 2
+            },
+            "axisRange": "auto",
+            "legendType": null,
+            "datasetSource": "user",
+            "changedReason": null
+        }
+    ],
+    "filters": {},
+    "permissions": null,
+    "isFavorited": false,
+    "projects": [],
+    "environment": [],
+    "prebuiltId": null,
+    "expired": false
+}
