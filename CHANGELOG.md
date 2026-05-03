@@ -1,5 +1,12 @@
 # playground-cli
 
+## 0.16.7
+
+### Patch Changes
+
+- 492ace6: Failed E2E cells now surface forensic detail (CLI subprocess stdout/stderr from `dot-runs.log`, junit.xml failure messages, and `::error::` annotations at the top of the run page) directly in the GH Actions UI. Previously a triager had to download the artefact and untar it locally to see the real root cause. Closes #98.
+- 68f6417: `dot update` now creates its install directory if missing instead of failing with ENOENT. Previously the directory was assumed to exist (created by `install.sh` during `dot init`), causing `dot update` to fail on environments that didn't run the installer (e.g. CI runners spawning the CLI directly). Fixes #97.
+
 ## 0.16.6
 
 ### Patch Changes
