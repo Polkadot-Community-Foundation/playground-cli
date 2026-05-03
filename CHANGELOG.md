@@ -1,5 +1,12 @@
 # playground-cli
 
+## 0.16.11
+
+### Patch Changes
+
+- 635ca56: CI now validates the consumer install path after every stable release: `e2e-post-release.yml` fires on `release: published`, runs `install.sh`, and runs the same smoke tests as `e2e-release.yml` (Phase 7) but against the installed binary at `~/.polkadot/bin/dot`. Catches `install.sh` regressions that the prerelease/SEA-download path doesn't.
+- e56f7a9: Adds `docs/e2e-bootstrap.md` (public maintainer-facing doc covering pre-conditions, idempotent bootstrap commands, and recovery procedures for the E2E suite) and `.github/workflows/e2e-cleanup.yml` (Sunday 04:00 UTC cron stub for sweeping rotating E2E state — actual sweep logic lands with Phase 5e).
+
 ## 0.16.10
 
 ### Patch Changes
