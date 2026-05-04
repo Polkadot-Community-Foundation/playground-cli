@@ -3,6 +3,7 @@ import {
     chmodSync,
     closeSync,
     fsyncSync,
+    mkdirSync,
     openSync,
     renameSync,
     unlinkSync,
@@ -13,7 +14,8 @@ import { execSync } from "node:child_process";
 import { arch, platform } from "node:os";
 import { resolve } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
-import { withCommandTelemetry, withSpan } from "../telemetry.js";
+import { withSpan, errorMessage } from "../telemetry.js";
+import { runCliCommand } from "../cli-runtime.js";
 
 const REPO = "paritytech/playground-cli";
 
@@ -100,34 +102,24 @@ export function atomicInstall(dest: string, bytes: Buffer, mode = 0o755): void {
 export const updateCommand = new Command("update")
     .description("Update dot to the latest version")
     .action(async () =>
-        withCommandTelemetry("update", async () => {
-            let installDir: string;
-            try {
-                installDir = await withSpan(
-                    "cli.update.resolve-install-dir",
-                    "resolve install dir",
-                    {},
-                    () => resolveInstallDir(),
-                );
-            } catch (err) {
-                console.error(err instanceof Error ? err.message : "Could not resolve install dir");
-                process.exitCode = 1;
-                throw err;
-            }
+        runCliCommand("update", { hardExit: true }, async () => {
+            const installDir = await withSpan(
+                "cli.update.resolve-install-dir",
+                "resolve install dir",
+                () => resolveInstallDir(),
+            );
 
             const current = `v${pkg.version}`;
             process.stdout.write("Checking for updates... ");
 
             let tag: string;
             try {
-                tag = await withSpan("cli.update.fetch-latest", "fetch latest release", {}, () =>
+                tag = await withSpan("cli.update.fetch-latest", "fetch latest release", () =>
                     fetchLatestTag(),
                 );
             } catch (err) {
                 console.log("failed");
-                console.error(
-                    `Could not reach GitHub: ${err instanceof Error ? err.message : String(err)}`,
-                );
+                console.error(`Could not reach GitHub: ${errorMessage(err)}`);
                 process.exitCode = 1;
                 throw err;
             }
@@ -151,7 +143,7 @@ export const updateCommand = new Command("update")
                 );
             } catch (err) {
                 console.log("failed");
-                console.error(err instanceof Error ? err.message : "Download failed");
+                console.error(errorMessage(err));
                 process.exitCode = 1;
                 throw err;
             }
@@ -163,6 +155,7 @@ export const updateCommand = new Command("update")
                     "install update",
                     { "cli.update.asset": asset },
                     async () => {
+                        mkdirSync(installDir, { recursive: true });
                         atomicInstall(dest, binary);
 
                         if (platform() === "darwin") {
@@ -181,9 +174,7 @@ export const updateCommand = new Command("update")
                 );
             } catch (err) {
                 console.log("failed");
-                console.error(
-                    `Could not write to ${dest}: ${err instanceof Error ? err.message : String(err)}`,
-                );
+                console.error(`Could not write to ${dest}: ${errorMessage(err)}`);
                 process.exitCode = 1;
                 throw err;
             }

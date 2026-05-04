@@ -93,4 +93,21 @@ export const E2E_DOMAINS = {
 	redeploy: "e2e-cli-redeploy",
 	/** Used by the cross-owner collision test (BOB tries to take SIGNER's). */
 	collision: "e2e-cli-collision",
+	/**
+	 * Phase 3 cell domains — registered by `tools/register-e2e-fixtures.ts`.
+	 * Owned by SIGNER; subsequent runs are same-owner re-publishes.
+	 * Not yet wired to any test — see Phase 4 of docs-internal/2026-05-02-e2e-test-suite-design.md.
+	 */
+	foundry: "e2e-cli-foundry",
+	cdm: "e2e-cli-cdm",
+	hardhat: "e2e-cli-hardhat",
+	multi: "e2e-cli-multi",
+	/**
+	 * Used by the nightly-chaos-sigint cell only. The deploy is interrupted by
+	 * SIGINT before it completes, so this domain is never actually registered.
+	 * It is kept separate from `storage` to avoid any race with the happy-path
+	 * storage test in test-publish when both run in a nightly that triggers all
+	 * matrices.
+	 */
+	chaos: "e2e-cli-chaos",
 } as const;

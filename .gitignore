@@ -4,3 +4,6 @@ dist/
 .cdm/
 docs-internal/
 .worktrees/
+reference-repos/
+.tokensave
+e2e-reports/

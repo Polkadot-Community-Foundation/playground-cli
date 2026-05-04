@@ -35,7 +35,7 @@ afterEach(() => {
 	tempDirs.length = 0;
 });
 
-describe("dot mod", () => {
+describe("dot mod — clone", () => {
 	test.skipIf(!TEST_DOMAIN)(
 		"clones the registered template into a fresh directory",
 		{ timeout: 180_000 },
@@ -59,6 +59,23 @@ describe("dot mod", () => {
 		},
 	);
 
+	test("exits non-zero with signer suggestion when no signer available", async () => {
+		const tempHome = makeTempDir("dot-e2e-mod-home-");
+		const cwd = makeTempDir("dot-e2e-mod-cwd-");
+		const result = await dot(["mod", "some-app.dot"], { home: tempHome, cwd });
+		expect(result.exitCode).not.toBe(0);
+		const output = result.stdout + result.stderr;
+		// Exact wording from src/utils/signer.ts SignerNotAvailableError:
+		//   `No signer available. Run "dot init" to log in, or pass --suri //Alice for dev.`
+		// The previous regex /signer|init|log.?in/i matched any of those words
+		// anywhere — including help text — so it passed even on early crashes
+		// that never reached the signer-resolution path.
+		expect(output).toContain("No signer available");
+		expect(output).toContain("dot init");
+	});
+});
+
+describe("dot mod — registry miss", () => {
 	test("reports a registry-miss for an unknown domain", { timeout: 120_000 }, async () => {
 		const cwd = makeTempDir("dot-e2e-mod-unknown-");
 		const domain = "nonexistent-domain-xyz-12345.dot";
@@ -77,20 +94,5 @@ describe("dot mod", () => {
 		// in output (e.g., a transient 404 from an IPFS gateway probe).
 		expect(output).toContain(domain);
 		expect(output).toContain("not found in registry");
-	});
-
-	test("exits non-zero with signer suggestion when no signer available", async () => {
-		const tempHome = makeTempDir("dot-e2e-mod-home-");
-		const cwd = makeTempDir("dot-e2e-mod-cwd-");
-		const result = await dot(["mod", "some-app.dot"], { home: tempHome, cwd });
-		expect(result.exitCode).not.toBe(0);
-		const output = result.stdout + result.stderr;
-		// Exact wording from src/utils/signer.ts SignerNotAvailableError:
-		//   `No signer available. Run "dot init" to log in, or pass --suri //Alice for dev.`
-		// The previous regex /signer|init|log.?in/i matched any of those words
-		// anywhere — including help text — so it passed even on early crashes
-		// that never reached the signer-resolution path.
-		expect(output).toContain("No signer available");
-		expect(output).toContain("dot init");
 	});
 });

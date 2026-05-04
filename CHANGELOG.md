@@ -1,5 +1,139 @@
 # playground-cli
 
+## 0.16.16
+
+### Patch Changes
+
+- d742e7d: Fix `dot init` failing on a clean macOS/Linux machine where `rustup` isn't yet installed. The rustup installer writes its binaries to `~/.cargo/bin` and adds that directory to PATH only via shell rc files, which doesn't reach the running `dot` process. The next two steps (`Rust nightly`, `rust-src`) then fail with `bash: rustup: command not found`. After installing rustup we now prepend `$CARGO_HOME/bin` (default `~/.cargo/bin`) to `process.env.PATH` so the rest of `dot init` can resolve `rustup` immediately.
+
+## 0.16.15
+
+### Patch Changes
+
+- 1988832: Remove unreachable null-signer guard in `resolveSignerSetup` (`signerMode.ts`). The dead `throw` could never fire because `shouldResolveUserSigner()` guarantees a signer is resolved before `resolveSignerSetup` is called when `--playground` is set. No user-visible behaviour change.
+
+## 0.16.14
+
+### Patch Changes
+
+- b071fff: Adds `docs/e2e-running-tests.md` covering how to trigger the E2E suite locally and on GitHub. Tables of triggers, modes, flag passthrough, and result-reading. Complements `docs/e2e-bootstrap.md` (maintainer one-time setup).
+
+## 0.16.13
+
+### Patch Changes
+
+- 8af7042: Fixed misleading "📱 Approve on your phone" log line during `dot deploy --signer dev --suri X --playground`. The session-key funding step now signs directly with the dev keypair instead of wrapping it in the phone-mode signing-event proxy. Phone-session deploys are unchanged.
+
+## 0.16.12
+
+### Patch Changes
+
+- b9044f0: Fixed an intermittent `Revive::AccountUnmapped` failure during contract deploys. The per-deploy session key is now persisted to `~/.config/dot/accounts.json` only AFTER its `map_account` extrinsic is confirmed on chain. Previously the persist happened first, so a failing `map_account` (e.g. nonce race, transient chain error) left the on-disk state lying — the retry would find the existing key, skip the mapping step, and fail at the dry-run with AccountUnmapped. Fixes #94.
+
+## 0.16.11
+
+### Patch Changes
+
+- 635ca56: CI now validates the consumer install path after every stable release: `e2e-post-release.yml` fires on `release: published`, runs `install.sh`, and runs the same smoke tests as `e2e-release.yml` (Phase 7) but against the installed binary at `~/.polkadot/bin/dot`. Catches `install.sh` regressions that the prerelease/SEA-download path doesn't.
+- e56f7a9: Adds `docs/e2e-bootstrap.md` (public maintainer-facing doc covering pre-conditions, idempotent bootstrap commands, and recovery procedures for the E2E suite) and `.github/workflows/e2e-cleanup.yml` (Sunday 04:00 UTC cron stub for sweeping rotating E2E state — actual sweep logic lands with Phase 5e).
+
+## 0.16.10
+
+### Patch Changes
+
+- df38cfa: Adds `DOT_BULLETIN_RPC` env-var override to `getChainConfig()`, allowing tests (or operators in an emergency) to prepend a custom Bulletin RPC endpoint while keeping the built-in URL as a fallback. The new `nightly-chaos-rpc` cell exercises this by setting an unroutable primary URL and asserting the deploy still completes via failover.
+
+## 0.16.9
+
+### Patch Changes
+
+- c5bcff6: CI now validates published RC binaries: a new `e2e-release.yml` workflow fires on `release: prereleased`, downloads the `dot-linux-x64` SEA asset, and runs `e2e/cli/published.test.ts` smoke tests (`--version`, `--help`). Catches packaging regressions before stable release.
+
+## 0.16.8
+
+### Patch Changes
+
+- b591ef3: E2E test setup and bootstrap-tool log strings now correctly use PAS (Paseo's native token symbol) instead of DOT. The numeric values are unchanged (1 PAS = 10^10 plancks); only the displayed unit symbol changes. Closes #96.
+
+## 0.16.7
+
+### Patch Changes
+
+- 492ace6: Failed E2E cells now surface forensic detail (CLI subprocess stdout/stderr from `dot-runs.log`, junit.xml failure messages, and `::error::` annotations at the top of the run page) directly in the GH Actions UI. Previously a triager had to download the artefact and untar it locally to see the real root cause. Closes #98.
+- 68f6417: `dot update` now creates its install directory if missing instead of failing with ENOENT. Previously the directory was assumed to exist (created by `install.sh` during `dot init`), causing `dot update` to fail on environments that didn't run the installer (e.g. CI runners spawning the CLI directly). Fixes #97.
+
+## 0.16.6
+
+### Patch Changes
+
+- 22c0e59: Nightly E2E now exercises the SIGINT cleanup path: a new `nightly-chaos-sigint` cell sends SIGINT to `dot deploy` mid-flight and asserts the process-guard's runAllCleanupAndExit handler exits cleanly within 5s with code 130 (or SIGINT signal).
+
+## 0.16.5
+
+### Patch Changes
+
+- 5c4b491: Nightly E2E now exercises the `--no-contract-build` error path: a new `nightly-rejections` cell asserts the integration-level error message when a Foundry project requests skip-build but ships no pre-built artefacts under `out/`.
+
+## 0.16.4
+
+### Patch Changes
+
+- 3751335: Nightly E2E now exercises the multi-contract publish path: `nightly-deploy-multi` cell publishes both `TokenA.sol` and `TokenB.sol` from the multi-contract fixture to the `e2e-cli-multi.dot` domain, exercising the batch contract-instantiate path. Refactored the 3 near-identical contract-deploy tests (foundry, hardhat, multi) into a shared `runContractDeployTest` helper.
+
+## 0.16.3
+
+### Patch Changes
+
+- e5b1b19: Nightly E2E now exercises the Hardhat (EVM) full-deploy path: a new `nightly-deploy-hardhat` cell publishes the hardhat fixture's pre-built `Lock.sol` bytecode to the `e2e-cli-hardhat.dot` domain on Paseo. Runs on schedule/dispatch only (max-parallel: 1 with `pr-deploy-frontend`/`pr-deploy-foundry` since they share SIGNER), so per-PR runtime is unaffected.
+
+## 0.16.2
+
+### Patch Changes
+
+- ac3addc: E2E suite now has a `test-nightly-no-publish` matrix that runs only on the daily schedule (06:00 UTC) and `workflow_dispatch`. Adds two nightly-only cells: `nightly-mod-miss` (registry-miss path for unknown domains) and `nightly-diagnostic` (DOT_DEPLOY_VERBOSE / DOT_MEMORY_TRACE coverage). Per-PR runs are unaffected.
+
+## 0.16.1
+
+### Patch Changes
+
+- 28d7c30: E2E suite now runs as a 7-cell matrix on CI: 4 no-publish cells in parallel + 3 publish cells serial (sharing the registry signer to avoid nonce races). Adds full-deploy tests for the Foundry and CDM backends. Per-cell pass/fail is visible in the sticky PR comment with cell-specific JUnit + forensic logs.
+
+## 0.16.0
+
+### Minor Changes
+
+- 8d02aa4: Add `--no-contract-build` flag to `dot deploy`. When set alongside `--contracts`, the deploy uses pre-existing contract artifacts (foundry `out/`, hardhat `artifacts/contracts/`, cdm `target/<crate>.release.polkavm`) instead of running the build toolchain. Useful for CI environments where `forge` / `cargo-contract` aren't installed.
+
+## 0.15.5
+
+### Patch Changes
+
+- 7696da3: CI now posts a sticky E2E test-pass comment on every PR with per-test pass/fail counts and Sentry triage links. Nightly schedule failures auto-open a GitHub issue. Per-cell forensic logs (`dot-runs.log`) and JUnit XML are uploaded as workflow artefacts. Test traffic is tagged with `cli.tag:e2e-ci-{pr|nightly|dispatch}` so production Sentry dashboards can filter it out.
+
+## 0.15.4
+
+### Patch Changes
+
+- 7151157: Avoid GitHub auth and `git push` during `dot deploy --modable` when the project already has an `origin`; the existing repository URL is recorded directly.
+
+## 0.15.3
+
+### Patch Changes
+
+- 9d0a0ba: Load the logged-in account for `dot deploy --signer dev --playground` so Playground registry publishes can be signed by the app owner.
+
+## 0.15.2
+
+### Patch Changes
+
+- f2f43c4: Suppress the non-fatal `ReviveApi_trace_call` compatibility stack during Playground registry contract dry-runs.
+
+## 0.15.1
+
+### Patch Changes
+
+- 2de1408: Resolve the Playground registry address from the live CDM meta-registry before publishing or browsing apps.
+
 ## 0.15.0
 
 ### Minor Changes

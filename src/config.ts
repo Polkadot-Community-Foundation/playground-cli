@@ -17,10 +17,15 @@ export interface ChainConfig {
     assetHubRpc: string;
     /** WebSocket endpoint for Paseo Bulletin (immutable IPFS storage). */
     bulletinRpc: string;
+    /**
+     * Ordered fallback endpoints for Bulletin, used where the caller builds its
+     * own WS provider (e.g. the dedicated metadata-upload client in
+     * `src/utils/deploy/playground.ts`). Always excludes `bulletinRpc` itself.
+     * Typically empty; populated when `DOT_BULLETIN_RPC` overrides the primary.
+     */
+    bulletinRpcFallbacks: string[];
     /** WebSocket endpoints for the People chain (SSO / session discovery). */
     peopleEndpoints: string[];
-    /** Playground registry contract on Asset Hub. Backing store for myApps. */
-    playgroundRegistryAddress: `0x${string}`;
     /** Viewer URL shown to users after a successful deploy. */
     appViewerOrigin: string;
 }
@@ -28,8 +33,8 @@ export interface ChainConfig {
 const TESTNET: ChainConfig = {
     assetHubRpc: "wss://asset-hub-paseo-rpc.n.dwellir.com",
     bulletinRpc: "wss://paseo-bulletin-rpc.polkadot.io",
+    bulletinRpcFallbacks: [],
     peopleEndpoints: ["wss://paseo-people-next-rpc.polkadot.io"],
-    playgroundRegistryAddress: "0x279585Cb8E8971e34520A3ebbda3E0C4D77C3d97",
     appViewerOrigin: "https://dot.li",
 };
 
@@ -39,8 +44,27 @@ export function getChainConfig(env: Env = DEFAULT_ENV): ChainConfig {
             "`--env mainnet` is not yet supported. Use `--env testnet` (default) while mainnet launch is pending.",
         );
     }
-    return TESTNET;
+    const cfg = TESTNET;
+    // CHAOS-test hook: when DOT_BULLETIN_RPC is set, use it as the primary
+    // Bulletin endpoint and retain the built-in URL as a fallback so failover
+    // works. bulletin-deploy's deploy() already applies this pattern internally
+    // (it builds [userRpc, DEFAULT] from options.rpc), so storage.ts consumers
+    // get failover for free. The dedicated WS client in playground.ts reads
+    // bulletinRpcFallbacks explicitly and builds its own endpoint array.
+    // Used by `e2e/cli/chaos.test.ts` to simulate an unreachable primary RPC.
+    const override = process.env.DOT_BULLETIN_RPC;
+    if (override) {
+        return {
+            ...cfg,
+            bulletinRpc: override,
+            bulletinRpcFallbacks: [cfg.bulletinRpc],
+        };
+    }
+    return cfg;
 }
+
+/** Fixed CDM meta-registry contract on Asset Hub. Source: @dotdm/utils REGISTRY_ADDRESS. */
+export const CDM_REGISTRY_ADDRESS = "0xae344f7f0f91d3a2176032af2990abcc7606c7d4";
 
 /** Identifier the terminal adapter reports during SSO. Kept stable so mobile pairings persist across releases. */
 export const DAPP_ID = "dot-cli";

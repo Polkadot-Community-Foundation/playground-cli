@@ -106,6 +106,7 @@ vi.mock("./contracts.js", () => ({
 }));
 vi.mock("./session-account.js", () => ({
     getOrCreateSessionAccount: getOrCreateSessionAccountMock,
+    persistSessionAccount: vi.fn(async () => {}),
     SESSION_MIN_BALANCE: 5_000_000_000n,
     SESSION_FUND_AMOUNT: 50_000_000_000n,
 }));
@@ -126,6 +127,7 @@ vi.mock("@polkadot-apps/tx", () => ({
 vi.mock("../../telemetry.js", () => ({
     withSpan: (...args: unknown[]) =>
         withSpanMock(args[0] as string, args[1] as string, args[2], args[3]),
+    errorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
 }));
 
 import { runDeploy, type DeployEvent } from "./run.js";
@@ -139,6 +141,17 @@ const fakeUserSigner: ResolvedSigner = {
     },
     address: "5Fake",
     source: "session",
+    destroy: vi.fn(),
+};
+
+const fakeDevSigner: ResolvedSigner = {
+    signer: {
+        publicKey: new Uint8Array(32).fill(1),
+        signTx: vi.fn(),
+        signBytes: vi.fn(),
+    },
+    address: "5Dev",
+    source: "dev",
     destroy: vi.fn(),
 };
 
@@ -621,6 +634,42 @@ describe("runDeploy — contracts phase", () => {
         expect(firstSigner).toHaveProperty("signTx");
         expect(firstSigner).toHaveProperty("signBytes");
         // Dev-mode funder-chain lookup must NOT have fired.
+        expect(pickFunderMock).not.toHaveBeenCalled();
+    });
+
+    it("ensureSessionFunded: underfunded + dev signer (source='dev') → uses signer directly, no phone events", async () => {
+        detectContractsTypeMock.mockReturnValue("foundry");
+        const { client, transferFactory } = makeFakeClient();
+        getConnectionMock.mockResolvedValue(client);
+        checkBalanceMock.mockResolvedValue({ free: 0n, sufficient: false });
+
+        const { events, push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "/tmp/proj/dist",
+            skipBuild: true,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: fakeDevSigner,
+            deployContracts: true,
+            onEvent: push,
+        });
+
+        // Transfer was submitted — the dev signer funded the session key.
+        const transferArg = transferFactory.mock.calls[0][0] as { value: bigint };
+        expect(transferArg.value).toBe(50_000_000_000n);
+
+        // The signer passed to submitAndWatch must be the raw dev signer — NOT
+        // a wrapSignerWithEvents proxy. Assert exact object identity.
+        const [, usedFunder] = submitAndWatchMock.mock.calls[0];
+        expect(usedFunder).toBe(fakeDevSigner.signer);
+
+        // No phone-tap lifecycle events should have been emitted.
+        const signingEvents = events.filter((e) => e.kind === "signing");
+        expect(signingEvents).toHaveLength(0);
+
+        // Funder-chain lookup must NOT have been consulted.
         expect(pickFunderMock).not.toHaveBeenCalled();
     });
 
