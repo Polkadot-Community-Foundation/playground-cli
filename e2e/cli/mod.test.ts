@@ -59,15 +59,24 @@ describe("dot mod", () => {
 		},
 	);
 
-	test("reports a registry-miss for an unknown domain", async () => {
+	test("reports a registry-miss for an unknown domain", { timeout: 120_000 }, async () => {
 		const cwd = makeTempDir("dot-e2e-mod-unknown-");
+		const domain = "nonexistent-domain-xyz-12345.dot";
 		const result = await dot(
-			["mod", "nonexistent-domain-xyz-12345.dot", "--suri", ALICE.suri],
-			{ cwd },
+			["mod", domain, "--suri", ALICE.suri],
+			{ cwd, timeout: 120_000 },
 		);
 		const output = result.stdout + result.stderr;
-		expect(result.exitCode).not.toBe(0);
-		expect(output).toMatch(/not found/i);
+		expect(
+			result.exitCode,
+			`expected non-zero exit for unknown domain\n${output}`,
+		).not.toBe(0);
+		// Exact wording from src/commands/mod/SetupScreen.tsx:
+		//   throw new Error(`App "${domain}" not found in registry`);
+		// Matching both fragments rules out an unrelated "not found" landing
+		// in output (e.g., a transient 404 from an IPFS gateway probe).
+		expect(output).toContain(domain);
+		expect(output).toContain("not found in registry");
 	});
 
 	test("exits non-zero with signer suggestion when no signer available", async () => {
@@ -76,6 +85,12 @@ describe("dot mod", () => {
 		const result = await dot(["mod", "some-app.dot"], { home: tempHome, cwd });
 		expect(result.exitCode).not.toBe(0);
 		const output = result.stdout + result.stderr;
-		expect(output).toMatch(/signer|init|log.?in/i);
+		// Exact wording from src/utils/signer.ts SignerNotAvailableError:
+		//   `No signer available. Run "dot init" to log in, or pass --suri //Alice for dev.`
+		// The previous regex /signer|init|log.?in/i matched any of those words
+		// anywhere — including help text — so it passed even on early crashes
+		// that never reached the signer-resolution path.
+		expect(output).toContain("No signer available");
+		expect(output).toContain("dot init");
 	});
 });

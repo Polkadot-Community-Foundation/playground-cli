@@ -30,6 +30,18 @@ function absBuildDir(fixture: string, dir = "dist"): string {
 	return resolve(fixture, dir);
 }
 
+/**
+ * Assertion notes for the preflight tests below:
+ * - "Checking availability" is printed by `src/commands/deploy/index.ts` ONLY
+ *   after preflight (signer + mapping + balance) has succeeded. Asserting on
+ *   it is a real checkpoint — a deploy that crashes earlier won't print it.
+ * - Avoid loose regexes like `/deploy/i`: the literal word "deploy" appears
+ *   in the command banner, error-help text, and stack traces, so it matches
+ *   even when nothing meaningful happened.
+ * - For tests that expect failure, assert `exitCode !== 0` so an early crash
+ *   that prints something tangentially matching the regex can't slip through.
+ */
+
 describe("dot deploy — preflight and validation", () => {
 	test("reports mainnet not yet supported", async () => {
 		const result = await dot([
@@ -43,8 +55,15 @@ describe("dot deploy — preflight and validation", () => {
 			"--dir", frontendOnly,
 		], { timeout: 400_000 });
 		const output = result.stdout + result.stderr;
-		expect(output).toMatch(/mainnet/i);
-		expect(output).toMatch(/not.*supported/i);
+		expect(
+			result.exitCode,
+			`expected non-zero exit for --env mainnet, got 0\n${output}`,
+		).not.toBe(0);
+		// Exact wording from src/commands/deploy/index.ts: "`--env mainnet` is
+		// not yet supported. Use `--env testnet` (default) while mainnet launch
+		// is pending."
+		expect(output).toContain("not yet supported");
+		expect(output).toContain("--env testnet");
 	});
 
 	test("detects foundry contracts type in project", async () => {
@@ -62,8 +81,11 @@ describe("dot deploy — preflight and validation", () => {
 		const output = result.stdout + result.stderr;
 		// foundry.toml present → should not complain about missing contract project
 		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		// Should proceed to at least the availability check
-		expect(output).toMatch(/checking availability|deploy/i);
+		// Real checkpoint: only printed after preflight succeeds.
+		expect(
+			output,
+			`expected to reach availability check\n${output}`,
+		).toContain("Checking availability");
 	});
 
 	test("detects hardhat contracts type in project", async () => {
@@ -80,7 +102,10 @@ describe("dot deploy — preflight and validation", () => {
 		]);
 		const output = result.stdout + result.stderr;
 		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		expect(output).toMatch(/checking availability|deploy/i);
+		expect(
+			output,
+			`expected to reach availability check\n${output}`,
+		).toContain("Checking availability");
 	});
 
 	test("detects CDM/Rust contracts type in project", async () => {
@@ -97,7 +122,10 @@ describe("dot deploy — preflight and validation", () => {
 		]);
 		const output = result.stdout + result.stderr;
 		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		expect(output).toMatch(/checking availability|deploy/i);
+		expect(
+			output,
+			`expected to reach availability check\n${output}`,
+		).toContain("Checking availability");
 	});
 
 	test("detects multiple contracts in multi-contract project", async () => {
@@ -114,7 +142,10 @@ describe("dot deploy — preflight and validation", () => {
 		]);
 		const output = result.stdout + result.stderr;
 		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		expect(output).toMatch(/checking availability|deploy/i);
+		expect(
+			output,
+			`expected to reach availability check\n${output}`,
+		).toContain("Checking availability");
 	});
 
 	test("--contracts reports error when no contract project detected", async () => {
@@ -130,6 +161,10 @@ describe("dot deploy — preflight and validation", () => {
 			"--dir", frontendOnly,
 		], { timeout: 400_000 });
 		const output = result.stdout + result.stderr;
+		expect(
+			result.exitCode,
+			`expected non-zero exit when --contracts has no project\n${output}`,
+		).not.toBe(0);
 		expect(output).toContain("no foundry/hardhat/cdm project was detected");
 	});
 
@@ -145,8 +180,10 @@ describe("dot deploy — preflight and validation", () => {
 			"--dir", frontendOnly,
 		], { timeout: 400_000 });
 		const output = result.stdout + result.stderr;
-		expect(output).toContain("Checking availability");
-		expect(output).toContain(domain);
+		// Availability banner names the domain; this is the strongest signal we
+		// have that the availability check actually executed against this run's
+		// domain (rather than echoing the arg in a usage/error string).
+		expect(output).toContain(`Checking availability of ${domain}.dot`);
 	});
 });
 
@@ -234,6 +271,15 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			bobDeploy.exitCode,
 			`bob deploy unexpectedly succeeded: ${bobDeploy.stdout}\n${bobDeploy.stderr}`,
 		).not.toBe(0);
-		expect(output.toLowerCase()).toMatch(/revert|taken|registered|owned|unavailable|already/);
+		// Exact wording from src/utils/deploy/availability.ts:
+		//   "{domain}.dot is already registered by {owner} — transfer it or use
+		//    a different name"
+		// The previous /revert|taken|registered|owned|unavailable|already/
+		// regex matched any of those words anywhere — including transient
+		// network errors and unrelated runtime stack traces — so it could not
+		// distinguish "Bob hit the right ownership conflict" from "Bob hit
+		// some other failure that happened to mention 'registered'".
+		expect(output).toContain("already registered");
+		expect(output).toContain(domain);
 	});
 });

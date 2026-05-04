@@ -55,18 +55,36 @@ describe("session management", () => {
 		const frontendOnly = fixturePath("frontend-only");
 		const sessionDir = join(tempHome, ".polkadot-apps");
 
-		await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		// Verify each build actually succeeds — otherwise "no session files
+		// were touched" is a tautology (a crashed build can't write any file).
+		const first = await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		expect(
+			first.exitCode,
+			`first build failed: ${first.stdout}\n${first.stderr}`,
+		).toBe(0);
 		const afterFirst = getSessionFiles(sessionDir);
 
-		await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		const second = await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		expect(
+			second.exitCode,
+			`second build failed: ${second.stdout}\n${second.stderr}`,
+		).toBe(0);
 		const afterSecond = getSessionFiles(sessionDir);
 
 		// build doesn't need auth — no session files should be created
-		expect(afterFirst).toEqual(afterSecond);
+		expect(afterFirst).toEqual([]);
+		expect(afterSecond).toEqual([]);
 	});
 
 	test("logout with no session reports no account signed in", async () => {
 		const result = await dot(["logout"], { home: tempHome, timeout: 30_000 });
+		// `dot logout` against an empty session dir is a benign no-op — should
+		// exit cleanly, not crash. Without this check, a crash with a stack
+		// trace containing "session" would still satisfy the regex below.
+		expect(
+			result.exitCode,
+			`logout crashed: ${result.stdout}\n${result.stderr}`,
+		).toBe(0);
 		const output = (result.stdout + result.stderr).toLowerCase();
 		expect(output).toMatch(/no.*sign|not.*log|no.*session|no.*account/);
 	});
