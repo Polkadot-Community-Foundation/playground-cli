@@ -68,7 +68,7 @@ describe("dot init — session detection", () => {
 		// in a fresh tempHome takes longer than 15s — nothing about sessions.
 		const result = await dot(["init"], {
 			home: tempHome,
-			timeout: 15_000,
+			timeout: 25_000,
 		});
 		const output = result.stdout + result.stderr;
 		expect(
@@ -99,7 +99,7 @@ describe("dot init — session detection", () => {
 
 		const result = await dot(["init"], {
 			home: tempHome,
-			timeout: 15_000,
+			timeout: 25_000,
 		});
 		const output = result.stdout + result.stderr;
 		expect(result.exitCode).not.toBe(0);
@@ -164,15 +164,18 @@ describe("dot init — toolchain detection", () => {
 			// post-install path-config logic. This test forces init to hit
 			// the "rustup not found" branch by removing it from PATH.
 			//
-			// We use a 5s timeout — long enough for init's TUI to render the
-			// dependency table (and start a curl install attempt), short
-			// enough that we don't actually finish a real rustup install.
-			// We do NOT assert exitCode here; execa terminates the process at
-			// the timeout, so exitCode is the kill signal, not a real result.
-			const result = await dot(["init"], {
+			// `-y` skips the connect()/QR block so the TUI renders the
+			// dependency table within ~1s. The 12s execa timeout is long
+			// enough for the table to render and the rustup-install curl
+			// pipeline to *start*, but well short of the ~30s+ a real
+			// rustup install needs — we want to see "⠋ rustup" or "·
+			// rustup", NOT "✓ rustup".
+			// We do NOT assert exitCode here; execa terminates at the
+			// timeout, so exitCode is the kill signal, not a real result.
+			const result = await dot(["init", "-y"], {
 				home: tempHome,
 				env: { PATH: pathWithoutToolchains() },
-				timeout: 5_000,
+				timeout: 12_000,
 			});
 			const output = result.stdout + result.stderr;
 			// The TUI prints each dependency on its own row. Seeing "rustup"
