@@ -19,22 +19,47 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { execSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { dot } from "./helpers/dot.js";
 
-/** PATH stripped of rustup/cargo/foundry locations. The init process must
- *  still be able to find `node`/`bun`/`pnpm`/`curl`/`bash`, so we keep the
- *  rest of PATH intact. Patterns are deliberately broad (cargo/rustup/
- *  foundry anywhere in the segment) so we strip both `~/.cargo/bin` style
- *  paths and `/opt/cargo/bin` / `/usr/local/cargo/bin` style ones. */
+/** PATH stripped of every directory that currently contains a rust /
+ *  foundry toolchain binary. The init process must still be able to find
+ *  `node`/`bun`/`pnpm`/`curl`/`bash`, so we keep the rest of PATH intact.
+ *
+ *  Naive pattern-based filtering (`/cargo/`, `/rustup/`, `/foundry/`) is
+ *  not enough on every CI runner: parity-default ships rustup at a path
+ *  that doesn't include any of those tokens (e.g. `/usr/local/bin`), so a
+ *  pattern strip leaves rustup discoverable and the test fires a false
+ *  ✓ rustup. Resolve each tool's actual location(s) up front and strip
+ *  exactly those parent dirs. Pattern strip is kept as a belt-and-braces
+ *  fallback for tools we don't enumerate. */
 function pathWithoutToolchains(): string {
 	const original = process.env.PATH ?? "/usr/bin:/bin";
+	const stripDirs = new Set<string>();
+	const tools = ["rustup", "cargo", "rustc", "forge", "foundryup", "foundryup-polkadot"];
+	for (const tool of tools) {
+		try {
+			const out = execSync(`which -a ${tool} 2>/dev/null || true`, {
+				encoding: "utf8",
+			});
+			for (const line of out.split("\n")) {
+				const path = line.trim();
+				if (path) stripDirs.add(dirname(path));
+			}
+		} catch { /* tool not installed — nothing to strip */ }
+	}
 	const stripPatterns = [/cargo/i, /rustup/i, /foundry/i];
 	return original
 		.split(":")
-		.filter((p) => p.length > 0 && !stripPatterns.some((re) => re.test(p)))
+		.filter(
+			(p) =>
+				p.length > 0 &&
+				!stripDirs.has(p) &&
+				!stripPatterns.some((re) => re.test(p)),
+		)
 		.join(":");
 }
 
