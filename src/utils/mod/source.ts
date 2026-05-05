@@ -11,6 +11,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import { extract } from "tar";
+import { ghAuthHeaders } from "../gh-token.js";
 
 export interface GitHubRepoRef {
     owner: string;
@@ -37,14 +38,20 @@ export async function resolveDefaultBranch(
     opts: FetchOpts = {},
 ): Promise<string> {
     const f = opts.fetch ?? fetch;
+    let apiStatus: number | undefined;
     try {
-        const res = await f(`https://api.github.com/repos/${ref.owner}/${ref.repo}`);
+        // Opportunistic gh-auth header lifts this call out of the shared
+        // 60/hour anonymous-IP bucket — see `src/utils/gh-token.ts`.
+        const res = await f(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, {
+            headers: { Accept: "application/vnd.github+json", ...(await ghAuthHeaders()) },
+        });
+        apiStatus = res.status;
         if (res.ok) {
             const body = (await res.json()) as { default_branch?: string };
             if (body.default_branch) return body.default_branch;
         }
     } catch {
-        // fall through to the heuristic probes
+        // network error — fall through to the heuristic probes
     }
     for (const candidate of ["main", "master"]) {
         try {
@@ -53,6 +60,11 @@ export async function resolveDefaultBranch(
         } catch {
             // try next
         }
+    }
+    if (apiStatus === 404 || apiStatus === 401) {
+        throw new Error(
+            `Repository ${ref.owner}/${ref.repo} is private or does not exist — dot mod only supports public repositories`,
+        );
     }
     throw new Error(
         `Could not resolve a default branch for ${ref.owner}/${ref.repo} — pin one in metadata.branch`,

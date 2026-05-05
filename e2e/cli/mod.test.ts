@@ -11,7 +11,7 @@
  */
 
 import { describe, test, expect, afterEach } from "vitest";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dot } from "./helpers/dot.js";
@@ -37,16 +37,20 @@ afterEach(() => {
 
 describe("dot mod — clone", () => {
 	test.skipIf(!TEST_DOMAIN)(
-		"clones the registered template into a fresh directory",
-		{ timeout: 180_000 },
+		"full clone flow: fetches source, runs setup.sh, writes dot.json",
+		{ timeout: 240_000 },
 		async () => {
 			const cwd = makeTempDir("dot-e2e-mod-cwd-");
 			const result = await dot(["mod", TEST_DOMAIN, "--suri", ALICE.suri], {
 				cwd,
-				timeout: 180_000,
+				timeout: 240_000,
 			});
 
-			expect(result.exitCode).toBe(0);
+			expect(
+				result.exitCode,
+				`mod failed:\n${result.stdout}\n${result.stderr}`,
+			).toBe(0);
+
 			// defaultRepoName slugifies the domain and appends a 6-hex suffix.
 			const slug = TEST_DOMAIN.replace(/\.dot$/, "")
 				.toLowerCase()
@@ -55,7 +59,56 @@ describe("dot mod — clone", () => {
 				(name) => name.startsWith(`${slug}-`) && /-[0-9a-f]{6}$/.test(name),
 			);
 			expect(created).toHaveLength(1);
-			expect(existsSync(join(cwd, created[0]!, "package.json"))).toBe(true);
+			const projectDir = join(cwd, created[0]!);
+
+			// ── Step 2 (download source) — content from GitHub ─────────────
+			// Asserting on multiple specific files proves the tarball was
+			// actually fetched and extracted, not invented from thin air.
+			// All four files are committed to paritytech/Rock-Paper-Scissors's
+			// default branch — if any go missing, the upstream fixture has
+			// been restructured and this test needs updating to match.
+			expect(existsSync(join(projectDir, "package.json"))).toBe(true);
+			expect(existsSync(join(projectDir, "README.md"))).toBe(true);
+			expect(existsSync(join(projectDir, "setup.sh"))).toBe(true);
+			expect(existsSync(join(projectDir, "vite.config.ts"))).toBe(true);
+
+			// ── Step 2 side effect: writeDotJson() ─────────────────────────
+			const dotJsonPath = join(projectDir, "dot.json");
+			expect(existsSync(dotJsonPath)).toBe(true);
+			const dotJson = JSON.parse(readFileSync(dotJsonPath, "utf-8")) as {
+				domain?: string;
+				name?: string;
+			};
+			// `domain` is set to `targetDir` in writeDotJson() — and
+			// `targetDir` flows from defaultRepoName(), which returns a
+			// RELATIVE slug-suffix path (e.g. `dot-cli-mod-fixture-a3b2c1`),
+			// not an absolute one. So dotJson.domain should equal the leaf
+			// directory name, NOT projectDir. (Field name is unusual but
+			// documented in src/commands/mod/SetupScreen.tsx.)
+			expect(dotJson.domain).toBe(created[0]);
+			expect(dotJson.name).toBeDefined();
+
+			// ── Step 2 side effect: ignoreModLogs() ────────────────────────
+			const gitignore = readFileSync(
+				join(projectDir, ".gitignore"),
+				"utf-8",
+			);
+			expect(gitignore).toContain(".dot-mod-setup.log");
+			expect(gitignore).toContain(".dot-mod-source.log");
+
+			// ── Step 3 (run setup.sh) ──────────────────────────────────────
+			// The script's first line of substantive output is
+			// `echo "[setup] Rock Paper Scissors tutorial"`. If the log file
+			// exists with that prefix, setup.sh actually ran. (We can't
+			// assert exit 0 of the script here — exit-code propagation is
+			// already covered by the outer `result.exitCode` check above.)
+			const setupLog = join(projectDir, ".dot-mod-setup.log");
+			expect(
+				existsSync(setupLog),
+				`setup.sh log not found — step 3 did not run.\n${result.stdout}\n${result.stderr}`,
+			).toBe(true);
+			const setupLogContent = readFileSync(setupLog, "utf-8");
+			expect(setupLogContent).toContain("[setup]");
 		},
 	);
 
@@ -65,19 +118,34 @@ describe("dot mod — clone", () => {
 		const result = await dot(["mod", "some-app.dot"], { home: tempHome, cwd });
 		expect(result.exitCode).not.toBe(0);
 		const output = result.stdout + result.stderr;
-		expect(output).toMatch(/signer|init|log.?in/i);
+		// Exact wording from src/utils/signer.ts SignerNotAvailableError:
+		//   `No signer available. Run "dot init" to log in, or pass --suri //Alice for dev.`
+		// The previous regex /signer|init|log.?in/i matched any of those words
+		// anywhere — including help text — so it passed even on early crashes
+		// that never reached the signer-resolution path.
+		expect(output).toContain("No signer available");
+		expect(output).toContain("dot init");
 	});
 });
 
 describe("dot mod — registry miss", () => {
-	test("reports a registry-miss for an unknown domain", async () => {
+	test("reports a registry-miss for an unknown domain", { timeout: 120_000 }, async () => {
 		const cwd = makeTempDir("dot-e2e-mod-unknown-");
+		const domain = "nonexistent-domain-xyz-12345.dot";
 		const result = await dot(
-			["mod", "nonexistent-domain-xyz-12345.dot", "--suri", ALICE.suri],
-			{ cwd },
+			["mod", domain, "--suri", ALICE.suri],
+			{ cwd, timeout: 120_000 },
 		);
 		const output = result.stdout + result.stderr;
-		expect(result.exitCode).not.toBe(0);
-		expect(output).toMatch(/not found/i);
+		expect(
+			result.exitCode,
+			`expected non-zero exit for unknown domain\n${output}`,
+		).not.toBe(0);
+		// Exact wording from src/commands/mod/SetupScreen.tsx:
+		//   throw new Error(`App "${domain}" not found in registry`);
+		// Matching both fragments rules out an unrelated "not found" landing
+		// in output (e.g., a transient 404 from an IPFS gateway probe).
+		expect(output).toContain(domain);
+		expect(output).toContain("not found in registry");
 	});
 });

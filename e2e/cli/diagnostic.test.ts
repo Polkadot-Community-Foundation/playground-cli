@@ -6,39 +6,82 @@
  */
 
 import { describe, test, expect } from "vitest";
+import { resolve } from "node:path";
 import { dot } from "./helpers/dot.js";
-import { ALICE } from "./fixtures/accounts.js";
+import { SIGNER, E2E_DOMAINS } from "./fixtures/accounts.js";
 import { fixturePath } from "./fixtures/templates.js";
 
 const frontendOnly = fixturePath("frontend-only");
 
 describe("diagnostic mode", () => {
-	test("DOT_DEPLOY_VERBOSE=1 does not break deploy preflight", async () => {
-		// Run a deploy that will reach preflight with verbose enabled.
-		// We don't need it to succeed — just verify verbose doesn't crash anything.
+	test(
+		"DOT_DEPLOY_VERBOSE=1 produces timestamped log lines during storage phase",
+		{ timeout: 300_000 },
+		async () => {
+			// Need a deploy that actually reaches the storage phase — that's
+			// where bulletin-deploy logs and verbose-mode wraps its output
+			// with "[+<seconds>s] " timestamps (see src/utils/deploy/storage.ts).
+			// Re-deploying a domain SIGNER already owns is the cheapest way
+			// to get there.
+			const result = await dot([
+				"deploy",
+				"--signer", "dev",
+				"--domain", E2E_DOMAINS.preflight,
+				"--buildDir", resolve(frontendOnly, "dist"),
+				"--no-build",
+				"--playground",
+				"--private",
+				"--suri", SIGNER.suri,
+				"--dir", frontendOnly,
+			], {
+				env: { DOT_DEPLOY_VERBOSE: "1" },
+				timeout: 280_000,
+			});
+			const output = result.stdout + result.stderr;
+			// Real preflight checkpoint — only printed after signer/mapping
+			// passes.
+			expect(
+				output,
+				`expected to reach availability check with verbose on\n${output}`,
+			).toContain("Checking availability");
+			// Verbose-only marker. Format: "[+12.3s] <line>". This prefix
+			// appears nowhere else, so matching it is the only way to prove
+			// DOT_DEPLOY_VERBOSE wasn't silently ignored.
+			expect(
+				output,
+				`expected verbose-only "[+Ns] ..." marker in output\n${output}`,
+			).toMatch(/\[\+\d+\.\d+s\]/);
+		},
+	);
+
+	test("DOT_MEMORY_TRACE=1 produces RSS sample lines during a real command", async () => {
+		// `--help` exits before the memory watchdog has a chance to sample.
+		// Run a deploy preflight instead — the watchdog samples once per
+		// second and writes RSS/heap/external lines to stderr when the env
+		// var is set (see src/utils/process-guard.ts startMemoryWatchdog).
 		const result = await dot([
 			"deploy",
 			"--signer", "dev",
-			"--domain", "diag-verbose-test",
-			"--buildDir", "dist",
+			"--domain", E2E_DOMAINS.preflight,
+			"--buildDir", resolve(frontendOnly, "dist"),
+			"--no-build",
 			"--playground",
-			"--suri", ALICE.suri,
+			"--private",
+			"--suri", SIGNER.suri,
 			"--dir", frontendOnly,
 		], {
-			env: { DOT_DEPLOY_VERBOSE: "1" },
-			timeout: 30_000,
+			env: { DOT_MEMORY_TRACE: "1" },
+			timeout: 120_000,
 		});
 		const output = result.stdout + result.stderr;
-		// Should reach the availability check even with verbose on
-		expect(output).toMatch(/checking availability|deploy|mainnet/i);
-	});
-
-	test("DOT_MEMORY_TRACE=1 does not prevent normal operation", async () => {
-		const result = await dot(["--help"], {
-			env: { DOT_MEMORY_TRACE: "1" },
-			timeout: 15_000,
-		});
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("deploy");
+		// Verbose-only prefix from src/utils/process-guard.ts watchdog worker:
+		//   "[mem +<seconds>s] rss=<bytes> heap=<used>/<total> external=... peak=..."
+		// That bracketed prefix is unique to this code path, so matching it
+		// proves DOT_MEMORY_TRACE actually engaged the sampler — not just
+		// that some other code wrote the word "rss" somewhere.
+		expect(
+			output,
+			`expected memory-trace markers in output\n${output}`,
+		).toMatch(/\[mem \+\d+\.\d+s\]/);
 	});
 });
