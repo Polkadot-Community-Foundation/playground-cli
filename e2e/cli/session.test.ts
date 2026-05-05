@@ -45,29 +45,47 @@ describe("session management", () => {
 			["deploy", "--signer", "phone", "--domain", "test", "--playground", "--buildDir", "dist"],
 			{ home: tempHome, timeout: 30_000 },
 		);
-		// Must fail with a signer/session error
+		// Must fail with a signer-resolution error. Match the exact
+		// SignerNotAvailableError text from src/utils/signer.ts so a generic
+		// "session" mention in an unrelated stack trace can't satisfy this.
 		expect(result.exitCode).not.toBe(0);
-		const output = (result.stdout + result.stderr).toLowerCase();
-		expect(output).toMatch(/no signer|no.*session|signer.*not|run.*dot init/);
+		const output = result.stdout + result.stderr;
+		expect(output).toContain("No signer available");
 	});
 
 	test("build does not create or modify session files", async () => {
 		const frontendOnly = fixturePath("frontend-only");
 		const sessionDir = join(tempHome, ".polkadot-apps");
 
-		await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		// Verify each build actually succeeds — otherwise "no session files
+		// were touched" is a tautology (a crashed build can't write any file).
+		const first = await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		expect(
+			first.exitCode,
+			`first build failed: ${first.stdout}\n${first.stderr}`,
+		).toBe(0);
 		const afterFirst = getSessionFiles(sessionDir);
 
-		await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		const second = await dot(["build", "--dir", frontendOnly], { home: tempHome });
+		expect(
+			second.exitCode,
+			`second build failed: ${second.stdout}\n${second.stderr}`,
+		).toBe(0);
 		const afterSecond = getSessionFiles(sessionDir);
 
 		// build doesn't need auth — no session files should be created
-		expect(afterFirst).toEqual(afterSecond);
+		expect(afterFirst).toEqual([]);
+		expect(afterSecond).toEqual([]);
 	});
 
 	test("logout with no session reports no account signed in", async () => {
 		const result = await dot(["logout"], { home: tempHome, timeout: 30_000 });
-		const output = (result.stdout + result.stderr).toLowerCase();
-		expect(output).toMatch(/no.*sign|not.*log|no.*session|no.*account/);
+		expect(
+			result.exitCode,
+			`logout crashed: ${result.stdout}\n${result.stderr}`,
+		).toBe(0);
+		// Exact wording from src/commands/logout/index.ts:
+		//   console.log("  No account is signed in.\n");
+		expect(result.stdout).toContain("No account is signed in");
 	});
 });

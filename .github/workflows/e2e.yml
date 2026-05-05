@@ -8,6 +8,12 @@ on:
     schedule:
         - cron: "0 6 * * *"
     workflow_dispatch:
+    # Fires the init-cold-smoke job after Dev Release publishes the per-PR
+    # `dev/<branch>` tag, so the smoke can install via the same one-liner
+    # the dev-release bot posts on the PR.
+    workflow_run:
+        workflows: ["Dev Release"]
+        types: [completed]
 
 permissions:
     pull-requests: write     # sticky PR comment posting
@@ -466,3 +472,82 @@ jobs:
                       -H "Accept: application/vnd.github+json" \
                       "$API_URL/repos/$REPO/issues" \
                       -d "$(jq -n --arg title "$TITLE" --arg body "$BODY" '{title: $title, body: $body}')"
+
+    init-cold-smoke:
+        # Runs `dot init` inside a fresh ubuntu:22.04 container — no rustup,
+        # no IPFS, no foundry, no cdm pre-installed. The cell-based jobs
+        # above run on a GitHub Actions runner that already has most of
+        # those tools on PATH, so they can't catch regressions in the
+        # install / post-install path-config logic (e.g. paritytech/
+        # playground-app#118 — newly-installed rustup unreachable from the
+        # same init process). This job is the cold-start defence: every
+        # dependency must be installed AND become reachable to subsequent
+        # init steps in the same process.
+        #
+        # Install path: the same `curl … install.sh | VERSION=… bash`
+        # one-liner the dev-release bot posts on every PR — i.e. exactly
+        # what an end user runs. install.sh downloads the SEA binary,
+        # adds it to PATH, then runs `dot init` as its final step (errors
+        # surface via exit code; see CLAUDE.md "Non-obvious invariants").
+        # Going through the published binary catches Bun-compile-only
+        # regressions that `bun run src/index.ts` masks.
+        #
+        # Triggers:
+        #   - workflow_run (Dev Release succeeded) → install dev/<branch>
+        #     for that PR; this is the per-PR cold-start gate.
+        #   - schedule / workflow_dispatch on main → install latest
+        #     stable release (no VERSION).
+        name: Init cold-start smoke test
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
+        timeout-minutes: 30
+        if: |
+            github.event_name == 'schedule' ||
+            github.event_name == 'workflow_dispatch' ||
+            (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        steps:
+            - name: Run dot init via install.sh in fresh ubuntu container
+              env:
+                  # Empty for schedule/dispatch → install.sh resolves the
+                  # latest stable tag. Set to dev/<head-branch> after a
+                  # successful Dev Release so we test the PR's binary.
+                  VERSION_OVERRIDE: ${{ github.event_name == 'workflow_run' && format('dev/{0}', github.event.workflow_run.head_branch) || '' }}
+              run: |
+                  docker run --rm \
+                    -e CI=true \
+                    -e VERSION="$VERSION_OVERRIDE" \
+                    ubuntu:22.04 \
+                    bash -eux -c '
+                      # install.sh needs only curl + ca-certs to fetch the
+                      # SEA binary. Anything beyond this is what `dot init`
+                      # (called from install.sh) installs for itself.
+                      apt-get update -qq
+                      DEBIAN_FRONTEND=noninteractive apt-get install -qq -y --no-install-recommends \
+                        curl ca-certificates bash
+
+                      # ── The actual smoke test ──────────────────────────────
+                      # End-user install path. install.sh exits non-zero if
+                      # the embedded `dot init` fails, so the pipeline alone
+                      # catches the #118-class "installed but unreachable"
+                      # regression. We additionally grep the captured output
+                      # for failed-dependency markers because some failure
+                      # modes still let init exit 0 (e.g. an optional row
+                      # rendered with the failure glyph).
+                      curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh \
+                        | bash 2>&1 | tee /tmp/init.log
+
+                      grep -q "setup complete" /tmp/init.log || {
+                        echo "::error::dot init did not reach '\''setup complete'\''"
+                        exit 1
+                      }
+
+                      # Reject failed-row markers rendered by the dot TUI.
+                      # Fail glyph is U+2715 ✕ (see src/utils/ui/theme/
+                      # tokens.ts); we also accept U+2717 ✗ for terminal-
+                      # font fallback. Word-anchored "failed" only — bare
+                      # " error" would also match " errors" (e.g. apt's
+                      # "0 errors") and apt warnings unrelated to the smoke.
+                      if grep -E "✗ |✕ |\bFAILED\b|\bfailed dependency\b" /tmp/init.log; then
+                        echo "::error::dot init reported a failed dependency"
+                        exit 1
+                      fi
+                    '
