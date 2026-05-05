@@ -105,6 +105,14 @@ async function runModCommand(
                           name: metadata.name ?? undefined,
                           description: metadata.description ?? undefined,
                           repository: metadata.repository ?? undefined,
+                          // Carry `branch` and `tag` through so the picker path
+                          // doesn't re-fetch IPFS — and, more importantly, so
+                          // `meta.branch ?? "main"` in SetupScreen sees the
+                          // real branch instead of falling back to a hardcoded
+                          // "main" that 404s for repos with default_branch
+                          // master/develop.
+                          branch: metadata.branch ?? undefined,
+                          tag: metadata.tag ?? undefined,
                       }
                     : null,
                 registry,
