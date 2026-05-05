@@ -15,9 +15,19 @@
 
 import { describe, test, expect } from "vitest";
 import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { dot } from "./helpers/dot.js";
 import { SIGNER, BOB, E2E_DOMAINS } from "./fixtures/accounts.js";
 import { fixturePath } from "./fixtures/templates.js";
+
+function hasCargoPvmContract(): boolean {
+	try {
+		execFileSync("cargo", ["pvm-contract", "help"], { stdio: "ignore" });
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 const frontendOnly = fixturePath("frontend-only");
 const foundry = fixturePath("foundry");
@@ -312,7 +322,7 @@ describe("dot deploy — rejects --no-contract-build with no artefacts", () => {
 // CDM runs the real contract build path instead of `--no-contract-build`.
 // That keeps the E2E focused on the Rust/PVM toolchain path; skip-build artifact
 // discovery remains covered by unit tests in `src/utils/deploy/contracts.test.ts`.
-describe("dot deploy — cdm (requires Paseo + IPFS + Rust/PVM toolchain)", () => {
+describe.skipIf(!hasCargoPvmContract())("dot deploy — cdm (requires Paseo + IPFS + Rust/PVM toolchain)", () => {
 	test("CDM deploy completes end-to-end", { timeout: 900_000 }, async () => {
 		const domain = E2E_DOMAINS.cdm;
 		const result = await dot([

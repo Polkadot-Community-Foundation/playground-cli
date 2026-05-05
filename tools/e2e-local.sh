@@ -46,6 +46,13 @@ if ! command -v ipfs >/dev/null 2>&1; then
     echo "" >&2
 fi
 
+if ! cargo pvm-contract help >/dev/null 2>&1; then
+    echo "warning: cargo-pvm-contract not found — CDM contract tests will be skipped." >&2
+    echo "         install with: rustup toolchain install nightly --component rust-src && rustup default nightly" >&2
+    echo "                       cargo install cargo-pvm-contract --git https://github.com/paritytech/cargo-pvm-contract --branch charles/cdm-integration --locked" >&2
+    echo "" >&2
+fi
+
 # Derive DOT_TAG from an optional leading mode keyword (smoke|pr|nightly).
 # e2e/cli/helpers/dot.ts defaults DOT_TAG to "e2e-local"; we override that
 # here so local runs are tagged by mode and stay distinct in Sentry dashboards.
