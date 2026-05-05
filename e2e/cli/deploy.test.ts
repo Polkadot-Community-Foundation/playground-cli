@@ -249,13 +249,14 @@ describe("dot deploy — preflight and validation", () => {
 			`availability banner not found:\n${output}`,
 		).toBeGreaterThan(-1);
 		// Verify the *ordering* claim in the test name: availability must
-		// precede any build-runner output. Without this, the test only proves
-		// availability ran, not that it ran first. Build runners emit the
-		// header `> <strategy description>` (see src/commands/build.ts) and
-		// bulletin-deploy's storage phase emits `▸ storage-and-dotns…`
-		// (logHeadlessEvent). Either appearing before availability would
-		// break the contract.
-		const buildIdx = output.search(/\n>\s+\w/);
+		// precede any build-runner output. The dot CLI's build banner is
+		// `\n> ${config.description}\n` from src/commands/build.ts:15, and
+		// `config.description` is always one of `pnpm/npm/yarn/bun/npx <verb>`
+		// (see src/utils/build/detect.ts). Anchoring on that exact prefix
+		// avoids matching unrelated `> ` lines that build-tool stdout itself
+		// can produce — pnpm prints `> @scope/pkg@1 build /path` for every
+		// run-script, vite logs `> built in 234ms`, etc.
+		const buildIdx = output.search(/\n> (?:pnpm|npm|yarn|bun|npx) /);
 		const storageIdx = output.indexOf("▸ storage-and-dotns");
 		if (buildIdx > -1) {
 			expect(

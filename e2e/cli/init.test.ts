@@ -164,18 +164,32 @@ describe("dot init — toolchain detection", () => {
 			// post-install path-config logic. This test forces init to hit
 			// the "rustup not found" branch by removing it from PATH.
 			//
+			// Why HTTPS_PROXY is set to a refused address:
+			// init's rustup install step pipes `curl https://sh.rustup.rs`
+			// into `sh` (see src/utils/toolchain.ts). On a runner whose
+			// outbound network is fast or where rustup-init is cached, the
+			// install can complete in <12s and the test would race against a
+			// timing-based "not yet ✓" assertion. Pointing the proxy at a
+			// guaranteed-refused port forces curl to fail in <1s, which
+			// makes the install step deterministically fail (✕ rustup) and
+			// removes the timing dependency entirely. We're testing the
+			// DETECTION path, not the install-success path — the cold-start
+			// smoke job in .github/workflows/e2e.yml covers install success.
+			//
 			// `-y` skips the connect()/QR block so the TUI renders the
-			// dependency table within ~1s. The 12s execa timeout is long
-			// enough for the table to render and the rustup-install curl
-			// pipeline to *start*, but well short of the ~30s+ a real
-			// rustup install needs — we want to see "⠋ rustup" or "·
-			// rustup", NOT "✓ rustup".
-			// We do NOT assert exitCode here; execa terminates at the
-			// timeout, so exitCode is the kill signal, not a real result.
+			// dependency table within ~1s. We do NOT assert exitCode: with
+			// the install forced to fail, init may still exit 0 (warnings
+			// are non-fatal) or non-zero, depending on which downstream
+			// steps the path-stripping affects. Either is consistent with
+			// the contract we care about here.
 			const result = await dot(["init", "-y"], {
 				home: tempHome,
-				env: { PATH: pathWithoutToolchains() },
-				timeout: 12_000,
+				env: {
+					PATH: pathWithoutToolchains(),
+					HTTPS_PROXY: "http://127.0.0.1:1",
+					https_proxy: "http://127.0.0.1:1",
+				},
+				timeout: 20_000,
 			});
 			const output = result.stdout + result.stderr;
 			// The TUI prints each dependency on its own row. Seeing "rustup"
@@ -189,10 +203,13 @@ describe("dot init — toolchain detection", () => {
 				output,
 				`expected later toolchain rows in dependency table\n${output}`,
 			).toMatch(/Rust nightly|cdm|foundry|IPFS/);
-			// A "✓ rustup" with this PATH would mean init falsely concluded
-			// rustup is installed — exactly the class of bug that lets fresh
-			// users hit broken installs in production. (Fresh installs render
-			// the row as "· rustup" or "⠋ rustup", not "✓".)
+			// A "✓ rustup" here would mean init falsely concluded rustup is
+			// installed despite the stripped PATH — exactly the class of bug
+			// that lets fresh users hit broken installs in production. With
+			// the network-blocked install above, a healthy run renders the
+			// row as "· rustup", "⠋ rustup", or "✕ rustup" (install failed),
+			// none of which match this regex. (✓ glyph from
+			// src/utils/ui/theme/tokens.ts.)
 			expect(
 				output,
 				`init reported rustup as installed despite stripped PATH:\n${output}`,

@@ -482,7 +482,7 @@ jobs:
         # (rustup, nightly, cdm, foundry, kubo) from the network and takes
         # ~10 min. Daily cron + manual dispatch only.
         name: Init cold-start smoke test
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 30
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         steps:
@@ -517,6 +517,14 @@ jobs:
 
                       # ── The actual smoke test ──────────────────────────────
                       # `dot init -y` runs the dependency installer end-to-end.
+                      # We run it via `bun run src/index.ts` rather than the
+                      # SEA binary because that is the same entry path used by
+                      # the e2e/cli/ vitest suite (see CLAUDE.md → E2E Tests),
+                      # which keeps the install-path code under test consistent
+                      # across local / per-PR / cold-start runs. The published-
+                      # binary install path is covered separately by
+                      # e2e-post-release.yml.
+                      #
                       # If init reports "setup complete" with no failed rows,
                       # every tool was installed AND was reachable to the
                       # next step in the same process — which is the exact
@@ -528,9 +536,13 @@ jobs:
                         exit 1
                       }
 
-                      # Reject any failed-row markers. Ink renders them with
-                      # ✗ (U+2717) — match common shapes plus the literal word.
-                      if grep -E "✗|✕| failed| error" /tmp/init.log; then
+                      # Reject failed-row markers rendered by the dot TUI.
+                      # Fail glyph is U+2715 ✕ (see src/utils/ui/theme/
+                      # tokens.ts); we also accept U+2717 ✗ for terminal-
+                      # font fallback. Word-anchored "failed" only — bare
+                      # " error" would also match " errors" (e.g. apt's
+                      # "0 errors") and apt warnings unrelated to the smoke.
+                      if grep -E "✗ |✕ |\bFAILED\b|\bfailed dependency\b" /tmp/init.log; then
                         echo "::error::dot init reported a failed dependency"
                         exit 1
                       fi
