@@ -156,7 +156,11 @@ describe("extractHardhatBytecode", () => {
 
 import { runContractsPhase } from "./contracts.js";
 
-function makeOpts(projectDir: string, contractsType: "foundry" | "hardhat" | "cdm", skipBuild: boolean) {
+function makeOpts(
+    projectDir: string,
+    contractsType: "foundry" | "hardhat" | "cdm",
+    skipBuild: boolean,
+) {
     return {
         projectDir,
         contractsType,
@@ -271,8 +275,14 @@ describe("runContractsPhase skipBuild=true (cdm)", () => {
     it("uses existing .release.polkavm artifacts without Cargo metadata", async () => {
         const targetDir = join(dir, "target");
         mkdirSync(targetDir, { recursive: true });
-        writeFileSync(join(targetDir, "counter.release.polkavm"), new Uint8Array([0x50, 0x56, 0x4d]));
-        writeFileSync(join(targetDir, "reader.release.polkavm"), new Uint8Array([0x50, 0x56, 0x4d]));
+        writeFileSync(
+            join(targetDir, "counter.release.polkavm"),
+            new Uint8Array([0x50, 0x56, 0x4d]),
+        );
+        writeFileSync(
+            join(targetDir, "reader.release.polkavm"),
+            new Uint8Array([0x50, 0x56, 0x4d]),
+        );
 
         const result = await runContractsPhase(makeOpts(dir, "cdm", true));
 
