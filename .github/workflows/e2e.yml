@@ -103,27 +103,12 @@ jobs:
                     - cell: pr-deploy-cdm
                       # source: e2e/cli/deploy.test.ts → describe("dot deploy — cdm …")
                       pattern: "deploy — cdm"
-                      installRustPvm: true
         steps:
             # checkout must run before the local composite action can be loaded.
             - uses: actions/checkout@v4
 
             - id: setup
               uses: ./.github/actions/setup-e2e
-
-            - name: Install Rust/PVM contract toolchain
-              if: matrix.installRustPvm == true
-              shell: bash
-              run: |
-                  if ! command -v rustup >/dev/null 2>&1; then
-                    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
-                    echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-                    source "$HOME/.cargo/env"
-                  fi
-                  rustup toolchain install nightly --profile minimal --component rust-src
-                  rustup default nightly
-                  cargo install cargo-pvm-contract --git https://github.com/paritytech/cargo-pvm-contract --branch charles/cdm-integration --locked
-                  cargo pvm-contract help
 
             - name: Run E2E cell (one retry on transient testnet failures)
               uses: nick-fields/retry@v3
