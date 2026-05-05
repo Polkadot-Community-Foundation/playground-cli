@@ -18,6 +18,7 @@ import {
     setProcessGuardWarningHandler,
 } from "./utils/process-guard.js";
 import { clearWindowTitle } from "./utils/ui/theme/window-title.js";
+import { startVersionCheck } from "./utils/version-check.js";
 
 const DEPLOY_DESCRIPTION =
     "Build the project, upload to Bulletin, register a .dot domain, and optionally publish to Playground";
@@ -114,6 +115,12 @@ program.addCommand(await createDeployCommand());
 program.addCommand(logoutCommand);
 program.addCommand(updateCommand);
 
+// Kick off the "is there a newer dot release?" check immediately so the
+// jsDelivr fetch races the command rather than tacking onto its tail. The
+// banner (if any) is printed in the `finally` once the user-visible work
+// has finished — see `src/utils/version-check.ts` for the rationale.
+const versionCheck = startVersionCheck(pkg.version);
+
 try {
     await program.parseAsync();
 } catch (err) {
@@ -123,6 +130,8 @@ try {
     process.exitCode = 1;
 } finally {
     await flushTelemetry();
+    const banner = await versionCheck.render();
+    if (banner) process.stderr.write(banner);
 }
 
 process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);

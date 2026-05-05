@@ -11,6 +11,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { commandExists, TOOL_STEPS } from "../toolchain.js";
 import { parseGitHubRepoUrl } from "../mod/source.js";
+import { ghAuthHeaders } from "../gh-token.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -91,8 +92,16 @@ export interface ResolveRepoOptions {
 
 /**
  * Verifies that a GitHub repository URL is publicly accessible.
- * Throws ModablePreflightError for private or missing repos.
- * Skips silently for non-GitHub URLs or when the API is unreachable.
+ *
+ * Adds an `Authorization: Bearer <token>` header opportunistically when the
+ * user is `gh auth login`'d so the request lands against their personal
+ * 5000/hour quota instead of the shared 60/hour anonymous-IP quota — the
+ * only reliable defence against blanket rate-limiting on hackathon WiFi
+ * (see `src/utils/gh-token.ts`).
+ *
+ * Throws ModablePreflightError for private/missing repos and for explicit
+ * rate-limit responses (so we never silently pass off a private repo as
+ * public). Stays lenient for ambiguous 5xx errors.
  */
 export async function assertPublicGitHubRepo(url: string, f: typeof fetch = fetch): Promise<void> {
     const ref = parseGitHubRepoUrl(url);
@@ -100,7 +109,9 @@ export async function assertPublicGitHubRepo(url: string, f: typeof fetch = fetc
 
     let res: Response;
     try {
-        res = await f(`https://api.github.com/repos/${ref.owner}/${ref.repo}`);
+        res = await f(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, {
+            headers: { Accept: "application/vnd.github+json", ...(await ghAuthHeaders()) },
+        });
     } catch {
         return; // network error — can't verify, let downstream fail
     }
@@ -120,7 +131,13 @@ export async function assertPublicGitHubRepo(url: string, f: typeof fetch = fetc
             `${ref.owner}/${ref.repo} is private or does not exist — modable apps must use a public repository`,
         );
     }
-    // other non-ok status (rate limit, server error) — skip check
+    if (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0") {
+        throw new ModablePreflightError(
+            "GitHub rate limit exceeded for unauthenticated requests — could not verify that the repository is public. " +
+                'Run "gh auth login" to use your personal 5000/hour quota, then retry.',
+        );
+    }
+    // other non-ok status (5xx, transient server error) — skip check
 }
 
 export async function resolveRepositoryUrl(opts: ResolveRepoOptions): Promise<string> {

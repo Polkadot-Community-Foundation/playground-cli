@@ -16,6 +16,7 @@ import { resolve } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { withSpan, errorMessage } from "../telemetry.js";
 import { runCliCommand } from "../cli-runtime.js";
+import { ghAuthHeaders } from "../utils/gh-token.js";
 
 const REPO = "paritytech/playground-cli";
 
@@ -39,8 +40,11 @@ export function detectAsset(os: Os = platform() as Os, cpu: Cpu = arch() as Cpu)
 }
 
 export async function fetchLatestTag(fetchImpl: typeof fetch = fetch): Promise<string> {
+    // Opportunistic gh-auth header: `dot update` is the most ironic command
+    // to be denied by GitHub's anonymous rate limiter, so route the request
+    // through the user's 5000/hr quota when they're `gh auth login`'d.
     const res = await fetchImpl(`https://api.github.com/repos/${REPO}/releases/latest`, {
-        headers: { Accept: "application/vnd.github.v3+json" },
+        headers: { Accept: "application/vnd.github.v3+json", ...(await ghAuthHeaders()) },
     });
     if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
     const data = (await res.json()) as { tag_name?: string };

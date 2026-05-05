@@ -89,8 +89,26 @@ describe("assertPublicGitHubRepo", () => {
         ).resolves.toBeUndefined();
     });
 
-    it("skips check for rate-limit (403) responses", async () => {
-        const mockFetch: typeof fetch = async () => new Response("rate limited", { status: 403 });
+    it("throws an actionable error on an explicit rate-limit (403 with x-ratelimit-remaining: 0)", async () => {
+        const mockFetch: typeof fetch = async () =>
+            new Response("rate limited", {
+                status: 403,
+                headers: { "x-ratelimit-remaining": "0" },
+            });
+        await expect(
+            assertPublicGitHubRepo("https://github.com/foo/bar", mockFetch),
+        ).rejects.toThrow(/rate limit exceeded.*gh auth login/is);
+    });
+
+    it("does not throw on ambiguous 403 (e.g. abuse detection without rate-limit headers)", async () => {
+        const mockFetch: typeof fetch = async () => new Response("forbidden", { status: 403 });
+        await expect(
+            assertPublicGitHubRepo("https://github.com/foo/bar", mockFetch),
+        ).resolves.toBeUndefined();
+    });
+
+    it("does not throw on 5xx (transient server error)", async () => {
+        const mockFetch: typeof fetch = async () => new Response("oops", { status: 502 });
         await expect(
             assertPublicGitHubRepo("https://github.com/foo/bar", mockFetch),
         ).resolves.toBeUndefined();
