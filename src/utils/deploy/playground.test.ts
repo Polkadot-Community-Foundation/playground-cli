@@ -44,10 +44,12 @@ vi.mock("../../telemetry.js", () => ({
     errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 
+import { execFileSync } from "node:child_process";
 import {
     publishToPlayground,
     buildMetadata,
     normalizeDomain,
+    readGitBranch,
     readReadme,
     README_CAP_BYTES,
 } from "./playground.js";
@@ -160,6 +162,66 @@ describe("readReadme", () => {
             expect(readReadme(dir, 10).kind).toBe("ok");
         } finally {
             rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe("readGitBranch", () => {
+    // Helper: git invocations that bypass the maintainer's global gpg-signing
+    // and ignore-author-config settings, so the tests run identically on any
+    // dev machine and in CI.
+    const gitOpts = (cwd: string) => ({
+        cwd,
+        stdio: "ignore" as const,
+        env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "test",
+            GIT_AUTHOR_EMAIL: "test@example.com",
+            GIT_COMMITTER_NAME: "test",
+            GIT_COMMITTER_EMAIL: "test@example.com",
+            GIT_CONFIG_GLOBAL: "/dev/null", // ignore the user's global git config (gpgsign etc.)
+            GIT_CONFIG_SYSTEM: "/dev/null",
+        },
+    });
+
+    it("returns null for a non-git directory", () => {
+        const tmp = makeTmpDir();
+        try {
+            expect(readGitBranch(tmp)).toBeNull();
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    it("returns the branch name when the repo is on a named branch", () => {
+        const tmp = makeTmpDir();
+        try {
+            execFileSync("git", ["init", "-b", "feature/x"], gitOpts(tmp));
+            writeFileSync(join(tmp, "f"), "x");
+            execFileSync("git", ["add", "f"], gitOpts(tmp));
+            execFileSync("git", ["commit", "-m", "init"], gitOpts(tmp));
+            expect(readGitBranch(tmp)).toBe("feature/x");
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    it("returns null in detached-HEAD state (so we never write the literal 'HEAD' to metadata)", () => {
+        const tmp = makeTmpDir();
+        try {
+            execFileSync("git", ["init", "-b", "main"], gitOpts(tmp));
+            writeFileSync(join(tmp, "f"), "x");
+            execFileSync("git", ["add", "f"], gitOpts(tmp));
+            execFileSync("git", ["commit", "-m", "init"], gitOpts(tmp));
+            const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+                cwd: tmp,
+                encoding: "utf8",
+                env: gitOpts(tmp).env,
+            }).trim();
+            execFileSync("git", ["checkout", "--detach", sha], gitOpts(tmp));
+            expect(readGitBranch(tmp)).toBeNull();
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
         }
     });
 });

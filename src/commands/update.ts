@@ -127,7 +127,7 @@ export const updateCommand = new Command("update")
                 );
             } catch (err) {
                 console.log("failed");
-                console.error(`Could not reach GitHub: ${errorMessage(err)}`);
+                console.error(`Could not check for updates: ${errorMessage(err)}`);
                 process.exitCode = 1;
                 throw err;
             }

@@ -65,8 +65,8 @@ async function runModCommand(
         // mount SetupScreen and start writing files.
         //
         // The direct-domain path (`dot mod some-domain.dot`) has no metadata
-        // at this point and falls through to SetupScreen, where the same
-        // 404/401 surfaces from `resolveDefaultBranch` as a step failure.
+        // at this point and falls through to SetupScreen, where a private or
+        // missing repo surfaces as a `downloadGitHubTarball` 404 step failure.
         // Slightly less polished UX, but lifting the metadata fetch up here
         // just for symmetry would be a larger refactor.
         if (metadata?.repository) {

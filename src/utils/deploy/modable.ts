@@ -106,6 +106,11 @@ export interface ResolveRepoOptions {
  *
  * Throws ModablePreflightError on 404 with the same message as before so
  * existing callers / tests continue to pattern-match on the wording.
+ *
+ * Note on redirects: `fetch` follows 30x redirects by default, which is the
+ * behaviour we want here — GitHub returns 301 → new location for renamed
+ * repos, and the codeload tarball download will follow the same rename, so
+ * accepting the redirect mirrors the eventual download behaviour.
  */
 export async function assertPublicGitHubRepo(url: string, f: typeof fetch = fetch): Promise<void> {
     const ref = parseGitHubRepoUrl(url);
