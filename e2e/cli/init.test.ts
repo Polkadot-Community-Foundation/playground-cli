@@ -12,10 +12,11 @@
  * have those tools on PATH, often via wrapper scripts in /usr/bin that
  * delegate into $HOME/.cargo. PATH-stripping a wrapper without breaking
  * sibling binaries in the same dir isn't possible. The cold-start smoke
- * job (.github/workflows/e2e.yml :: init-cold-smoke) runs `dot init` in a
- * fresh ubuntu:22.04 container with no toolchain pre-installed and is the
- * authoritative test for detection + install-then-use. It runs daily +
- * workflow_dispatch.
+ * job (.github/workflows/e2e.yml :: init-cold-smoke) installs the dev/<branch>
+ * SEA binary via install.sh inside a fresh ubuntu:22.04 container with no
+ * toolchain pre-installed and is the authoritative test for detection +
+ * install-then-use. It runs after Dev Release on each PR, plus daily on
+ * main and on workflow_dispatch (against the latest stable release).
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";

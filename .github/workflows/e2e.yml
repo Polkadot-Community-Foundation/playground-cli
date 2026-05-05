@@ -8,6 +8,12 @@ on:
     schedule:
         - cron: "0 6 * * *"
     workflow_dispatch:
+    # Fires the init-cold-smoke job after Dev Release publishes the per-PR
+    # `dev/<branch>` tag, so the smoke can install via the same one-liner
+    # the dev-release bot posts on the PR.
+    workflow_run:
+        workflows: ["Dev Release"]
+        types: [completed]
 
 permissions:
     pull-requests: write     # sticky PR comment posting
@@ -478,58 +484,56 @@ jobs:
         # dependency must be installed AND become reachable to subsequent
         # init steps in the same process.
         #
-        # Excluded from per-PR runs because it pulls full toolchains
-        # (rustup, nightly, cdm, foundry, kubo) from the network and takes
-        # ~10 min. Daily cron + manual dispatch only.
+        # Install path: the same `curl … install.sh | VERSION=… bash`
+        # one-liner the dev-release bot posts on every PR — i.e. exactly
+        # what an end user runs. install.sh downloads the SEA binary,
+        # adds it to PATH, then runs `dot init` as its final step (errors
+        # surface via exit code; see CLAUDE.md "Non-obvious invariants").
+        # Going through the published binary catches Bun-compile-only
+        # regressions that `bun run src/index.ts` masks.
+        #
+        # Triggers:
+        #   - workflow_run (Dev Release succeeded) → install dev/<branch>
+        #     for that PR; this is the per-PR cold-start gate.
+        #   - schedule / workflow_dispatch on main → install latest
+        #     stable release (no VERSION).
         name: Init cold-start smoke test
         runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 30
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: |
+            github.event_name == 'schedule' ||
+            github.event_name == 'workflow_dispatch' ||
+            (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         steps:
-            - uses: actions/checkout@v4
-
-            - name: Run dot init in fresh ubuntu container
+            - name: Run dot init via install.sh in fresh ubuntu container
+              env:
+                  # Empty for schedule/dispatch → install.sh resolves the
+                  # latest stable tag. Set to dev/<head-branch> after a
+                  # successful Dev Release so we test the PR's binary.
+                  VERSION_OVERRIDE: ${{ github.event_name == 'workflow_run' && format('dev/{0}', github.event.workflow_run.head_branch) || '' }}
               run: |
                   docker run --rm \
-                    -v "${{ github.workspace }}:/work" \
-                    -w /work \
                     -e CI=true \
+                    -e VERSION="$VERSION_OVERRIDE" \
                     ubuntu:22.04 \
                     bash -eux -c '
-                      # Minimal prerequisites — anything beyond these is what
-                      # `dot init` is expected to install for itself.
+                      # install.sh needs only curl + ca-certs to fetch the
+                      # SEA binary. Anything beyond this is what `dot init`
+                      # (called from install.sh) installs for itself.
                       apt-get update -qq
                       DEBIAN_FRONTEND=noninteractive apt-get install -qq -y --no-install-recommends \
-                        curl ca-certificates bash unzip git build-essential sudo
-
-                      # bun (CLI runtime)
-                      export BUN_INSTALL=/usr/local/bun
-                      curl -fsSL https://bun.sh/install | bash
-                      export PATH="$BUN_INSTALL/bin:$PATH"
-
-                      # pnpm (package manager) — install via standalone script
-                      # so we do not depend on a pre-existing Node.
-                      curl -fsSL https://get.pnpm.io/install.sh | env SHELL=$(which bash) bash -
-                      export PNPM_HOME=/root/.local/share/pnpm
-                      export PATH="$PNPM_HOME:$PATH"
-
-                      pnpm install --frozen-lockfile
+                        curl ca-certificates bash
 
                       # ── The actual smoke test ──────────────────────────────
-                      # `dot init -y` runs the dependency installer end-to-end.
-                      # We run it via `bun run src/index.ts` rather than the
-                      # SEA binary because that is the same entry path used by
-                      # the e2e/cli/ vitest suite (see CLAUDE.md → E2E Tests),
-                      # which keeps the install-path code under test consistent
-                      # across local / per-PR / cold-start runs. The published-
-                      # binary install path is covered separately by
-                      # e2e-post-release.yml.
-                      #
-                      # If init reports "setup complete" with no failed rows,
-                      # every tool was installed AND was reachable to the
-                      # next step in the same process — which is the exact
-                      # path config that #118 broke.
-                      bun run src/index.ts init -y 2>&1 | tee /tmp/init.log
+                      # End-user install path. install.sh exits non-zero if
+                      # the embedded `dot init` fails, so the pipeline alone
+                      # catches the #118-class "installed but unreachable"
+                      # regression. We additionally grep the captured output
+                      # for failed-dependency markers because some failure
+                      # modes still let init exit 0 (e.g. an optional row
+                      # rendered with the failure glyph).
+                      curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh \
+                        | bash 2>&1 | tee /tmp/init.log
 
                       grep -q "setup complete" /tmp/init.log || {
                         echo "::error::dot init did not reach '\''setup complete'\''"
