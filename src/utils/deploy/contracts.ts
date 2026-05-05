@@ -180,32 +180,30 @@ async function compileCdm(opts: RunContractsPhaseOptions): Promise<CompiledArtif
 }
 
 /**
- * CDM skip-build path: use `detectContracts` to enumerate crates from
- * Cargo metadata (no build required), then resolve the expected
- * `target/<crate>.release.polkavm` path that `buildContracts` would have
- * produced. Throws with a clear message if any artifact is missing.
+ * CDM skip-build path: discover committed `target/*.release.polkavm`
+ * artifacts directly. Do not call `detectContracts` here: it shells out to
+ * `cargo metadata`, and CI skip-build runs intentionally do not install Cargo.
  */
 async function compileCdmSkipBuild(opts: RunContractsPhaseOptions): Promise<CompiledArtifact[]> {
     const projectDir = resolve(opts.projectDir);
-    const contracts = detectContracts(projectDir);
+    const targetDir = join(projectDir, "target");
 
-    if (contracts.length === 0) {
-        throwMissingArtifacts(projectDir, "cargo-contract build");
+    if (!existsSync(targetDir)) {
+        throwMissingArtifacts(targetDir, "cargo pvm-contract build --release");
     }
 
-    opts.onEvent({
-        kind: "compile-detected",
-        contracts: contracts.map((c) => c.name),
-    });
+    const artifacts = readdirSync(targetDir)
+        .filter((file) => file.endsWith(".release.polkavm"))
+        .sort()
+        .map((file) => ({
+            name: file.slice(0, -".release.polkavm".length),
+            pvmPath: join(targetDir, file),
+        }));
 
-    const artifacts: CompiledArtifact[] = [];
-    for (const contract of contracts) {
-        const pvmPath = join(projectDir, `target/${contract.name}.release.polkavm`);
-        if (!existsSync(pvmPath)) {
-            throwMissingArtifacts(pvmPath, "cargo-contract build");
-        }
-        artifacts.push({ name: contract.name, pvmPath });
+    if (artifacts.length === 0) {
+        throwMissingArtifacts(targetDir, "cargo pvm-contract build --release");
     }
+
     return artifacts;
 }
 
