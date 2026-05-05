@@ -10,13 +10,12 @@ import { extractFoundryBytecode, extractHardhatBytecode, hexToBytes } from "./co
 // These mocks exist purely for the skipBuild integration tests at the bottom of
 // this file. The pure-helper tests above do not need them.
 
-const { runStreamedMock, deployBatchMock, detectContractsMock } = vi.hoisted(() => ({
+const { runStreamedMock, deployBatchMock } = vi.hoisted(() => ({
     runStreamedMock: vi.fn(async () => {}),
     deployBatchMock: vi.fn(async () => ({
         addresses: ["0xdeadbeef"] as `0x${string}`[],
         chunkCount: 1,
     })),
-    detectContractsMock: vi.fn(() => [{ name: "flipper" }]),
 }));
 
 vi.mock("../process.js", () => ({
@@ -31,7 +30,7 @@ vi.mock("@dotdm/contracts", async (importOriginal) => {
             contracts: [{ crate: "flipper", pvmPath: "/tmp/flipper.polkavm" }],
             totalDurationMs: 1,
         })),
-        detectContracts: detectContractsMock,
+        detectContracts: vi.fn(() => [{ name: "flipper" }]),
         ContractDeployer: class MockContractDeployer {
             deployBatch = deployBatchMock;
         },
@@ -156,11 +155,7 @@ describe("extractHardhatBytecode", () => {
 
 import { runContractsPhase } from "./contracts.js";
 
-function makeOpts(
-    projectDir: string,
-    contractsType: "foundry" | "hardhat" | "cdm",
-    skipBuild: boolean,
-) {
+function makeOpts(projectDir: string, contractsType: "foundry" | "hardhat", skipBuild: boolean) {
     return {
         projectDir,
         contractsType,
@@ -259,54 +254,5 @@ describe("runContractsPhase skipBuild=true (hardhat)", () => {
         await expect(runContractsPhase(makeOpts(dir, "hardhat", true))).rejects.toThrow(
             /no pre-built contract artifacts found at/,
         );
-    });
-});
-
-describe("runContractsPhase skipBuild=true (cdm)", () => {
-    let dir: string;
-
-    beforeEach(() => {
-        runStreamedMock.mockClear();
-        deployBatchMock.mockClear();
-        detectContractsMock.mockClear();
-        dir = mkdtempSync(join(tmpdir(), "contracts-test-cdm-"));
-    });
-
-    it("uses existing .release.polkavm artifacts without Cargo metadata", async () => {
-        const targetDir = join(dir, "target");
-        mkdirSync(targetDir, { recursive: true });
-        writeFileSync(
-            join(targetDir, "counter.release.polkavm"),
-            new Uint8Array([0x50, 0x56, 0x4d]),
-        );
-        writeFileSync(
-            join(targetDir, "reader.release.polkavm"),
-            new Uint8Array([0x50, 0x56, 0x4d]),
-        );
-
-        const result = await runContractsPhase(makeOpts(dir, "cdm", true));
-
-        expect(runStreamedMock).not.toHaveBeenCalled();
-        expect(detectContractsMock).not.toHaveBeenCalled();
-        expect(result.deployed.map((c) => c.name)).toEqual(["counter", "reader"]);
-    });
-
-    it("throws with a clear message when target/ is missing", async () => {
-        mkdirSync(dir, { recursive: true });
-
-        await expect(runContractsPhase(makeOpts(dir, "cdm", true))).rejects.toThrow(
-            /no pre-built contract artifacts found at/,
-        );
-        expect(detectContractsMock).not.toHaveBeenCalled();
-    });
-
-    it("throws with a clear message when target/ contains no .release.polkavm files", async () => {
-        mkdirSync(join(dir, "target"), { recursive: true });
-        writeFileSync(join(dir, "target", "counter.release.abi.json"), "{}");
-
-        await expect(runContractsPhase(makeOpts(dir, "cdm", true))).rejects.toThrow(
-            /no pre-built contract artifacts found at/,
-        );
-        expect(detectContractsMock).not.toHaveBeenCalled();
     });
 });

@@ -110,6 +110,23 @@ jobs:
             - id: setup
               uses: ./.github/actions/setup-e2e
 
+            - name: Install Rust/CDM toolchain
+              if: matrix.cell == 'pr-deploy-cdm'
+              shell: bash
+              run: |
+                  sudo apt-get update -q
+                  sudo apt-get install -y -q --no-install-recommends build-essential pkg-config
+                  if ! command -v rustup >/dev/null 2>&1; then
+                    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+                    echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+                    source "$HOME/.cargo/env"
+                  fi
+                  rustup toolchain install nightly --profile minimal --component rust-src
+                  rustup default nightly
+                  curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash
+                  command -v cdm
+                  cargo pvm-contract --help
+
             - name: Run E2E cell (one retry on transient testnet failures)
               uses: nick-fields/retry@v3
               with:
