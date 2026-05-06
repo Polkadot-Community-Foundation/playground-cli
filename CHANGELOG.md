@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.18.1
+
+### Patch Changes
+
+- 7373966: Update `bulletin-deploy` to 0.7.10 for the latest DotNS/deploy fixes.
+
 ## 0.18.0
 
 ### Minor Changes
