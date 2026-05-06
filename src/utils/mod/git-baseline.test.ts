@@ -24,9 +24,7 @@ describe("createOptionalGitBaseline", () => {
             // No commits exist on HEAD — `git log` exits non-zero with the
             // "does not have any commits yet" wording on every supported git
             // version. We assert via execFileSync throwing.
-            expect(() =>
-                execFileSync("git", ["log"], { cwd: dir, stdio: "pipe" }),
-            ).toThrow();
+            expect(() => execFileSync("git", ["log"], { cwd: dir, stdio: "pipe" })).toThrow();
 
             expect(logs.join("\n")).toContain("initializing fresh git history");
         } finally {
