@@ -124,6 +124,8 @@ jobs:
                   rustup toolchain install nightly --profile minimal --component rust-src
                   rustup default nightly
                   curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash
+                  echo "$HOME/.cdm/bin" >> "$GITHUB_PATH"
+                  export PATH="$HOME/.cdm/bin:$PATH"
                   command -v cdm
                   cargo pvm-contract --help
 
