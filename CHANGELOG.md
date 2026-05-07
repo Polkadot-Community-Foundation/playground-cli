@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.19.5
+
+### Patch Changes
+
+- a5385ba: Upgrade bulletin-deploy from 0.7.10 to 0.7.12.
+
 ## 0.19.4
 
 ### Patch Changes
