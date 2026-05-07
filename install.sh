@@ -27,9 +27,9 @@ else
     TAG=$(curl -fsSL "https://data.jsdelivr.com/v1/packages/gh/$REPO/resolved" \
           | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' | head -n1) || true
   fi
+  case "$TAG" in v*|'') ;; *) TAG="v$TAG" ;; esac
 fi
 [ -z "$TAG" ] && echo "Could not determine latest release" && exit 1
-case "$TAG" in v*) ;; *) TAG="v$TAG" ;; esac
 
 # 3) Install binary
 spin() { while true; do for c in '|' '/' '-' '\'; do printf "\r%s %s" "$1" "$c"; sleep 0.1; done; done; }
