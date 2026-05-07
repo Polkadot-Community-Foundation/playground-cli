@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.19.1
+
+### Patch Changes
+
+- 8f1007c: Preserve explicit installer VERSION overrides such as dev branch release tags.
+
 ## 0.19.0
 
 ### Minor Changes
