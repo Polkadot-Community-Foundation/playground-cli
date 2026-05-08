@@ -1,10 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockGetChainAPI = vi.fn();
+const mockCreateClient = vi.fn();
+const mockGetWsProvider = vi.fn();
 const mockDestroy = vi.fn();
+const mockGetTypedApi = vi.fn((descriptor) => ({ descriptor }));
 
-vi.mock("@polkadot-apps/chain-client", () => ({
-    getChainAPI: (...args: any[]) => mockGetChainAPI(...args),
+vi.mock("polkadot-api", () => ({
+    createClient: (provider: unknown) => mockCreateClient(provider),
+}));
+
+vi.mock("polkadot-api/ws", () => ({
+    getWsProvider: (endpoints: unknown, options?: unknown) => mockGetWsProvider(endpoints, options),
+}));
+
+vi.mock("@parity/product-sdk-descriptors/paseo-asset-hub", () => ({
+    paseo_asset_hub: { genesis: "0xasset" },
+}));
+
+vi.mock("@parity/product-sdk-descriptors/bulletin", () => ({
+    bulletin: { genesis: "0xbulletin" },
+}));
+
+vi.mock("@parity/product-sdk-descriptors/individuality", () => ({
+    individuality: { genesis: "0xpeople" },
 }));
 
 // Re-import after each test to reset the singleton
@@ -13,43 +31,46 @@ let destroyConnection: typeof import("./connection.js").destroyConnection;
 
 beforeEach(async () => {
     vi.resetModules();
-    mockGetChainAPI.mockReset();
+    mockCreateClient.mockReset();
+    mockGetWsProvider.mockReset();
     mockDestroy.mockReset();
+    mockGetTypedApi.mockClear();
+    mockCreateClient.mockImplementation(() => ({
+        destroy: mockDestroy,
+        getTypedApi: mockGetTypedApi,
+    }));
+    mockGetWsProvider.mockImplementation((endpoints) => ({ endpoints }));
     const mod = await import("./connection.js");
     getConnection = mod.getConnection;
     destroyConnection = mod.destroyConnection;
 });
 
 describe("getConnection", () => {
-    it("calls getChainAPI with 'paseo'", async () => {
-        mockGetChainAPI.mockResolvedValue({ destroy: mockDestroy });
+    it("creates direct clients for the three Paseo chains", async () => {
         await getConnection();
-        expect(mockGetChainAPI).toHaveBeenCalledWith("paseo");
+        expect(mockCreateClient).toHaveBeenCalledTimes(3);
+        expect(mockGetTypedApi).toHaveBeenCalledTimes(3);
     });
 
     it("returns the same client on subsequent calls (singleton)", async () => {
-        const fakeClient = { destroy: mockDestroy };
-        mockGetChainAPI.mockResolvedValue(fakeClient);
-
         const first = await getConnection();
         const second = await getConnection();
 
         expect(first).toBe(second);
-        expect(mockGetChainAPI).toHaveBeenCalledTimes(1);
+        expect(mockCreateClient).toHaveBeenCalledTimes(3);
     });
 
     it("does not race when called concurrently", async () => {
-        const fakeClient = { destroy: mockDestroy };
-        mockGetChainAPI.mockResolvedValue(fakeClient);
-
         const [a, b] = await Promise.all([getConnection(), getConnection()]);
 
         expect(a).toBe(b);
-        expect(mockGetChainAPI).toHaveBeenCalledTimes(1);
+        expect(mockCreateClient).toHaveBeenCalledTimes(3);
     });
 
     it("throws a readable error on connection failure", async () => {
-        mockGetChainAPI.mockRejectedValue(new Error("WebSocket failed"));
+        mockCreateClient.mockImplementation(() => {
+            throw new Error("WebSocket failed");
+        });
 
         await expect(getConnection()).rejects.toThrow("Could not connect to Paseo network");
     });
@@ -58,14 +79,18 @@ describe("getConnection", () => {
         // Regression guard — historically the outer message only said "check
         // your internet connection", which is misleading when the cause is a
         // descriptor mismatch or a bad endpoint URL.
-        mockGetChainAPI.mockRejectedValue(new Error("ECONNREFUSED 127.0.0.1:9944"));
+        mockCreateClient.mockImplementation(() => {
+            throw new Error("ECONNREFUSED 127.0.0.1:9944");
+        });
 
         await expect(getConnection()).rejects.toThrow(/ECONNREFUSED 127\.0\.0\.1:9944/);
     });
 
     it("preserves the underlying error as Error.cause", async () => {
         const underlying = new Error("descriptor mismatch");
-        mockGetChainAPI.mockRejectedValue(underlying);
+        mockCreateClient.mockImplementation(() => {
+            throw underlying;
+        });
 
         try {
             await getConnection();
@@ -76,40 +101,32 @@ describe("getConnection", () => {
     });
 
     it("allows retry after connection failure", async () => {
-        mockGetChainAPI.mockRejectedValueOnce(new Error("timeout"));
-        const fakeClient = { destroy: mockDestroy };
-        mockGetChainAPI.mockResolvedValueOnce(fakeClient);
+        mockCreateClient.mockImplementationOnce(() => {
+            throw new Error("timeout");
+        });
 
         await expect(getConnection()).rejects.toThrow();
         const client = await getConnection();
-        expect(client).toBe(fakeClient);
-        expect(mockGetChainAPI).toHaveBeenCalledTimes(2);
+        expect(client).toBeTruthy();
+        expect(mockCreateClient).toHaveBeenCalledTimes(4);
     });
 });
 
 describe("destroyConnection", () => {
     it("calls destroy on the client", async () => {
-        const fakeClient = { destroy: mockDestroy };
-        mockGetChainAPI.mockResolvedValue(fakeClient);
-
         await getConnection();
         destroyConnection();
 
-        expect(mockDestroy).toHaveBeenCalledTimes(1);
+        expect(mockDestroy).toHaveBeenCalledTimes(3);
     });
 
     it("allows reconnection after destroy", async () => {
-        const client1 = { destroy: vi.fn() };
-        const client2 = { destroy: vi.fn() };
-        mockGetChainAPI.mockResolvedValueOnce(client1).mockResolvedValueOnce(client2);
-
         const first = await getConnection();
         destroyConnection();
         const second = await getConnection();
 
-        expect(first).toBe(client1);
-        expect(second).toBe(client2);
-        expect(mockGetChainAPI).toHaveBeenCalledTimes(2);
+        expect(first).not.toBe(second);
+        expect(mockCreateClient).toHaveBeenCalledTimes(6);
     });
 
     it("is safe to call when not connected", () => {

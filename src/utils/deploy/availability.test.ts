@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // to drive each classification branch — no `classifyName` mock anymore.
 //
 // Ownership check is driven by the caller's H160 (derived from SS58 via
-// `@polkadot-apps/address::ss58ToH160`), so the mock reflects the full
+// `@parity/product-sdk-address::ss58ToH160`), so the mock reflects the full
 // `{ owned, owner }` shape. `getUserPopStatus` + `isTestnet` feed the
 // `needsPopUpgrade` prediction that's threaded into the summary card's
 // phone-approval count.

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import type { CdmJson } from "@polkadot-apps/contracts";
+import type { CdmJson } from "@parity/product-sdk-contracts";
 import { CDM_REGISTRY_ADDRESS } from "../config.js";
 
 const { createContractFromClientMock, getAddressQueryMock } = vi.hoisted(() => ({
@@ -7,7 +7,7 @@ const { createContractFromClientMock, getAddressQueryMock } = vi.hoisted(() => (
     getAddressQueryMock: vi.fn(),
 }));
 
-vi.mock("@polkadot-apps/contracts", () => ({
+vi.mock("@parity/product-sdk-contracts", () => ({
     createContractFromClient: (...args: unknown[]) => createContractFromClientMock(...args),
 }));
 

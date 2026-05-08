@@ -10,7 +10,7 @@ const { fromClientMock, getContractMock, withRequiredLiveContractAddressesMock }
     }),
 );
 
-vi.mock("@polkadot-apps/contracts", () => ({
+vi.mock("@parity/product-sdk-contracts", () => ({
     ContractManager: {
         fromClient: (...args: unknown[]) => fromClientMock(...args),
     },

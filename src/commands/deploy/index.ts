@@ -2,7 +2,6 @@ import React from "react";
 import { resolve } from "node:path";
 import { Command, Option } from "commander";
 import { render } from "ink";
-import { DeployScreen } from "./DeployScreen.js";
 import { renderSummaryText } from "./summary.js";
 import { errorMessage, withSpan } from "../../telemetry.js";
 import { resolveSigner, SignerNotAvailableError, type ResolvedSigner } from "../../utils/signer.js";
@@ -12,14 +11,16 @@ import { checkAllowance, LOW_TX_THRESHOLD } from "../../utils/account/allowance.
 import { onProcessShutdown } from "../../utils/process-guard.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import {
-    runDeploy,
     resolveSignerSetup,
+    type SignerMode,
+    type DeployApproval,
+} from "../../utils/deploy/signerMode.js";
+import {
     checkDomainAvailability,
     formatAvailability,
-    type SignerMode,
-    type DeployOutcome,
-    type DeployEvent,
-} from "../../utils/deploy/index.js";
+    type AvailabilityResult,
+} from "../../utils/deploy/availability.js";
+import type { DeployOutcome, DeployEvent } from "../../utils/deploy/run.js";
 import { buildSummaryView } from "./summary.js";
 import { detectContractsType, type ContractsType } from "../../utils/build/detect.js";
 import { loadDetectInput } from "../../utils/build/runner.js";
@@ -372,8 +373,9 @@ async function runHeadless(ctx: {
             "cli.deploy.moddable": moddable ? "true" : "false",
             "cli.deploy.contracts": deployContracts ? "true" : "false",
         },
-        () =>
-            runDeploy({
+        async () => {
+            const { runDeploy } = await import("../../utils/deploy/run.js");
+            return await runDeploy({
                 projectDir: ctx.projectDir,
                 buildDir,
                 skipBuild,
@@ -390,7 +392,8 @@ async function runHeadless(ctx: {
                 plan: availability.plan,
                 env: ctx.env,
                 onEvent: (event) => logHeadlessEvent(event),
-            }),
+            });
+        },
     );
 
     printFinalResult(outcome);
@@ -436,49 +439,66 @@ function runInteractive(ctx: {
     const contractsType = safeDetectContractsType(ctx.projectDir);
     return new Promise((resolvePromise, rejectPromise) => {
         let settled = false;
-        const app = render(
-            React.createElement(DeployScreen, {
-                projectDir: ctx.projectDir,
-                domain: ctx.opts.domain ?? null,
-                buildDir: ctx.opts.buildDir ?? null,
-                mode: (ctx.opts.signer as SignerMode | undefined) ?? null,
-                publishToPlayground:
-                    ctx.opts.playground !== undefined ? Boolean(ctx.opts.playground) : null,
-                playgroundPrivate: Boolean(ctx.opts.private),
-                // Only pre-fill when the user explicitly asked to skip via `--no-build`;
-                // otherwise show the prompt so they can hit Enter on the default "yes".
-                skipBuild: ctx.opts.build === false ? true : null,
-                contractsType,
-                deployContracts: ctx.opts.contracts !== undefined ? ctx.opts.contracts : null,
-                moddable:
-                    ctx.opts.moddable === true ? true : ctx.opts.moddable === false ? false : null,
-                userSigner: ctx.userSigner,
-                onDone: (outcome: DeployOutcome | null) => {
-                    if (settled) return;
-                    settled = true;
-                    app.unmount();
-                    if (outcome === null) {
-                        process.exitCode = 1;
-                        rejectPromise(new Error("Deploy was cancelled or failed."));
-                    } else {
-                        resolvePromise();
-                    }
-                },
-            }),
-        );
+        let app: ReturnType<typeof render> | null = null;
+        import("./DeployScreen.js")
+            .then(({ DeployScreen }) => {
+                app = render(
+                    React.createElement(DeployScreen, {
+                        projectDir: ctx.projectDir,
+                        domain: ctx.opts.domain ?? null,
+                        buildDir: ctx.opts.buildDir ?? null,
+                        mode: (ctx.opts.signer as SignerMode | undefined) ?? null,
+                        publishToPlayground:
+                            ctx.opts.playground !== undefined ? Boolean(ctx.opts.playground) : null,
+                        playgroundPrivate: Boolean(ctx.opts.private),
+                        // Only pre-fill when the user explicitly asked to skip via `--no-build`;
+                        // otherwise show the prompt so they can hit Enter on the default "yes".
+                        skipBuild: ctx.opts.build === false ? true : null,
+                        contractsType,
+                        deployContracts:
+                            ctx.opts.contracts !== undefined ? ctx.opts.contracts : null,
+                        moddable:
+                            ctx.opts.moddable === true
+                                ? true
+                                : ctx.opts.moddable === false
+                                  ? false
+                                  : null,
+                        userSigner: ctx.userSigner,
+                        onDone: (outcome: DeployOutcome | null) => {
+                            if (settled) return;
+                            settled = true;
+                            app?.unmount();
+                            if (outcome === null) {
+                                process.exitCode = 1;
+                                rejectPromise(new Error("Deploy was cancelled or failed."));
+                            } else {
+                                resolvePromise();
+                            }
+                        },
+                    }),
+                );
 
-        // `waitUntilExit()` resolves when the Ink app unmounts and rejects on
-        // render errors. Either resolution could happen WITHOUT `onDone`
-        // firing — e.g. Ink's error boundary unmounting on a render throw —
-        // in which case the outer promise would hang forever. Force-settle
-        // if we see the app go down unexpectedly.
-        app.waitUntilExit()
-            .then(() => {
-                if (!settled) {
-                    settled = true;
-                    process.exitCode = 1;
-                    rejectPromise(new Error("TUI closed unexpectedly before the deploy finished."));
-                }
+                // `waitUntilExit()` resolves when the Ink app unmounts and rejects on
+                // render errors. Either resolution could happen WITHOUT `onDone`
+                // firing — e.g. Ink's error boundary unmounting on a render throw —
+                // in which case the outer promise would hang forever. Force-settle
+                // if we see the app go down unexpectedly.
+                app.waitUntilExit()
+                    .then(() => {
+                        if (!settled) {
+                            settled = true;
+                            process.exitCode = 1;
+                            rejectPromise(
+                                new Error("TUI closed unexpectedly before the deploy finished."),
+                            );
+                        }
+                    })
+                    .catch((err) => {
+                        if (!settled) {
+                            settled = true;
+                            rejectPromise(err);
+                        }
+                    });
             })
             .catch((err) => {
                 if (!settled) {

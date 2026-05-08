@@ -13,19 +13,24 @@ import type { Dirent } from "node:fs";
 import { readdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ss58Encode } from "@polkadot-apps/address";
+import { ss58Encode } from "@parity/product-sdk-address";
 import {
+    createSessionSignerForAccount,
     createTerminalAdapter,
     waitForSessions,
     renderQrCode,
     type TerminalAdapter,
     type PairingStatus,
     type AttestationStatus,
-    type StoredUserSession,
-} from "@polkadot-apps/terminal";
-import { createTxSigner } from "./session-signer-patch.js";
+    type UserSession,
+} from "@parity/product-sdk-terminal";
 import type { PolkadotSigner } from "polkadot-api";
-import { DAPP_ID, TERMINAL_METADATA_URL, getChainConfig } from "../config.js";
+import {
+    DAPP_ID,
+    PLAYGROUND_PRODUCT_ID,
+    TERMINAL_METADATA_URL,
+    getChainConfig,
+} from "../config.js";
 
 /** How long we wait for the statement store to publish the pairing QR. */
 const QR_TIMEOUT_MS = 60_000;
@@ -36,6 +41,17 @@ function createAdapter(): TerminalAdapter {
         metadataUrl: TERMINAL_METADATA_URL,
         endpoints: getChainConfig().peopleEndpoints,
     });
+}
+
+function createPlaygroundSigner(session: UserSession): PolkadotSigner {
+    return createSessionSignerForAccount(session, {
+        productId: PLAYGROUND_PRODUCT_ID,
+        derivationIndex: 0,
+    });
+}
+
+function sessionSigningAddress(session: UserSession): string {
+    return ss58Encode(createPlaygroundSigner(session).publicKey);
 }
 
 export type ConnectResult =
@@ -66,8 +82,7 @@ export async function connect(): Promise<ConnectResult> {
 
     const sessions = await waitForSessions(adapter);
     if (sessions.length > 0) {
-        const pubkey = new Uint8Array(sessions[0].remoteAccount.accountId);
-        return { kind: "existing", address: ss58Encode(pubkey) };
+        return { kind: "existing", address: sessionSigningAddress(sessions[0]) };
     }
 
     // Start authenticate — this triggers the pairing flow and QR emission
@@ -143,29 +158,36 @@ export async function waitForLogin(
         },
     );
 
+    let authenticated = false;
     let address: string | null = null;
     try {
         const result = await authPromise;
         result.match(
             (session) => {
                 if (session) {
-                    const pubkey = new Uint8Array(session.remoteAccount.accountId);
-                    address = ss58Encode(pubkey);
-                    onStatus({ step: "success", address });
+                    authenticated = true;
                 }
             },
             (error) => {
                 onStatus({ step: "error", message: error.message });
             },
         );
+        if (authenticated) {
+            const sessions = await waitForSessions(adapter, 3000);
+            if (sessions.length > 0) {
+                address = sessionSigningAddress(sessions[0]);
+                onStatus({ step: "success", address });
+            } else {
+                onStatus({
+                    step: "error",
+                    message: "Login succeeded but the local session was not available",
+                });
+            }
+        }
     } finally {
         // Always clear subscriptions, even if authPromise rejects.
         unsubPairing();
         unsubAttestation();
-    }
-
-    if (address) {
-        await waitForSessions(adapter, 3000);
     }
 
     return address;
@@ -203,9 +225,8 @@ export async function getSessionSigner(): Promise<SessionHandle | null> {
     }
 
     const session = sessions[0];
-    const pubkey = new Uint8Array(session.remoteAccount.accountId);
-    const address = ss58Encode(pubkey);
-    const signer = createTxSigner(session);
+    const signer = createPlaygroundSigner(session);
+    const address = ss58Encode(signer.publicKey);
 
     let destroyed = false;
     const destroy = () => {
@@ -236,7 +257,7 @@ export type LogoutStatus =
 export interface LogoutHandle {
     adapter: TerminalAdapter;
     address: string;
-    session: StoredUserSession;
+    session: UserSession;
 }
 
 /**
@@ -254,8 +275,7 @@ export async function findSession(): Promise<LogoutHandle | null> {
         return null;
     }
     const session = sessions[0];
-    const pubkey = new Uint8Array(session.remoteAccount.accountId);
-    const address = ss58Encode(pubkey);
+    const address = sessionSigningAddress(session);
     return { adapter, address, session };
 }
 
@@ -324,7 +344,7 @@ export async function waitForLogout(
 export async function clearLocalAppStorage(
     dir: string = join(homedir(), ".polkadot-apps"),
 ): Promise<void> {
-    // @polkadot-apps/terminal's node-storage only writes flat `${appId}_${key}.json`
+    // @parity/product-sdk-terminal's node-storage only writes flat `${appId}_${key}.json`
     // files, never subdirectories. Filter by isFile() anyway so a future change
     // up-stack (or an unrelated user stash) can't trip this helper.
     let entries: Dirent[];

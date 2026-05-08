@@ -5,9 +5,7 @@
  * (balances, registry entries) after CLI operations.
  */
 
-import { getChainAPI } from "@polkadot-apps/chain-client";
-
-type PaseoClient = Awaited<ReturnType<typeof getChainAPI<"paseo">>>;
+import { destroyConnection, getConnection, type PaseoClient } from "../../../src/utils/connection.js";
 
 const CONNECT_TIMEOUT_MS = 30_000;
 
@@ -21,7 +19,7 @@ let client: PaseoClient | null = null;
 export async function getTestClient(): Promise<PaseoClient> {
 	if (!clientPromise) {
 		clientPromise = Promise.race([
-			getChainAPI("paseo").then((c) => {
+			getConnection().then((c) => {
 				client = c;
 				return c;
 			}),
@@ -45,7 +43,7 @@ export async function getTestClient(): Promise<PaseoClient> {
  */
 export function destroyTestClient(): void {
 	if (client) {
-		client.destroy();
+		destroyConnection();
 		client = null;
 	}
 	clientPromise = null;
@@ -59,4 +57,3 @@ export async function queryBalance(address: string): Promise<bigint> {
 	const account = await c.assetHub.query.System.Account.getValue(address, { at: "best" });
 	return account.data.free;
 }
-

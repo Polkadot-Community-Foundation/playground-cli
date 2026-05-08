@@ -14,9 +14,9 @@
  * check (no fees needed) so its substrate balance doesn't matter.
  */
 
-import { ss58Encode, deriveH160, type HexString } from "@polkadot-apps/address";
-import { getDevPublicKey, type DevAccountName } from "@polkadot-apps/tx";
-import { seedToAccount } from "@polkadot-apps/keys";
+import { ss58Encode, deriveH160, type HexString } from "@parity/product-sdk-address";
+import { getDevPublicKey, type DevAccountName } from "@parity/product-sdk-tx";
+import { seedToAccount } from "@parity/product-sdk-keys";
 
 export interface TestAccount {
 	name: string;

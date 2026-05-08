@@ -4,9 +4,9 @@
  * Queries the on-chain playground registry to verify deploy outcomes.
  */
 
-import { ContractManager } from "@polkadot-apps/contracts";
-import { createDevSigner, getDevPublicKey } from "@polkadot-apps/tx";
-import { ss58Encode } from "@polkadot-apps/address";
+import { ContractManager } from "@parity/product-sdk-contracts";
+import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
+import { ss58Encode } from "@parity/product-sdk-address";
 import { getTestClient } from "../helpers/chain.js";
 import {
 	PLAYGROUND_REGISTRY_CONTRACT,

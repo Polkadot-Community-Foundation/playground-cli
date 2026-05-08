@@ -6,9 +6,9 @@
  * once at startup and thread the result through all operations.
  */
 
-import { ss58Encode } from "@polkadot-apps/address";
-import { createDevSigner, getDevPublicKey, type DevAccountName } from "@polkadot-apps/tx";
-import { seedToAccount } from "@polkadot-apps/keys";
+import { ss58Encode } from "@parity/product-sdk-address";
+import { createDevSigner, getDevPublicKey, type DevAccountName } from "@parity/product-sdk-tx";
+import { seedToAccount } from "@parity/product-sdk-keys";
 import type { PolkadotSigner } from "polkadot-api";
 import { getSessionSigner, type SessionHandle } from "./auth.js";
 

@@ -15,20 +15,19 @@ import {
     type MarkKind,
 } from "../../utils/ui/theme/index.js";
 import {
-    runDeploy,
     resolveSignerSetup,
-    checkDomainAvailability,
-    formatAvailability,
-    readReadme,
-    README_CAP_BYTES,
-    type AvailabilityResult,
-    type DeployEvent,
-    type DeployOutcome,
-    type DeployPlan,
     type SignerMode,
     type DeployApproval,
-    type SigningEvent,
-} from "../../utils/deploy/index.js";
+} from "../../utils/deploy/signerMode.js";
+import {
+    checkDomainAvailability,
+    formatAvailability,
+    type AvailabilityResult,
+    type DeployPlan,
+} from "../../utils/deploy/availability.js";
+import { readReadme, README_CAP_BYTES } from "../../utils/deploy/playground.js";
+import type { DeployEvent, DeployOutcome } from "../../utils/deploy/run.js";
+import type { SigningEvent } from "../../utils/deploy/signingProxy.js";
 import { buildSummaryView } from "./summary.js";
 import {
     initialRunningState,
@@ -875,6 +874,7 @@ function RunningStage({
 
         (async () => {
             try {
+                const { runDeploy } = await import("../../utils/deploy/run.js");
                 const outcome = await runDeploy({
                     projectDir,
                     buildDir: inputs.buildDir,

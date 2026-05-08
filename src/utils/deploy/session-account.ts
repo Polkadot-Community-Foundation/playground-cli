@@ -7,8 +7,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { SessionKeyManager, type SessionKeyInfo } from "@polkadot-apps/keys";
-import type { KvStore } from "@polkadot-apps/storage";
+import { SessionKeyManager, type SessionKeyInfo } from "@parity/product-sdk-keys";
+import type { KvStore } from "@parity/product-sdk-storage";
 
 export type { SessionKeyInfo };
 

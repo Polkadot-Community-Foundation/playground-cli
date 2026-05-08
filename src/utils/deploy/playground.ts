@@ -19,10 +19,10 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createClient } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider/web";
-import { withPolkadotSdkCompat } from "polkadot-api/polkadot-sdk-compat";
-import { bulletin } from "@polkadot-apps/descriptors/bulletin";
-import { upload } from "@polkadot-apps/bulletin";
+import { getWsProvider } from "polkadot-api/ws";
+import { bulletin } from "@parity/product-sdk-descriptors/bulletin";
+import { calculateCid } from "@parity/product-sdk-bulletin";
+import { createDevSigner, submitAndWatch, withRetry } from "@parity/product-sdk-tx";
 import { getRegistryContract } from "../registry.js";
 import { getConnection } from "../connection.js";
 import { getChainConfig, type Env } from "../../config.js";
@@ -192,7 +192,7 @@ export async function publishToPlayground(
     const metadataBytes = new Uint8Array(Buffer.from(JSON.stringify(metadata), "utf8"));
 
     options.onLogEvent?.({ kind: "info", message: "Uploading playground metadata to Bulletin…" });
-    // Storage-only upload via `@polkadot-apps/bulletin`. Submits
+    // Storage-only upload using product-sdk Bulletin CID helpers. Submits
     // `TransactionStorage.store` directly — no DotNS, no `register()`, no
     // `setContenthash()`. The signer defaults to the Alice dev signer on
     // testnet, which is fine for a small metadata JSON.
@@ -208,17 +208,23 @@ export async function publishToPlayground(
         async () => {
             const cfg = getChainConfig(options.env);
             const bulletinClient = createClient(
-                withPolkadotSdkCompat(
-                    getWsProvider({
-                        endpoints: [cfg.bulletinRpc, ...cfg.bulletinRpcFallbacks],
-                        heartbeatTimeout: BULLETIN_WS_HEARTBEAT_MS,
-                    }),
-                ),
+                getWsProvider([cfg.bulletinRpc, ...cfg.bulletinRpcFallbacks], {
+                    heartbeatTimeout: BULLETIN_WS_HEARTBEAT_MS,
+                }),
             );
             try {
                 const bulletinApi = bulletinClient.getTypedApi(bulletin);
-                const result = await upload(bulletinApi, metadataBytes);
-                return result.cid;
+                const cid = (await calculateCid(metadataBytes)).toString();
+                const signer = createDevSigner("Alice");
+                await withRetry(() =>
+                    submitAndWatch(
+                        bulletinApi.tx.TransactionStorage.store({
+                            data: metadataBytes,
+                        }),
+                        signer,
+                    ),
+                );
+                return cid;
             } finally {
                 bulletinClient.destroy();
             }

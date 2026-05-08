@@ -118,7 +118,7 @@ describe("subscribe-before-assignment pattern", () => {
 // ── Sign-out flow ─────────────────────────────────────────────────────────────
 
 /**
- * Minimal stand-in for `@polkadot-apps/terminal`'s TerminalAdapter, wide enough
+ * Minimal stand-in for `@parity/product-sdk-terminal`'s TerminalAdapter, wide enough
  * for what `waitForLogout` actually touches. We don't import the real type here
  * so the test file stays cheap to run; a compile error if the real API drifts
  * is caught by the consuming call site in auth.ts, not here.

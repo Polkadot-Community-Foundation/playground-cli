@@ -6,7 +6,7 @@
  */
 
 import { Enum } from "polkadot-api";
-import { submitAndWatch, createDevSigner } from "@polkadot-apps/tx";
+import { submitAndWatch, createDevSigner } from "@parity/product-sdk-tx";
 import type { PaseoClient } from "../connection.js";
 import { remainingAuthorizationExtent } from "./authorizationExtent.js";
 

@@ -26,6 +26,8 @@ export interface ChainConfig {
     bulletinRpcFallbacks: string[];
     /** WebSocket endpoints for the People chain (SSO / session discovery). */
     peopleEndpoints: string[];
+    /** HTTP IPFS gateway for Bulletin content reads. */
+    bulletinGateway: string;
     /** Viewer URL shown to users after a successful deploy. */
     appViewerOrigin: string;
 }
@@ -35,6 +37,7 @@ const TESTNET: ChainConfig = {
     bulletinRpc: "wss://paseo-bulletin-rpc.polkadot.io",
     bulletinRpcFallbacks: [],
     peopleEndpoints: ["wss://paseo-people-next-rpc.polkadot.io"],
+    bulletinGateway: "https://paseo-ipfs.polkadot.io/ipfs/",
     appViewerOrigin: "https://dot.li",
 };
 
@@ -68,6 +71,9 @@ export const CDM_REGISTRY_ADDRESS = "0xae344f7f0f91d3a2176032af2990abcc7606c7d4"
 
 /** Identifier the terminal adapter reports during SSO. Kept stable so mobile pairings persist across releases. */
 export const DAPP_ID = "dot-cli";
+
+/** Product account identifier used for mobile signing. Matches playground.dot's host product id. */
+export const PLAYGROUND_PRODUCT_ID = "playground.dot";
 
 /**
  * Runtime metadata the terminal adapter fetches to render transactions on the

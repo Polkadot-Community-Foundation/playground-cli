@@ -2,7 +2,7 @@
  * Tests for the Revive-mapping wrapper.
  *
  * `mapping.ts` itself is thin (delegates to `createInkSdk` + `ensureAccountMapped`
- * from `@polkadot-apps/tx`, both already tested upstream). The thing that
+ * from `@parity/product-sdk-tx`, both already tested upstream). The thing that
  * matters for us is the wrapper's branching and argument plumbing:
  *
  *   - `checkMapping` reflects `addressIsMapped`
@@ -22,7 +22,7 @@ vi.mock("@polkadot-api/sdk-ink", () => ({
     createInkSdk: (...args: unknown[]) => mockCreateInkSdk(...args),
 }));
 
-vi.mock("@polkadot-apps/tx", () => ({
+vi.mock("@parity/product-sdk-tx", () => ({
     ensureAccountMapped: (...args: unknown[]) =>
         mockEnsureAccountMapped(...(args as [string, unknown, unknown, unknown])),
 }));
