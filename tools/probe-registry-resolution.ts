@@ -16,9 +16,9 @@
  *   2  unexpected error (RPC down, type error, etc.)
  */
 
-import { ContractManager, type CdmJson } from "@polkadot-apps/contracts";
-import { createDevSigner, getDevPublicKey } from "@polkadot-apps/tx";
-import { ss58Encode } from "@polkadot-apps/address";
+import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
+import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
+import { ss58Encode } from "@parity/product-sdk-address";
 import type { HexString } from "polkadot-api";
 import { getConnection, destroyConnection } from "../src/utils/connection.js";
 import {
