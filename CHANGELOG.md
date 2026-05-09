@@ -1,5 +1,18 @@
 # playground-cli
 
+## 0.20.0
+
+### Minor Changes
+
+- 0b5960c: Migrate the CLI runtime from `@polkadot-apps/*` packages to `@parity/product-sdk-*`, including terminal product-account signing for `playground.dot`. The QR-paired session signer routes transaction signing through `session.signPayload` (no `<Bytes>` envelope) so the chain accepts the produced signature, and arbitrary-byte signing through `session.signRaw` (envelope applied by mobile, correct for free-form data). Product-SDK packages use caret ranges so upstream patch and minor releases land automatically on a fresh `pnpm install`.
+
+### Patch Changes
+
+- dc9eead: Purge `@polkadot-apps/*` from the dependency tree. `@dotdm/contracts` is pinned to `1.1.1-dev.1778274929` (the dev release from the CDM monorepo's product-sdk migration PR; the `latest` stable still pulls the legacy stack), and `@novasamatech/*` is forced to `0.7.8-2` via `pnpm.overrides` so transitive consumers come along. `grep '@polkadot-apps/' pnpm-lock.yaml` now returns zero hits. The runtime is effectively PAPI 2.x-only — the lockfile still mentions `polkadot-api@1.23.3` but only as a vestigial declaration of the bundled `@parity/dotns-cli` CLI binary, which inlines its deps and never resolves them at runtime.
+- ac4aaaa: Migrate the diagnostic tools (`tools/list-registry-apps.ts`, `tools/probe-registry-resolution.ts`) off direct `@polkadot-apps/*` imports onto `@parity/product-sdk-{contracts,tx,address}`. The list-registry-apps script now hits Paseo's public IPFS gateway directly (since `@parity/product-sdk-bulletin`'s `queryJson` is host-only and these tools run as plain Bun processes). Adds a CI grep guard so direct `@polkadot-apps/*` imports under `src/`, `e2e/`, `scripts/`, `tools/` fail the Format job.
+- 2398dce: Upgrade `bulletin-deploy` from `0.7.12` to `0.7.13`. The new release adds a `--env <id>` selector to the upstream CLI binary plus additive deploy span attributes (`deploy.env`, `deploy.network`, `deploy.environments_source`); library consumers see zero behaviour change and the default endpoint resolves to the same paseo-next WSS as before.
+- cfc487c: Upgrade `@parity/product-sdk-terminal` to `^0.2.0` and the rest of `@parity/product-sdk-*` to their latest patch releases. The new terminal release includes both fixes the CLI was working around: (1) `createSessionSignerForAccount` now uses a split-callback PJS signer (tx → `session.signPayload`, bytes → `session.signRaw`), so the local PJS-based replacement we'd inlined is gone; (2) `destroy()` is now async and drains pending statement-subscription unsubscribes before tearing down the lazy client, eliminating the `DestroyedError: Client destroyed` unhandled rejection on `dot logout`. The CLI's local helpers and the `DestroyedError` entry in `isBenignUnsubscriptionError` are removed accordingly.
+
 ## 0.19.5
 
 ### Patch Changes
