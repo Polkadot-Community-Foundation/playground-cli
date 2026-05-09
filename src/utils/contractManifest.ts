@@ -1,4 +1,8 @@
-import { createContractFromClient, type AbiEntry, type CdmJson } from "@polkadot-apps/contracts";
+import {
+    createContractFromClient,
+    type AbiEntry,
+    type CdmJson,
+} from "@parity/product-sdk-contracts";
 import type { HexString, PolkadotClient } from "polkadot-api";
 import { CDM_REGISTRY_ADDRESS } from "../config.js";
 
@@ -106,7 +110,7 @@ function patchContractAddresses(
  * Options for the meta-registry lookup. `defaultOrigin` is forwarded to the
  * underlying contract handle so the read-only `getAddress` dry-run uses the
  * caller's logged-in account instead of the dev fallback (Alice). Without it,
- * `@polkadot-apps/contracts` emits a misleading `[contracts] No origin
+ * `@parity/product-sdk-contracts` emits a misleading `[contracts] No origin
  * configured` warning even when the user has signed in via `dot init`.
  */
 export interface LiveContractLookupOptions {

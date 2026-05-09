@@ -25,13 +25,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { runStreamed } from "../process.js";
-import {
-    ContractDeployer,
-    buildContracts,
-    detectContracts,
-    type BuildEvent as CdmBuildEvent,
-    type PipelineChainClient,
-} from "@dotdm/contracts";
+import type { BuildEvent as CdmBuildEvent, PipelineChainClient } from "@dotdm/contracts";
 import type { HexString, PolkadotSigner, SS58String } from "polkadot-api";
 import type { ContractsType } from "../build/detect.js";
 
@@ -71,6 +65,13 @@ export interface ContractsPhaseResult {
     deployed: Array<{ name: string; address: HexString }>;
 }
 
+let dotdmContractsPromise: Promise<typeof import("@dotdm/contracts")> | null = null;
+
+function loadDotdmContracts(): Promise<typeof import("@dotdm/contracts")> {
+    dotdmContractsPromise ??= import("@dotdm/contracts");
+    return dotdmContractsPromise;
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 export async function runContractsPhase(
@@ -91,6 +92,7 @@ export async function runContractsPhase(
         contracts: artifacts.map((a) => a.name),
     });
 
+    const { ContractDeployer } = await loadDotdmContracts();
     const deployer = new ContractDeployer(
         opts.signer,
         opts.origin,
@@ -159,6 +161,7 @@ async function compileCdm(opts: RunContractsPhaseOptions): Promise<CompiledArtif
         return compileCdmSkipBuild(opts);
     }
 
+    const { buildContracts } = await loadDotdmContracts();
     const summary = await buildContracts({
         rootDir: opts.projectDir,
         onEvent: (event: CdmBuildEvent) => {
@@ -186,6 +189,7 @@ async function compileCdm(opts: RunContractsPhaseOptions): Promise<CompiledArtif
  * produced. Throws with a clear message if any artifact is missing.
  */
 async function compileCdmSkipBuild(opts: RunContractsPhaseOptions): Promise<CompiledArtifact[]> {
+    const { detectContracts } = await loadDotdmContracts();
     const projectDir = resolve(opts.projectDir);
     const contracts = detectContracts(projectDir);
 

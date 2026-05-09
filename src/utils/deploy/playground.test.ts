@@ -10,20 +10,28 @@ const { captureWarningMock, withSpanMock } = vi.hoisted(() => ({
 
 // Mock the metadata upload path so we never actually touch the network.
 // The mock returns a fake CID that publish() treats as the metadata CID.
-vi.mock("@polkadot-apps/bulletin", () => ({
-    upload: vi.fn(async () => ({ cid: "bafymeta", blockHash: "0x0" })),
+vi.mock("@parity/product-sdk-bulletin", () => ({
+    calculateCid: vi.fn(async () => ({ toString: (): string => "bafymeta" })),
+}));
+vi.mock("@parity/product-sdk-tx", () => ({
+    createDevSigner: vi.fn(() => ({ __devSigner: "Alice" })),
+    submitAndWatch: vi.fn(async () => ({ ok: true, block: { hash: "0x0" } })),
+    withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 vi.mock("polkadot-api", () => ({
     createClient: vi.fn(() => ({
-        getTypedApi: vi.fn(() => ({})),
+        getTypedApi: vi.fn(() => ({
+            tx: {
+                TransactionStorage: {
+                    store: vi.fn((args: unknown) => ({ __kind: "store", args })),
+                },
+            },
+        })),
         destroy: vi.fn(),
     })),
 }));
-vi.mock("polkadot-api/ws-provider/web", () => ({
+vi.mock("polkadot-api/ws", () => ({
     getWsProvider: vi.fn(() => ({})),
-}));
-vi.mock("polkadot-api/polkadot-sdk-compat", () => ({
-    withPolkadotSdkCompat: vi.fn((provider) => provider),
 }));
 
 // Likewise stub the connection + registry helpers. We capture the publish

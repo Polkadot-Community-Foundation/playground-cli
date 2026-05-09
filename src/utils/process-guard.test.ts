@@ -64,6 +64,18 @@ describe("isBenignUnsubscriptionError", () => {
         expect(isBenignUnsubscriptionError({ name: "UnsubscriptionError" })).toBe(false);
     });
 
+    it("does NOT suppress DestroyedError — the upstream 0.2.0 fix removed the race", () => {
+        // Pre-0.2.0 `@parity/product-sdk-terminal`'s `destroy()` could surface
+        // `DestroyedError: Client destroyed` from PAPI's raw-client `disconnect`
+        // when statement-subscription unsubscribes were still in flight. We
+        // briefly suppressed it. The 0.2.0 fix drains those unsubscribes
+        // before tearing down the lazy client, so the shape should never
+        // resurface — if it does, it's a real regression and must escalate.
+        const err = new Error("Client destroyed");
+        err.name = "DestroyedError";
+        expect(isBenignUnsubscriptionError(err)).toBe(false);
+    });
+
     it("accepts string entries inside the errors array (rxjs permits them)", () => {
         const err = new Error("x");
         err.name = "UnsubscriptionError";

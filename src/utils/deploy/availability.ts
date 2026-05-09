@@ -14,8 +14,7 @@
  *     this is the re-deploy / update path, not a block.
  */
 
-import { DotNS } from "bulletin-deploy";
-import { ss58ToH160 } from "@polkadot-apps/address";
+import { ss58ToH160 } from "@parity/product-sdk-address";
 import { normalizeDomain } from "./playground.js";
 import { getChainConfig, type Env } from "../../config.js";
 
@@ -26,6 +25,16 @@ const POP_STATUS_FULL = 2;
 const POP_STATUS_RESERVED = 3;
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+type DotNSInstance = InstanceType<typeof import("bulletin-deploy").DotNS>;
+
+let bulletinDeployPromise: Promise<typeof import("bulletin-deploy")> | null = null;
+
+async function createDotNS(): Promise<DotNSInstance> {
+    bulletinDeployPromise ??= import("bulletin-deploy");
+    const { DotNS } = await bulletinDeployPromise;
+    return new DotNS();
+}
 
 /**
  * Mirror of `classifyDotnsLabel` from bulletin-deploy 0.7.6. The function
@@ -179,7 +188,7 @@ export async function checkDomainAvailability(
     // DotNS connect pings RPC + does an `ensureAccountMapped` tx if the dev
     // account isn't mapped yet. On testnet the default account is already
     // mapped, so this is effectively a pure read path — no phone prompts.
-    const dotns = new DotNS();
+    const dotns = await createDotNS();
     try {
         await withTimeout(
             dotns.connect({ rpc: cfg.assetHubRpc }),

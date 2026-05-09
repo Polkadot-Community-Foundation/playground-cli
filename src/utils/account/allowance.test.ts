@@ -1,7 +1,7 @@
 /**
  * Tests for bulletin allowance checks and Alice-based granting.
  *
- * Only `@polkadot-apps/tx` is mocked — we use the real `polkadot-api`
+ * Only `@parity/product-sdk-tx` is mocked — we use the real `polkadot-api`
  * `Enum(...)` so a mistake like `Enum("User", …)` instead of `Enum("Account", …)`
  * fails the test rather than silently passing a placeholder through.
  */
@@ -15,7 +15,7 @@ const mockCreateDevSigner = vi
     .fn<(name: string) => unknown>()
     .mockImplementation((name) => ({ __devSigner: name }));
 
-vi.mock("@polkadot-apps/tx", () => ({
+vi.mock("@parity/product-sdk-tx", () => ({
     submitAndWatch: (...args: unknown[]) => mockSubmitAndWatch(args[0], args[1] as unknown),
     createDevSigner: (...args: unknown[]) => mockCreateDevSigner(args[0] as string),
 }));

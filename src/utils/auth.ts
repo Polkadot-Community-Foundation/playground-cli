@@ -13,19 +13,24 @@ import type { Dirent } from "node:fs";
 import { readdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ss58Encode } from "@polkadot-apps/address";
+import { ss58Encode } from "@parity/product-sdk-address";
 import {
+    createSessionSignerForAccount,
     createTerminalAdapter,
     waitForSessions,
     renderQrCode,
     type TerminalAdapter,
     type PairingStatus,
     type AttestationStatus,
-    type StoredUserSession,
-} from "@polkadot-apps/terminal";
-import { createTxSigner } from "./session-signer-patch.js";
+    type UserSession,
+} from "@parity/product-sdk-terminal";
 import type { PolkadotSigner } from "polkadot-api";
-import { DAPP_ID, TERMINAL_METADATA_URL, getChainConfig } from "../config.js";
+import {
+    DAPP_ID,
+    PLAYGROUND_PRODUCT_ID,
+    TERMINAL_METADATA_URL,
+    getChainConfig,
+} from "../config.js";
 
 /** How long we wait for the statement store to publish the pairing QR. */
 const QR_TIMEOUT_MS = 60_000;
@@ -36,6 +41,17 @@ function createAdapter(): TerminalAdapter {
         metadataUrl: TERMINAL_METADATA_URL,
         endpoints: getChainConfig().peopleEndpoints,
     });
+}
+
+function createPlaygroundSigner(session: UserSession): PolkadotSigner {
+    return createSessionSignerForAccount(session, {
+        productId: PLAYGROUND_PRODUCT_ID,
+        derivationIndex: 0,
+    });
+}
+
+function sessionSigningAddress(session: UserSession): string {
+    return ss58Encode(createPlaygroundSigner(session).publicKey);
 }
 
 export type ConnectResult =
@@ -66,8 +82,7 @@ export async function connect(): Promise<ConnectResult> {
 
     const sessions = await waitForSessions(adapter);
     if (sessions.length > 0) {
-        const pubkey = new Uint8Array(sessions[0].remoteAccount.accountId);
-        return { kind: "existing", address: ss58Encode(pubkey) };
+        return { kind: "existing", address: sessionSigningAddress(sessions[0]) };
     }
 
     // Start authenticate — this triggers the pairing flow and QR emission
@@ -105,8 +120,11 @@ export async function connect(): Promise<ConnectResult> {
         return { kind: "qr", qrCode, login: { adapter, authPromise } };
     } catch (err) {
         // Release the WebSocket so we don't leak on the error path.
+        // SDK's destroy() is now async (Promise<void>) — fire-and-forget here is
+        // fine because the SDK awaits its own pending unsubscribes internally
+        // before tearing down the lazy client.
         try {
-            adapter.destroy();
+            void adapter.destroy();
         } catch {
             // best-effort cleanup; ignore
         }
@@ -143,29 +161,36 @@ export async function waitForLogin(
         },
     );
 
+    let authenticated = false;
     let address: string | null = null;
     try {
         const result = await authPromise;
         result.match(
             (session) => {
                 if (session) {
-                    const pubkey = new Uint8Array(session.remoteAccount.accountId);
-                    address = ss58Encode(pubkey);
-                    onStatus({ step: "success", address });
+                    authenticated = true;
                 }
             },
             (error) => {
                 onStatus({ step: "error", message: error.message });
             },
         );
+        if (authenticated) {
+            const sessions = await waitForSessions(adapter, 3000);
+            if (sessions.length > 0) {
+                address = sessionSigningAddress(sessions[0]);
+                onStatus({ step: "success", address });
+            } else {
+                onStatus({
+                    step: "error",
+                    message: "Login succeeded but the local session was not available",
+                });
+            }
+        }
     } finally {
         // Always clear subscriptions, even if authPromise rejects.
         unsubPairing();
         unsubAttestation();
-    }
-
-    if (address) {
-        await waitForSessions(adapter, 3000);
     }
 
     return address;
@@ -198,21 +223,26 @@ export async function getSessionSigner(): Promise<SessionHandle | null> {
 
     const sessions = await waitForSessions(adapter, 3000);
     if (sessions.length === 0) {
-        adapter.destroy();
+        // SDK destroy() is async; fire-and-forget here is OK because we have
+        // nothing else to await — pending statement-subscription unsubscribes
+        // are drained inside the SDK before the lazy client tears down.
+        void adapter.destroy();
         return null;
     }
 
     const session = sessions[0];
-    const pubkey = new Uint8Array(session.remoteAccount.accountId);
-    const address = ss58Encode(pubkey);
-    const signer = createTxSigner(session);
+    const signer = createPlaygroundSigner(session);
+    const address = ss58Encode(signer.publicKey);
 
     let destroyed = false;
     const destroy = () => {
         if (destroyed) return;
         destroyed = true;
         try {
-            adapter.destroy();
+            // Fire-and-forget. SDK destroy() is async but the SessionHandle
+            // contract returns void; the pending-unsubscribe drain happens
+            // inside the SDK regardless of whether we await.
+            void adapter.destroy();
         } catch {
             // best-effort; adapter.destroy() is idempotent in practice
         }
@@ -236,7 +266,7 @@ export type LogoutStatus =
 export interface LogoutHandle {
     adapter: TerminalAdapter;
     address: string;
-    session: StoredUserSession;
+    session: UserSession;
 }
 
 /**
@@ -250,12 +280,21 @@ export async function findSession(): Promise<LogoutHandle | null> {
     const adapter = createAdapter();
     const sessions = await waitForSessions(adapter, 3000);
     if (sessions.length === 0) {
-        adapter.destroy();
+        // Awaiting the async destroy() lets the SDK drain its pending
+        // statement-subscription unsubscribes before we return null. Wrapped
+        // in try/catch (mirroring `waitForLogout`'s teardown) so a hypothetical
+        // post-destroy artifact doesn't bubble up to `lookupSession` and
+        // misreport "no account is signed in" as "Could not reach the login
+        // service".
+        try {
+            await adapter.destroy();
+        } catch {
+            // best-effort
+        }
         return null;
     }
     const session = sessions[0];
-    const pubkey = new Uint8Array(session.remoteAccount.accountId);
-    const address = ss58Encode(pubkey);
+    const address = sessionSigningAddress(session);
     return { adapter, address, session };
 }
 
@@ -303,8 +342,12 @@ export async function waitForLogout(
             onStatus({ step: "error", message: msg });
         }
     } finally {
+        // Awaiting destroy() lets the SDK drain its pending
+        // statement-subscription unsubscribes before our `dot logout`
+        // process exits — which is exactly the path the upstream
+        // 0.2.0 fix was made for.
         try {
-            adapter.destroy();
+            await adapter.destroy();
         } catch {
             // best-effort
         }
@@ -324,7 +367,7 @@ export async function waitForLogout(
 export async function clearLocalAppStorage(
     dir: string = join(homedir(), ".polkadot-apps"),
 ): Promise<void> {
-    // @polkadot-apps/terminal's node-storage only writes flat `${appId}_${key}.json`
+    // @parity/product-sdk-terminal's node-storage only writes flat `${appId}_${key}.json`
     // files, never subdirectories. Filter by isFile() anyway so a future change
     // up-stack (or an unrelated user stash) can't trip this helper.
     let entries: Dirent[];

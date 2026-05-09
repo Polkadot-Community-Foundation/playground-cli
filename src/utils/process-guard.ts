@@ -158,6 +158,14 @@ function logSuppressedBenign(reason: unknown): void {
  *
  * Both look terrifying but are already the expected outcome. Keeping the match
  * narrow so a genuinely new failure still escalates.
+ *
+ * `DestroyedError: Client destroyed` from PAPI's raw-client used to surface
+ * here too, on `dot logout`, because `@parity/product-sdk-terminal@0.1.0`
+ * destroyed its lazy client without draining pending statement-subscription
+ * unsubscribes. That race was fixed upstream in 0.2.0 (the `destroy()` method
+ * is now async and `await`s `lazyClient.awaitPendingUnsubs()` between
+ * `sessions.dispose()` and `lazyClient.disconnect()`), so we no longer suppress
+ * `DestroyedError` here — if it ever resurfaces it's a real regression.
  */
 export function isBenignUnsubscriptionError(reason: unknown): boolean {
     if (!(reason instanceof Error)) return false;

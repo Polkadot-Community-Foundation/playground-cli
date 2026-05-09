@@ -5,7 +5,7 @@
  *   - `./funder.js` to expose two named funders with predictable signer
  *     identities (so `submitAndWatch` assertions can check which funder was
  *     picked without dragging sr25519 derivation into the test).
- *   - `@polkadot-apps/tx`'s `submitAndWatch` to observe what got submitted
+ *   - `@parity/product-sdk-tx`'s `submitAndWatch` to observe what got submitted
  *     without touching the network.
  *
  * The real `polkadot-api` `Enum(...)` is used so the `transfer_keep_alive({
@@ -19,7 +19,7 @@ const mockSubmitAndWatch = vi
     .fn<(tx: unknown, signer: unknown) => Promise<unknown>>()
     .mockResolvedValue({ ok: true });
 
-vi.mock("@polkadot-apps/tx", () => ({
+vi.mock("@parity/product-sdk-tx", () => ({
     submitAndWatch: (...args: unknown[]) => mockSubmitAndWatch(args[0], args[1] as unknown),
 }));
 

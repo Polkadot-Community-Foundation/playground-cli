@@ -8,11 +8,11 @@
  *   bun tools/list-registry-apps.ts
  */
 
-import { ContractManager, type CdmJson } from "@polkadot-apps/contracts";
-import { createDevSigner, getDevPublicKey } from "@polkadot-apps/tx";
-import { ss58Encode } from "@polkadot-apps/address";
-import { getGateway, fetchJson } from "@polkadot-apps/bulletin";
+import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
+import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
+import { ss58Encode } from "@parity/product-sdk-address";
 import type { HexString } from "polkadot-api";
+import { fetchBulletinJson, getBulletinGateway } from "../src/utils/bulletinGateway.js";
 import { getConnection, destroyConnection } from "../src/utils/connection.js";
 import {
     PLAYGROUND_REGISTRY_CONTRACT,
@@ -66,12 +66,12 @@ async function main(): Promise<number> {
         const value = res.value as { entries: RegistryEntry[]; total: number };
         console.log(`live registry has ${value.total} app(s); inspecting up to 100:\n`);
 
-        const gateway = getGateway("paseo");
+        const gateway = getBulletinGateway();
         for (const entry of value.entries) {
             let meta: AppMetadata = {};
             let metaErr = "";
             try {
-                meta = await fetchJson<AppMetadata>(entry.metadata_uri, gateway);
+                meta = await fetchBulletinJson<AppMetadata>(entry.metadata_uri, gateway);
             } catch (e) {
                 metaErr = e instanceof Error ? e.message.slice(0, 60) : String(e).slice(0, 60);
             }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
-import { getGateway, fetchJson } from "@polkadot-apps/bulletin";
 import { Mark, Hint, COLOR } from "../../utils/ui/theme/index.js";
+import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
 
 import { filterModdable, type AppEntry } from "./browserFilter.js";
 export type { AppEntry };
@@ -39,7 +39,7 @@ export function AppBrowser({ registry, onSelect, onCancel, moddableOnly }: Props
     // `null` = no more pages.
     const nextStart = useRef<number | null>(0);
 
-    const gateway = getGateway("paseo");
+    const gateway = getBulletinGateway();
 
     const loadBatch = useCallback(
         async (start: number) => {
@@ -85,7 +85,7 @@ export function AppBrowser({ registry, onSelect, onCancel, moddableOnly }: Props
                     const entry = entries[i];
                     const cid = raw.metadata_uri;
                     if (!cid) return;
-                    const meta = await fetchJson<Record<string, string>>(cid, gateway);
+                    const meta = await fetchBulletinJson<Record<string, string>>(cid, gateway);
                     setApps((prev) =>
                         prev.map((a) =>
                             a === entry

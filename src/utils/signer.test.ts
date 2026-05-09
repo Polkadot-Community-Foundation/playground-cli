@@ -2,8 +2,8 @@
  * Tests for unified signer resolution.
  *
  * Mock boundaries:
- *   - `@polkadot-apps/tx` (createDevSigner, getDevPublicKey)
- *   - `@polkadot-apps/address` (ss58Encode)
+ *   - `@parity/product-sdk-tx` (createDevSigner, getDevPublicKey)
+ *   - `@parity/product-sdk-address` (ss58Encode)
  *   - `./auth.js` (getSessionSigner)
  *
  * We exercise the resolution priority (suri → session → error),
@@ -17,12 +17,12 @@ const mockGetDevPublicKey = vi.fn().mockReturnValue(new Uint8Array(32));
 const mockSs58Encode = vi.fn().mockReturnValue("5GrwvaEF...");
 const mockGetSessionSigner = vi.fn<() => Promise<unknown>>();
 
-vi.mock("@polkadot-apps/tx", () => ({
+vi.mock("@parity/product-sdk-tx", () => ({
     createDevSigner: (...args: unknown[]) => mockCreateDevSigner(...args),
     getDevPublicKey: (...args: unknown[]) => mockGetDevPublicKey(...args),
 }));
 
-vi.mock("@polkadot-apps/address", () => ({
+vi.mock("@parity/product-sdk-address", () => ({
     ss58Encode: (...args: unknown[]) => mockSs58Encode(...args),
 }));
 

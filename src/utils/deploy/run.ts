@@ -15,7 +15,6 @@ import {
     type BuildConfig,
     type ContractsType,
 } from "../build/index.js";
-import { runStorageDeploy } from "./storage.js";
 import { publishToPlayground, normalizeDomain } from "./playground.js";
 import { runContractsPhase, type ContractsPhaseEvent } from "./contracts.js";
 import {
@@ -35,7 +34,7 @@ import type { DeployLogEvent } from "./progress.js";
 import { checkBalance, pickFunder, FUNDER_FEE_BUFFER } from "../account/funding.js";
 import { FAUCET_URL } from "../account/funder.js";
 import { Enum, type PolkadotSigner } from "polkadot-api";
-import { submitAndWatch } from "@polkadot-apps/tx";
+import { submitAndWatch } from "@parity/product-sdk-tx";
 import { withDeployPhase } from "./phase.js";
 import type { ResolvedSigner } from "../signer.js";
 import { getConnection } from "../connection.js";
@@ -168,14 +167,16 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
             "cli.deploy.storage-dotns",
             { "cli.deploy.domain": label },
             options.onEvent,
-            () =>
-                runStorageDeploy({
+            async () => {
+                const { runStorageDeploy } = await import("./storage.js");
+                return await runStorageDeploy({
                     content: buildAbs,
                     domainName: label,
                     auth: storageAuth,
                     onLogEvent: (event) => options.onEvent({ kind: "storage-event", event }),
                     env: options.env,
-                }),
+                });
+            },
         );
     })();
 

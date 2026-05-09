@@ -29,7 +29,10 @@ Read `CLAUDE.md` alongside this file when you need the full rationale for repo-s
 
 ## Dependency Rules
 
-- Do not upgrade `polkadot-api` or `@polkadot-api/sdk-ink` past the current pins unless `@polkadot-apps/chain-client` is bumped and compatibility is verified.
+- Direct imports come from `@parity/product-sdk-*`, not `@polkadot-apps/*`. `@polkadot-apps/*` is fully out of the lockfile (`@dotdm/contracts` ships its own product-sdk migration). CI's `Format` job greps `src/ e2e/ scripts/ tools/` for direct `@polkadot-apps/*` imports and fails the build on any match.
+- `@dotdm/contracts` is pinned to the dev tag `1.1.1-dev.1778274929` until the maintainer promotes the migrated build to `latest`. The `1.1.1` stable still pulls `@polkadot-apps/*` + PAPI 1.x.
+- `@novasamatech/*` is forced to `0.7.8-2` via `pnpm.overrides` because product-sdk-terminal's `^0.7.7` caret doesn't auto-widen across patches. Drop the override when upstream tightens the caret.
+- `@parity/product-sdk-*` packages use caret ranges (`^0.x.y`) so upstream patch and minor releases land automatically on a fresh `pnpm install`.
 - Keep `bulletin-deploy` pinned to an explicit version. Do not switch it to `latest`.
 - When upgrading `bulletin-deploy`, check public API changes for `deploy()`, DotNS methods, `DeployOptions`, `jsMerkle`, signer options, RPC handling, and attributes.
 
@@ -46,13 +49,14 @@ Read `CLAUDE.md` alongside this file when you need the full rationale for repo-s
 
 - Deploy delegates storage hardening to `bulletin-deploy`: chunking, retries, pool accounts, nonce fallback, DAG-PB, and DotNS commit-reveal stay there.
 - The CLI owns `registry.publish()` because the registry contract must record the user as `env::caller()`.
-- Do not call `bulletin-deploy.deploy()` just to store playground metadata JSON. Use `@polkadot-apps/bulletin::upload()` so it submits `TransactionStorage.store` directly and returns the CID.
+- Do not call `bulletin-deploy.deploy()` just to store playground metadata JSON. Submit `TransactionStorage.store` directly via PAPI using `calculateCid` from `@parity/product-sdk-bulletin` (see `src/utils/deploy/playground.ts::publishToPlayground`). `deploy()` would also run a DotNS register/setContenthash pass on a random `test-domain-*` label, which reverts opaquely.
 - Metadata uploads need a dedicated Bulletin client with `heartbeatTimeout: 300_000`, destroyed immediately after upload.
 - `dot deploy` currently relies on the Kubo binary path and must not pass `jsMerkle: true` until bulletin-deploy's pure-JS merkleizer preserves DAG-PB directory/file blocks correctly.
 - `dot init` installs `ipfs`, so deploys can rely on the Kubo CLI after setup.
 
 ## Runtime Safety
 
+- The mobile app wraps `signRaw` data with `<Bytes>...</Bytes>` (anti-phishing envelope, still load-bearing on Android v1192). Tx-payload signing routed through `signRaw` produces a signature the chain rejects as `BadProof`. `@parity/product-sdk-terminal@0.2.0+`'s `createSessionSignerForAccount` handles this with split callbacks (tx → `signPayload`, bytes → `signRaw`); use it directly. Don't downgrade to `0.1.0` and don't hand-roll a `signRaw`-only signer for tx work.
 - `getSessionSigner()` returns an adapter that keeps the Node event loop alive. Every caller must call the returned `destroy()`.
 - New long-running commands should register cleanup through `onProcessShutdown()` and use the process guard where appropriate.
 - `startMemoryWatchdog()` runs for both `dot deploy` and `dot mod`; add it to new top-level commands that do meaningful I/O.

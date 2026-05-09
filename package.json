@@ -9,7 +9,7 @@
         "dot": "./src/index.ts"
     },
     "scripts": {
-        "postinstall": "bash node_modules/@polkadot-apps/terminal/scripts/patch-wasm.sh",
+        "postinstall": "bash node_modules/@parity/product-sdk-terminal/scripts/patch-wasm.sh",
         "format": "biome format --write .",
         "format:check": "biome format .",
         "build": "bun build --compile src/index.ts --outfile ./dist/dot",
@@ -22,24 +22,24 @@
         "test:e2e:nightly": "tools/e2e-local.sh nightly"
     },
     "dependencies": {
-        "@dotdm/contracts": "latest",
-        "@parity/dotns-cli": "0.6.0",
-        "@polkadot-api/sdk-ink": "^0.6.2",
-        "@polkadot-apps/address": "latest",
-        "@polkadot-apps/bulletin": "latest",
-        "@polkadot-apps/chain-client": "latest",
-        "@polkadot-apps/contracts": "latest",
-        "@polkadot-apps/descriptors": "latest",
-        "@polkadot-apps/keys": "latest",
-        "@polkadot-apps/storage": "^0.2.8",
-        "@polkadot-apps/terminal": "latest",
-        "@polkadot-apps/tx": "latest",
-        "@polkadot-apps/utils": "latest",
+        "@dotdm/contracts": "1.1.1-dev.1778274929",
+        "@parity/dotns-cli": "0.6.1",
+        "@parity/product-sdk-address": "^0.1.1",
+        "@parity/product-sdk-bulletin": "^0.2.1",
+        "@parity/product-sdk-chain-client": "^0.2.1",
+        "@parity/product-sdk-contracts": "^0.2.1",
+        "@parity/product-sdk-descriptors": "^0.2.1",
+        "@parity/product-sdk-keys": "^0.2.0",
+        "@parity/product-sdk-storage": "^0.1.1",
+        "@parity/product-sdk-terminal": "^0.2.0",
+        "@parity/product-sdk-tx": "^0.2.0",
+        "@parity/product-sdk-utils": "^0.1.1",
+        "@polkadot-api/sdk-ink": "^0.7.0",
         "@sentry/node": "^9.47.1",
-        "bulletin-deploy": "0.7.12",
+        "bulletin-deploy": "0.7.13",
         "commander": "^12.0.0",
         "ink": "^5.2.1",
-        "polkadot-api": "^1.23.3",
+        "polkadot-api": "^2.1.2",
         "react": "^18.3.1",
         "react-devtools-core": "file:stubs/react-devtools-core",
         "tar": "^7.5.13"
@@ -59,19 +59,14 @@
             "@biomejs/biome"
         ],
         "overrides": {
-            "@parity/dotns-cli>@polkadot-api/descriptors": "file:./stubs/papi-descriptors-stub"
-        },
-        "packageExtensions": {
-            "bulletin-deploy@0.7.12": {
-                "dependencies": {
-                    "@polkadot/util": "13.5.9"
-                }
-            },
-            "@parity/dotns-cli@0.6.0": {
-                "dependencies": {
-                    "@polkadot/util": "14.0.3"
-                }
-            }
+            "@parity/dotns-cli>@polkadot-api/descriptors": "file:./stubs/papi-descriptors-stub",
+            "@polkadot-api/json-rpc-provider": "^0.2.0",
+            "@novasamatech/host-api": "0.7.8-2",
+            "@novasamatech/host-papp": "0.7.8-2",
+            "@novasamatech/product-sdk": "0.7.8-2",
+            "@novasamatech/scale": "0.7.8-2",
+            "@novasamatech/statement-store": "0.7.8-2",
+            "@novasamatech/storage-adapter": "0.7.8-2"
         }
     }
 }

@@ -9,9 +9,9 @@
  */
 
 import type { PolkadotSigner } from "polkadot-api";
-import { createDevSigner, getDevPublicKey } from "@polkadot-apps/tx";
-import { seedToAccount } from "@polkadot-apps/keys";
-import { ss58Encode } from "@polkadot-apps/address";
+import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
+import { seedToAccount } from "@parity/product-sdk-keys";
+import { ss58Encode } from "@parity/product-sdk-address";
 
 /**
  * Dedicated testnet funder mnemonic. Obscure-by-convention (not in any

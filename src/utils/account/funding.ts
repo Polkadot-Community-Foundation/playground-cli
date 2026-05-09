@@ -11,7 +11,7 @@
  */
 
 import { Enum } from "polkadot-api";
-import { submitAndWatch } from "@polkadot-apps/tx";
+import { submitAndWatch } from "@parity/product-sdk-tx";
 import type { PaseoClient } from "../connection.js";
 import { FUNDER_CHAIN, type Funder } from "./funder.js";
 import { AllFundersExhaustedError } from "./errors.js";

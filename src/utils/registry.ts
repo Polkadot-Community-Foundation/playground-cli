@@ -2,7 +2,7 @@
  * Playground registry contract access.
  */
 
-import { ContractManager, type CdmJson } from "@polkadot-apps/contracts";
+import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
 import type { ResolvedSigner } from "./signer.js";
 import {
     PLAYGROUND_REGISTRY_CONTRACT,

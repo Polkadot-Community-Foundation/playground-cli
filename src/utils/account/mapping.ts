@@ -6,7 +6,7 @@
  */
 
 import { createInkSdk } from "@polkadot-api/sdk-ink";
-import { ensureAccountMapped } from "@polkadot-apps/tx";
+import { ensureAccountMapped } from "@parity/product-sdk-tx";
 import type { PolkadotSigner } from "polkadot-api";
 import type { PaseoClient } from "../connection.js";
 

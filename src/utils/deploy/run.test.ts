@@ -121,7 +121,7 @@ vi.mock("../account/funding.js", () => ({
 vi.mock("../account/funder.js", () => ({
     FAUCET_URL: "https://faucet.polkadot.io/?network=pah",
 }));
-vi.mock("@polkadot-apps/tx", () => ({
+vi.mock("@parity/product-sdk-tx", () => ({
     submitAndWatch: (...args: unknown[]) => submitAndWatchMock(args[0], args[1]),
 }));
 vi.mock("../../telemetry.js", () => ({

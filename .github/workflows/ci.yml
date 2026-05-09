@@ -18,6 +18,16 @@ jobs:
                   node-version: "22"
             - run: pnpm install
             - run: pnpm format:check
+            - name: No @polkadot-apps/* imports in tracked source
+              run: |
+                  # Match quoted module specifiers only ("@polkadot-apps/" or
+                  # '@polkadot-apps/'), so explanatory prose / markdown that
+                  # references the legacy package name in backticks doesn't
+                  # trip the guard. Direct imports always quote the module path.
+                  if grep -rnE "['\"]@polkadot-apps/" src/ e2e/ scripts/ tools/; then
+                      echo "::error::Direct @polkadot-apps/* imports are not allowed — migrate to @parity/product-sdk-*"
+                      exit 1
+                  fi
 
     unit-tests:
         name: Unit Tests

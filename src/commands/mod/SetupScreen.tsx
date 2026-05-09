@@ -2,13 +2,13 @@ import { useRef, useState } from "react";
 import { Box } from "ink";
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { getGateway, fetchJson } from "@polkadot-apps/bulletin";
 import { StepRunner, type Step } from "../../utils/ui/components/StepRunner.js";
 import { Header, Hint, Row, Section } from "../../utils/ui/theme/index.js";
 import { runCommand } from "../../utils/git.js";
 import { createOptionalGitBaseline } from "../../utils/mod/git-baseline.js";
 import { downloadGitHubTarball, parseGitHubRepoUrl } from "../../utils/mod/source.js";
 import { VERSION_LABEL } from "../../utils/version.js";
+import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
 
 interface AppMetadata {
     name?: string;
@@ -55,7 +55,7 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
                 if (!cid) throw new Error(`App "${domain}" not found in registry`);
 
                 log(`fetching metadata from IPFS (${cid.slice(0, 16)}...)...`);
-                meta = await fetchJson<AppMetadata>(cid, getGateway("paseo"));
+                meta = await fetchBulletinJson<AppMetadata>(cid, getBulletinGateway());
                 if (!meta.repository) throw new Error("App has no repository URL");
             },
         },
