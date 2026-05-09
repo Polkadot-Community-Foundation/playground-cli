@@ -22,7 +22,7 @@
         "test:e2e:nightly": "tools/e2e-local.sh nightly"
     },
     "dependencies": {
-        "@dotdm/contracts": "latest",
+        "@dotdm/contracts": "1.1.1-dev.1778274929",
         "@parity/dotns-cli": "0.6.0",
         "@parity/product-sdk-address": "^0.1.1",
         "@parity/product-sdk-bulletin": "^0.2.1",
@@ -60,7 +60,13 @@
         ],
         "overrides": {
             "@parity/dotns-cli>@polkadot-api/descriptors": "file:./stubs/papi-descriptors-stub",
-            "@polkadot-api/json-rpc-provider": "^0.2.0"
+            "@polkadot-api/json-rpc-provider": "^0.2.0",
+            "@novasamatech/host-api": "0.7.8-2",
+            "@novasamatech/host-papp": "0.7.8-2",
+            "@novasamatech/product-sdk": "0.7.8-2",
+            "@novasamatech/scale": "0.7.8-2",
+            "@novasamatech/statement-store": "0.7.8-2",
+            "@novasamatech/storage-adapter": "0.7.8-2"
         }
     }
 }

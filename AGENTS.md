@@ -29,8 +29,9 @@ Read `CLAUDE.md` alongside this file when you need the full rationale for repo-s
 
 ## Dependency Rules
 
-- Direct imports come from `@parity/product-sdk-*`, not `@polkadot-apps/*`. The legacy packages remain in `node_modules` only transitively via `@dotdm/contracts`. CI's `Format` job greps `src/ e2e/ scripts/ tools/` for direct `@polkadot-apps/*` imports and fails the build on any match.
-- Do not upgrade `polkadot-api` or `@polkadot-api/sdk-ink` past the current pins (`^2.1.2` / `^0.7.0`) until `@dotdm/contracts` migrates to `@parity/product-sdk-*`. Two PAPI majors load side-by-side today (1.23.3 via `@dotdm/contracts`, 2.1.2 elsewhere); bumping further could drift the structural cast in `src/utils/deploy/run.ts:293` that hands our PAPI 2.x client to `@dotdm/contracts`'s `PipelineChainClient`.
+- Direct imports come from `@parity/product-sdk-*`, not `@polkadot-apps/*`. `@polkadot-apps/*` is fully out of the lockfile (`@dotdm/contracts` ships its own product-sdk migration). CI's `Format` job greps `src/ e2e/ scripts/ tools/` for direct `@polkadot-apps/*` imports and fails the build on any match.
+- `@dotdm/contracts` is pinned to the dev tag `1.1.1-dev.1778274929` until the maintainer promotes the migrated build to `latest`. The `1.1.1` stable still pulls `@polkadot-apps/*` + PAPI 1.x.
+- `@novasamatech/*` is forced to `0.7.8-2` via `pnpm.overrides` because product-sdk-terminal's `^0.7.7` caret doesn't auto-widen across patches. Drop the override when upstream tightens the caret.
 - `@parity/product-sdk-*` packages use caret ranges (`^0.x.y`) so upstream patch and minor releases land automatically on a fresh `pnpm install`.
 - Keep `bulletin-deploy` pinned to an explicit version. Do not switch it to `latest`.
 - When upgrading `bulletin-deploy`, check public API changes for `deploy()`, DotNS methods, `DeployOptions`, `jsMerkle`, signer options, RPC handling, and attributes.
