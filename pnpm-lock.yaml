@@ -61,8 +61,8 @@ importers:
         specifier: ^9.47.1
         version: 9.47.1
       bulletin-deploy:
-        specifier: 0.7.13
-        version: 0.7.13(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4)
+        specifier: 0.7.14
+        version: 0.7.14(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4)
       commander:
         specifier: ^12.0.0
         version: 12.1.0
@@ -2360,8 +2360,8 @@ packages:
   buffer@6.0.3:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
-  bulletin-deploy@0.7.13:
-    resolution: {integrity: sha512-2e0Eu440L1YZ/ZIMkBQWiUi8e4wPxphyZIoYU7Ywf+Rdzd/a386HP49JpL/TMJMWTHlrjg5R4Q5oduJc2I6Wjw==}
+  bulletin-deploy@0.7.14:
+    resolution: {integrity: sha512-3UtrwjG+ETHetBDwlg4MLrDKoWs0nJ40h4anfaXBlslzmrupwxSrgiL5qubTe8y0ZX2yE52F9uaqq08cieNLoA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -7180,7 +7180,7 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.2.0
       '@polkadot-api/utils': 0.2.0
-      '@scure/base': 2.0.0
+      '@scure/base': 2.2.0
       scale-ts: 1.6.1
 
   '@polkadot-api/substrate-bindings@0.17.0':
@@ -8315,7 +8315,7 @@ snapshots:
       base64-js: 1.5.1
       ieee754: 1.2.1
 
-  bulletin-deploy@0.7.13(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4):
+  bulletin-deploy@0.7.14(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4):
     dependencies:
       '@ipld/car': 5.4.3
       '@ipld/dag-pb': 4.1.5
