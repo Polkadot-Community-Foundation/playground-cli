@@ -55,7 +55,7 @@ Read `CLAUDE.md` alongside this file when you need the full rationale for repo-s
 
 ## Runtime Safety
 
-- The mobile app wraps `signRaw` data with `<Bytes>...</Bytes>` (anti-phishing envelope, still load-bearing on Android v1192). Tx-payload signing routed through `signRaw` produces a signature the chain rejects as `BadProof`. `src/utils/auth.ts::createPlaygroundSigner` builds a PJS signer with split callbacks (tx → `session.signPayload`, bytes → `session.signRaw`) instead of using `@parity/product-sdk-terminal@0.1.0`'s `createSessionSignerForAccount`. Upstream fix is `paritytech/product-sdk a33edf3`; switch back once published.
+- The mobile app wraps `signRaw` data with `<Bytes>...</Bytes>` (anti-phishing envelope, still load-bearing on Android v1192). Tx-payload signing routed through `signRaw` produces a signature the chain rejects as `BadProof`. `@parity/product-sdk-terminal@0.2.0+`'s `createSessionSignerForAccount` handles this with split callbacks (tx → `signPayload`, bytes → `signRaw`); use it directly. Don't downgrade to `0.1.0` and don't hand-roll a `signRaw`-only signer for tx work.
 - `getSessionSigner()` returns an adapter that keeps the Node event loop alive. Every caller must call the returned `destroy()`.
 - New long-running commands should register cleanup through `onProcessShutdown()` and use the process guard where appropriate.
 - `startMemoryWatchdog()` runs for both `dot deploy` and `dot mod`; add it to new top-level commands that do meaningful I/O.

@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { ss58Encode } from "@parity/product-sdk-address";
 import {
+    createSessionSignerForAccount,
     createTerminalAdapter,
     waitForSessions,
     renderQrCode,
@@ -23,7 +24,6 @@ import {
     type AttestationStatus,
     type UserSession,
 } from "@parity/product-sdk-terminal";
-import { getPolkadotSignerFromPjs } from "polkadot-api/pjs-signer";
 import type { PolkadotSigner } from "polkadot-api";
 import {
     DAPP_ID,
@@ -43,155 +43,11 @@ function createAdapter(): TerminalAdapter {
     });
 }
 
-/**
- * Local replacement for `@parity/product-sdk-terminal::createSessionSignerForAccount`.
- *
- * The published `@parity/product-sdk-terminal@0.1.0` routes BOTH transaction
- * signing and arbitrary-byte signing through `session.signRaw`, which the
- * mobile wallet wraps with `<Bytes>...</Bytes>` (the anti-phishing envelope —
- * see `polkadot-app-android-v2/.../MessageSigningContext.kt::generalUntrustedMessage`).
- * The chain rejects the resulting signature with `BadProof` because the
- * signature is over `<Bytes>${payload}</Bytes>` rather than `${payload}`.
- *
- * Upstream fix landed on `paritytech/product-sdk` `main` as commit `a33edf3`
- * ("fix(terminal): route signTx through session.signPayload to avoid BadProof",
- * PR #62) but is NOT yet on npm — the registry-latest is still `0.1.0`. Until
- * a version with that fix ships, we mirror its approach here: PAPI's PJS
- * signer interface lets us provide separate `signPayload` and `signRaw`
- * callbacks, so transaction signing can route through `session.signPayload`
- * (mobile's `SignPayloadJsonInteractor` — chain-tx context, no `<Bytes>` wrap)
- * while arbitrary-byte signing keeps using `session.signRaw` (mobile's
- * `SignRawInteractor` — `<Bytes>` wrap, correct for arbitrary user data).
- *
- * REMOVE this helper and switch back to `createSessionSignerForAccount` once
- * the npm dist-tag for `@parity/product-sdk-terminal` reflects `a33edf3`.
- */
 function createPlaygroundSigner(session: UserSession): PolkadotSigner {
-    const productAccountId: [string, number] = [PLAYGROUND_PRODUCT_ID, 0];
-    const accountId = new Uint8Array(session.remoteAccount.accountId);
-    const accountIdHex = asHex(toHex(accountId));
-    return getPolkadotSignerFromPjs(
-        accountIdHex,
-        makeSignPayloadCallback(session, productAccountId),
-        makeSignRawCallback(session, productAccountId),
-    );
-}
-
-function asHex(v: string): `0x${string}` {
-    return v.startsWith("0x") ? (v as `0x${string}`) : (`0x${v}` as `0x${string}`);
-}
-
-function toHex(bytes: Uint8Array): `0x${string}` {
-    return `0x${Buffer.from(bytes).toString("hex")}` as `0x${string}`;
-}
-
-function fromHex(hex: string): Uint8Array {
-    const stripped = hex.startsWith("0x") ? hex.slice(2) : hex;
-    return new Uint8Array(Buffer.from(stripped, "hex"));
-}
-
-// Minimal local PJS payload types — `@polkadot-api/pjs-signer` exposes the
-// canonical `SignerPayloadJSON` only as an internal type. Structurally
-// matches the fields the mappers always emit; mirrors the shape the
-// upstream `signer.ts` uses.
-type PjsSignerPayloadJSON = {
-    address: string;
-    assetId?: number | object;
-    blockHash: string;
-    blockNumber: string;
-    era: string;
-    genesisHash: string;
-    metadataHash?: string;
-    method: string;
-    mode?: number;
-    nonce: string;
-    specVersion: string;
-    tip: string;
-    transactionVersion: string;
-    signedExtensions: string[];
-    version: number;
-    withSignedTransaction?: boolean;
-};
-
-type PjsSignRawPayload = {
-    address: string;
-    data: string;
-    type: "bytes";
-};
-
-/**
- * Hook for transaction signing — translates PAPI's `SignerPayloadJSON` into
- * host-papp's `SigningPayloadRequest` and routes to `session.signPayload`.
- *
- * @internal Exported only for `auth.test.ts`'s BadProof regression guards;
- * not part of the public surface of this module.
- */
-export function makeSignPayloadCallback(session: UserSession, productAccountId: [string, number]) {
-    return async (
-        payload: PjsSignerPayloadJSON,
-    ): Promise<{
-        signature: `0x${string}`;
-        signedTransaction?: `0x${string}`;
-    }> => {
-        const result = await session.signPayload({
-            productAccountId,
-            blockHash: asHex(payload.blockHash),
-            blockNumber: asHex(payload.blockNumber),
-            era: asHex(payload.era),
-            genesisHash: asHex(payload.genesisHash),
-            method: asHex(payload.method),
-            nonce: asHex(payload.nonce),
-            specVersion: asHex(payload.specVersion),
-            tip: asHex(payload.tip),
-            transactionVersion: asHex(payload.transactionVersion),
-            signedExtensions: payload.signedExtensions,
-            version: payload.version,
-            assetId:
-                payload.assetId !== undefined
-                    ? (payload.assetId as never as `0x${string}`)
-                    : undefined,
-            metadataHash: payload.metadataHash ? asHex(payload.metadataHash) : undefined,
-            mode: payload.mode,
-            withSignedTransaction: payload.withSignedTransaction,
-        });
-        if (result.isErr()) {
-            throw new Error(`Mobile signing rejected: ${result.error.message}`);
-        }
-        return {
-            signature: toHex(result.value.signature) as `0x${string}`,
-            signedTransaction: result.value.signedTransaction
-                ? (toHex(result.value.signedTransaction) as `0x${string}`)
-                : undefined,
-        };
-    };
-}
-
-/**
- * Hook for arbitrary-byte signing — routes to `session.signRaw`. The mobile
- * applies the `<Bytes>...</Bytes>` envelope, which is correct for free-form
- * data but wrong for tx payloads (see {@link makeSignPayloadCallback}).
- *
- * @internal Exported only for `auth.test.ts`; not part of the public surface.
- */
-export function makeSignRawCallback(session: UserSession, productAccountId: [string, number]) {
-    return async (
-        payload: PjsSignRawPayload,
-    ): Promise<{
-        id: number;
-        signature: `0x${string}`;
-    }> => {
-        const result = await session.signRaw({
-            productAccountId,
-            data: { tag: "Bytes" as const, value: fromHex(payload.data) },
-        });
-        if (result.isErr()) {
-            throw new Error(`Mobile signing rejected: ${result.error.message}`);
-        }
-        return {
-            id: 0,
-            signature: toHex(result.value.signature) as `0x${string}`,
-        };
-    };
+    return createSessionSignerForAccount(session, {
+        productId: PLAYGROUND_PRODUCT_ID,
+        derivationIndex: 0,
+    });
 }
 
 function sessionSigningAddress(session: UserSession): string {
@@ -264,8 +120,11 @@ export async function connect(): Promise<ConnectResult> {
         return { kind: "qr", qrCode, login: { adapter, authPromise } };
     } catch (err) {
         // Release the WebSocket so we don't leak on the error path.
+        // SDK's destroy() is now async (Promise<void>) — fire-and-forget here is
+        // fine because the SDK awaits its own pending unsubscribes internally
+        // before tearing down the lazy client.
         try {
-            adapter.destroy();
+            void adapter.destroy();
         } catch {
             // best-effort cleanup; ignore
         }
@@ -364,7 +223,10 @@ export async function getSessionSigner(): Promise<SessionHandle | null> {
 
     const sessions = await waitForSessions(adapter, 3000);
     if (sessions.length === 0) {
-        adapter.destroy();
+        // SDK destroy() is async; fire-and-forget here is OK because we have
+        // nothing else to await — pending statement-subscription unsubscribes
+        // are drained inside the SDK before the lazy client tears down.
+        void adapter.destroy();
         return null;
     }
 
@@ -377,7 +239,10 @@ export async function getSessionSigner(): Promise<SessionHandle | null> {
         if (destroyed) return;
         destroyed = true;
         try {
-            adapter.destroy();
+            // Fire-and-forget. SDK destroy() is async but the SessionHandle
+            // contract returns void; the pending-unsubscribe drain happens
+            // inside the SDK regardless of whether we await.
+            void adapter.destroy();
         } catch {
             // best-effort; adapter.destroy() is idempotent in practice
         }
@@ -415,7 +280,9 @@ export async function findSession(): Promise<LogoutHandle | null> {
     const adapter = createAdapter();
     const sessions = await waitForSessions(adapter, 3000);
     if (sessions.length === 0) {
-        adapter.destroy();
+        // Awaiting the async destroy() lets the SDK drain its pending
+        // statement-subscription unsubscribes before we return null.
+        await adapter.destroy();
         return null;
     }
     const session = sessions[0];
@@ -467,8 +334,12 @@ export async function waitForLogout(
             onStatus({ step: "error", message: msg });
         }
     } finally {
+        // Awaiting destroy() lets the SDK drain its pending
+        // statement-subscription unsubscribes before our `dot logout`
+        // process exits — which is exactly the path the upstream
+        // 0.2.0 fix was made for.
         try {
-            adapter.destroy();
+            await adapter.destroy();
         } catch {
             // best-effort
         }

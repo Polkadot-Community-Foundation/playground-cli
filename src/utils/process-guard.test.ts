@@ -64,21 +64,15 @@ describe("isBenignUnsubscriptionError", () => {
         expect(isBenignUnsubscriptionError({ name: "UnsubscriptionError" })).toBe(false);
     });
 
-    it("matches a bare DestroyedError (the dot-logout polkadot-api raw-client teardown case)", () => {
-        // `@polkadot-api/raw-client`'s `disconnect()` errors every still-pending
-        // request with a fresh `DestroyedError("Client destroyed")`. This shape
-        // is exclusive to that one teardown path — matching the class alone is
-        // safe.
+    it("does NOT suppress DestroyedError — the upstream 0.2.0 fix removed the race", () => {
+        // Pre-0.2.0 `@parity/product-sdk-terminal`'s `destroy()` could surface
+        // `DestroyedError: Client destroyed` from PAPI's raw-client `disconnect`
+        // when statement-subscription unsubscribes were still in flight. We
+        // briefly suppressed it. The 0.2.0 fix drains those unsubscribes
+        // before tearing down the lazy client, so the shape should never
+        // resurface — if it does, it's a real regression and must escalate.
         const err = new Error("Client destroyed");
         err.name = "DestroyedError";
-        expect(isBenignUnsubscriptionError(err)).toBe(true);
-    });
-
-    it("does NOT match a generic Error with the same message but a different name", () => {
-        // Defensive: only the actual `DestroyedError` class is benign; any
-        // other error happening to carry the string "Client destroyed" must
-        // still escalate.
-        const err = new Error("Client destroyed");
         expect(isBenignUnsubscriptionError(err)).toBe(false);
     });
 

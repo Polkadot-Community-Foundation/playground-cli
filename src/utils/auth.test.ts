@@ -5,20 +5,17 @@
  * verify the patterns used rather than the full integration.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     clearLocalAppStorage,
-    makeSignPayloadCallback,
-    makeSignRawCallback,
     waitForLogout,
     type LogoutHandle,
     type LogoutStatus,
 } from "./auth.js";
 import { DAPP_ID } from "../config.js";
-import type { UserSession } from "@parity/product-sdk-terminal";
 
 describe("subscribe-before-assignment pattern", () => {
     /**
@@ -315,188 +312,5 @@ describe("clearLocalAppStorage", () => {
     it("swallows unlink errors so callers stay on the happy path", async () => {
         // Nothing to delete → nothing to error on, but the promise must resolve.
         await expect(clearLocalAppStorage(dir)).resolves.toBeUndefined();
-    });
-});
-
-// ── createPlaygroundSigner — BadProof regression guards ──────────────────────
-//
-// These tests cover the local replacement for
-// `@parity/product-sdk-terminal::createSessionSignerForAccount`. The published
-// SDK (0.1.0) routes BOTH tx and arbitrary-byte signing through `signRaw`,
-// which the mobile wallet wraps with `<Bytes>...</Bytes>` — producing a
-// signature the chain rejects as `BadProof`. Until the upstream fix
-// (paritytech/product-sdk a33edf3) ships on npm, our local builder splits the
-// callbacks: tx → `signPayload` (no envelope), bytes → `signRaw` (envelope).
-// These tests guard against a regression that would re-merge the paths.
-
-type FakeOk<T> = { isOk(): true; isErr(): false; value: T };
-type FakeErr<E> = { isOk(): false; isErr(): true; error: E };
-function ok<T>(value: T): FakeOk<T> {
-    return { isOk: () => true as const, isErr: () => false as const, value };
-}
-function err<E>(error: E): FakeErr<E> {
-    return { isOk: () => false as const, isErr: () => true as const, error };
-}
-
-interface SessionStub {
-    remoteAccount: { accountId: number[] };
-    signPayload: ReturnType<typeof vi.fn>;
-    signRaw: ReturnType<typeof vi.fn>;
-}
-
-function makeSessionStub(opts: {
-    signPayload?: (req: unknown) => unknown;
-    signRaw?: (req: unknown) => unknown;
-}): SessionStub {
-    return {
-        remoteAccount: { accountId: new Array(32).fill(0).map((_, i) => i) },
-        signPayload: vi.fn(
-            opts.signPayload ??
-                (() => {
-                    throw new Error("signPayload not stubbed");
-                }),
-        ),
-        signRaw: vi.fn(
-            opts.signRaw ??
-                (() => {
-                    throw new Error("signRaw not stubbed");
-                }),
-        ),
-    };
-}
-
-function pjsTxPayload() {
-    return {
-        address: `0x${"00".repeat(32)}`,
-        blockHash: `0x${"11".repeat(32)}`,
-        blockNumber: "0x12345678",
-        era: "0xc501",
-        genesisHash: `0x${"22".repeat(32)}`,
-        method: "0xabcdef",
-        nonce: "0x00000001",
-        specVersion: "0x000003e8",
-        tip: `0x${"0".repeat(32)}`,
-        transactionVersion: "0x00000001",
-        signedExtensions: ["CheckMortality", "CheckNonce"],
-        version: 4,
-    };
-}
-
-describe("makeSignPayloadCallback — tx signing path (BadProof fix)", () => {
-    it("forwards the tx payload to session.signPayload with the right productAccountId", async () => {
-        const captured: unknown[] = [];
-        const session = makeSessionStub({
-            signPayload: (req) => {
-                captured.push(req);
-                return ok({
-                    signature: new Uint8Array([0xaa, 0xbb]),
-                    signedTransaction: undefined,
-                });
-            },
-        });
-        const cb = makeSignPayloadCallback(session as unknown as UserSession, [
-            "playground.dot",
-            0,
-        ]);
-        await cb(pjsTxPayload());
-
-        expect(captured).toHaveLength(1);
-        const req = captured[0] as { productAccountId: [string, number] };
-        expect(req.productAccountId).toEqual(["playground.dot", 0]);
-    });
-
-    it("must NOT call session.signRaw when signing a tx payload (BadProof regression guard)", async () => {
-        const session = makeSessionStub({
-            signPayload: () => ok({ signature: new Uint8Array([1]), signedTransaction: undefined }),
-        });
-        const cb = makeSignPayloadCallback(session as unknown as UserSession, [
-            "playground.dot",
-            0,
-        ]);
-        await cb(pjsTxPayload());
-
-        expect(session.signPayload).toHaveBeenCalledTimes(1);
-        expect(session.signRaw).toHaveBeenCalledTimes(0);
-    });
-
-    it("0x-prefixes every hex field handed to host-papp", async () => {
-        const captured: unknown[] = [];
-        const session = makeSessionStub({
-            signPayload: (req) => {
-                captured.push(req);
-                return ok({ signature: new Uint8Array([0]), signedTransaction: undefined });
-            },
-        });
-        const cb = makeSignPayloadCallback(session as unknown as UserSession, [
-            "playground.dot",
-            0,
-        ]);
-        // Mix prefixed and unprefixed inputs so asHex actually has to add `0x`.
-        await cb({ ...pjsTxPayload(), nonce: "1234abcd" });
-
-        const req = captured[0] as Record<string, unknown>;
-        for (const f of [
-            "blockHash",
-            "blockNumber",
-            "era",
-            "genesisHash",
-            "method",
-            "nonce",
-            "specVersion",
-            "tip",
-            "transactionVersion",
-        ]) {
-            expect(req[f], `${f} must be 0x-prefixed`).toMatch(/^0x[0-9a-fA-F]*$/);
-        }
-    });
-
-    it("hex-encodes the signature and propagates signedTransaction when present", async () => {
-        const session = makeSessionStub({
-            signPayload: () =>
-                ok({
-                    signature: new Uint8Array([0xab, 0xcd]),
-                    signedTransaction: new Uint8Array([0x01, 0x02, 0x03]),
-                }),
-        });
-        const cb = makeSignPayloadCallback(session as unknown as UserSession, [
-            "playground.dot",
-            0,
-        ]);
-        const out = await cb(pjsTxPayload());
-        expect(out.signature).toBe("0xabcd");
-        expect(out.signedTransaction).toBe("0x010203");
-    });
-
-    it("throws with a clear error when the mobile rejects", async () => {
-        const session = makeSessionStub({
-            signPayload: () => err({ message: "user declined" }),
-        });
-        const cb = makeSignPayloadCallback(session as unknown as UserSession, [
-            "playground.dot",
-            0,
-        ]);
-        await expect(cb(pjsTxPayload())).rejects.toThrow("Mobile signing rejected: user declined");
-    });
-});
-
-describe("makeSignRawCallback — arbitrary-byte signing path", () => {
-    it("forwards the bytes verbatim under the Bytes tag — mobile applies <Bytes> wrap", async () => {
-        const captured: unknown[] = [];
-        const session = makeSessionStub({
-            signRaw: (req) => {
-                captured.push(req);
-                return ok({ signature: new Uint8Array([0xff]) });
-            },
-        });
-        const cb = makeSignRawCallback(session as unknown as UserSession, ["playground.dot", 0]);
-        await cb({ address: `0x${"00".repeat(32)}`, data: "0xdeadbeef", type: "bytes" });
-
-        const req = captured[0] as {
-            productAccountId: [string, number];
-            data: { tag: string; value: Uint8Array };
-        };
-        expect(req.productAccountId).toEqual(["playground.dot", 0]);
-        expect(req.data.tag).toBe("Bytes");
-        expect(Array.from(req.data.value)).toEqual([0xde, 0xad, 0xbe, 0xef]);
     });
 });
