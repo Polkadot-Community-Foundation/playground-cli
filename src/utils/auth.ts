@@ -281,8 +281,16 @@ export async function findSession(): Promise<LogoutHandle | null> {
     const sessions = await waitForSessions(adapter, 3000);
     if (sessions.length === 0) {
         // Awaiting the async destroy() lets the SDK drain its pending
-        // statement-subscription unsubscribes before we return null.
-        await adapter.destroy();
+        // statement-subscription unsubscribes before we return null. Wrapped
+        // in try/catch (mirroring `waitForLogout`'s teardown) so a hypothetical
+        // post-destroy artifact doesn't bubble up to `lookupSession` and
+        // misreport "no account is signed in" as "Could not reach the login
+        // service".
+        try {
+            await adapter.destroy();
+        } catch {
+            // best-effort
+        }
         return null;
     }
     const session = sessions[0];

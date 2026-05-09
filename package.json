@@ -23,7 +23,7 @@
     },
     "dependencies": {
         "@dotdm/contracts": "1.1.1-dev.1778274929",
-        "@parity/dotns-cli": "0.6.0",
+        "@parity/dotns-cli": "0.6.1",
         "@parity/product-sdk-address": "^0.1.1",
         "@parity/product-sdk-bulletin": "^0.2.1",
         "@parity/product-sdk-chain-client": "^0.2.1",

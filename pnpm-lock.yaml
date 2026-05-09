@@ -22,8 +22,8 @@ importers:
         specifier: 1.1.1-dev.1778274929
         version: 1.1.1-dev.1778274929(@novasamatech/host-api@0.7.8-2)(@novasamatech/product-sdk@0.7.8-2(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@polkadot-api/ink-contracts@0.6.2)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       '@parity/dotns-cli':
-        specifier: 0.6.0
-        version: 0.6.0(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4)
+        specifier: 0.6.1
+        version: 0.6.1(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4)
       '@parity/product-sdk-address':
         specifier: ^0.1.1
         version: 0.1.1
@@ -1158,11 +1158,6 @@ packages:
     peerDependencies:
       multiformats: ^13.4.1
       polkadot-api: ^2.1.2
-
-  '@parity/dotns-cli@0.6.0':
-    resolution: {integrity: sha512-DSsE6m15QvuXUOc48CbeR5wwadN2U82qklf/VJavclvvs/tvDrax3WngiJJ/cJiEIaobiBfQAUKA0+J8bsL1HA==}
-    engines: {bun: '>=1.2.6'}
-    hasBin: true
 
   '@parity/dotns-cli@0.6.1':
     resolution: {integrity: sha512-agGLDsg/LXEsoJRoWJTXua1vuCm/3WE58J++JpyJ30u3gBtgiRE7FOn+asSbl2iN4Ux1bvsfRCM+Y04LwEsSHw==}
@@ -3580,11 +3575,6 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.7:
-    resolution: {integrity: sha512-ua3NDgISf6jdwezAheMOk4mbE1LXjm1DfMUDMuJf4AqxLFK3ccGpgWizwa5YV7Yz9EpXwEaWoRXSb/BnV0t5dQ==}
-    engines: {node: ^18 || >=20}
-    hasBin: true
-
   nanoid@5.1.9:
     resolution: {integrity: sha512-ZUvP7KeBLe3OZ1ypw6dI/TzYJuvHP77IM4Ry73waSQTLn8/g8rpdjfyVAh7t1/+FjBtG4lCP42MEbDxOsRpBMw==}
     engines: {node: ^18 || >=20}
@@ -3690,10 +3680,6 @@ packages:
   open@7.4.2:
     resolution: {integrity: sha512-MVHddDVweXZF3awtlAS+6pgKLlm/JgxZ90+/NBurBoQctVOOB/zDdVjcyPzQ+0laDGbsWgrRkflI65sQeOgT9Q==}
     engines: {node: '>=8'}
-
-  ora@9.3.0:
-    resolution: {integrity: sha512-lBX72MWFduWEf7v7uWf5DHp9Jn5BI8bNPGuFgtXMmr2uDz2Gz2749y3am3agSDdkhHPHYmmxEGSKH85ZLGzgXw==}
-    engines: {node: '>=20'}
 
   ora@9.4.0:
     resolution: {integrity: sha512-84cglkRILFxdtA8hAvLNdMrtBpPNBTrQ9/ulg0FA7xLMnD6mifv+enAIeRmvtv+WgdCE+LPGOfQmtJRrVaIVhQ==}
@@ -5678,7 +5664,7 @@ snapshots:
       any-signal: 4.2.0
       main-event: 1.0.4
       multiformats: 13.4.2
-      nanoid: 5.1.7
+      nanoid: 5.1.9
       progress-events: 1.1.0
       protons-runtime: 6.0.1
       retimeable-signal: 1.0.1
@@ -6109,7 +6095,7 @@ snapshots:
   '@multiformats/dns@1.0.13':
     dependencies:
       '@dnsquery/dns-packet': 6.1.1
-      '@libp2p/interface': 3.2.0
+      '@libp2p/interface': 3.2.2
       hashlru: 2.3.0
       p-queue: 9.1.2
       progress-events: 1.1.0
@@ -6530,48 +6516,6 @@ snapshots:
       multiformats: 13.4.2
       polkadot-api: 2.1.2(esbuild@0.27.7)(rxjs@7.8.2)
 
-  '@parity/dotns-cli@0.6.0(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4)':
-    dependencies:
-      '@chainsafe/libp2p-noise': 17.0.0
-      '@chainsafe/libp2p-yamux': 8.0.1
-      '@ensdomains/content-hash': 3.0.0
-      '@helia/unixfs': 7.2.1
-      '@ipld/dag-pb': 4.1.5
-      '@libp2p/websockets': 10.1.11
-      '@multiformats/blake2': 2.0.2
-      '@multiformats/multiaddr': 13.0.1
-      '@noble/hashes': 2.2.0
-      '@polkadot-api/descriptors': file:stubs/papi-descriptors-stub
-      '@polkadot-labs/hdkd': 0.0.26
-      '@polkadot-labs/hdkd-helpers': 0.0.27
-      '@polkadot/keyring': 14.0.3(@polkadot/util-crypto@14.0.3(@polkadot/util@14.0.3))(@polkadot/util@14.0.3)
-      '@polkadot/util-crypto': 14.0.3(@polkadot/util@14.0.3)
-      chalk: 5.6.2
-      commander: 14.0.3
-      helia: 6.1.4(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))
-      ipfs-unixfs: 12.0.2
-      ipfs-unixfs-importer: 16.1.5
-      multiformats: 13.4.2
-      ora: 9.3.0
-      polkadot-api: 1.23.3(postcss@8.5.10)(rxjs@7.8.2)(yaml@2.8.4)
-      viem: 2.48.0(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@microsoft/api-extractor'
-      - '@polkadot/util'
-      - '@swc/core'
-      - bufferutil
-      - encoding
-      - jiti
-      - postcss
-      - react-native
-      - rxjs
-      - supports-color
-      - tsx
-      - typescript
-      - utf-8-validate
-      - yaml
-      - zod
-
   '@parity/dotns-cli@0.6.1(@polkadot/util@14.0.3)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.8.4)':
     dependencies:
       '@chainsafe/libp2p-noise': 17.0.0
@@ -6939,7 +6883,7 @@ snapshots:
       commander: 14.0.3
       execa: 9.6.1
       fs.promises.exists: 1.1.4
-      ora: 9.3.0
+      ora: 9.4.0
       read-pkg: 10.1.0
       rxjs: 7.8.2
       tsc-prog: 2.3.0(typescript@5.9.3)
@@ -8088,7 +8032,7 @@ snapshots:
 
   '@types/dns-packet@5.6.5':
     dependencies:
-      '@types/node': 22.19.17
+      '@types/node': 22.19.18
 
   '@types/estree@1.0.8': {}
 
@@ -8105,7 +8049,7 @@ snapshots:
   '@types/multicast-dns@7.2.4':
     dependencies:
       '@types/dns-packet': 5.6.5
-      '@types/node': 22.19.17
+      '@types/node': 22.19.18
 
   '@types/mysql@2.15.26':
     dependencies:
@@ -8764,8 +8708,7 @@ snapshots:
 
   eventemitter3@5.0.1: {}
 
-  eventemitter3@5.0.4:
-    optional: true
+  eventemitter3@5.0.4: {}
 
   events@3.3.0: {}
 
@@ -9810,8 +9753,6 @@ snapshots:
 
   nanoid@3.3.11: {}
 
-  nanoid@5.1.7: {}
-
   nanoid@5.1.9: {}
 
   napi-build-utils@2.0.0: {}
@@ -9835,7 +9776,7 @@ snapshots:
 
   node-abi@3.89.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.0
 
   node-datachannel@0.29.0:
     dependencies:
@@ -9911,17 +9852,6 @@ snapshots:
       is-docker: 2.2.1
       is-wsl: 2.2.0
 
-  ora@9.3.0:
-    dependencies:
-      chalk: 5.6.2
-      cli-cursor: 5.0.0
-      cli-spinners: 3.4.0
-      is-interactive: 2.0.0
-      is-unicode-supported: 2.1.0
-      log-symbols: 7.0.1
-      stdin-discarder: 0.3.2
-      string-width: 8.2.0
-
   ora@9.4.0:
     dependencies:
       chalk: 5.6.2
@@ -9972,7 +9902,7 @@ snapshots:
 
   p-queue@9.1.2:
     dependencies:
-      eventemitter3: 5.0.1
+      eventemitter3: 5.0.4
       p-timeout: 7.0.1
 
   p-retry@8.0.0:
