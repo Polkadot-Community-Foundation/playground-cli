@@ -69,10 +69,12 @@ fi
 export PATH="$INSTALL_DIR/bin:$HOME/.local/bin:$PATH"
 
 echo ""
-echo -e "dot is ready! Running: \033[1mdot init\033[0m"
+echo -e "dot is ready! Setting up dependencies…"
 echo ""
-if ! "$INSTALL_DIR/bin/$BIN" init; then
+if ! "$INSTALL_DIR/bin/$BIN" init --yes; then
   INIT_EXIT=$?
-  echo -e "\n\033[33mInit did not complete. Run \033[1mdot init\033[0;33m when ready.\033[0m" >&2
+  echo -e "\n\033[33mDependency setup failed. Run \033[1mdot init\033[0;33m when ready.\033[0m" >&2
   exit "$INIT_EXIT"
 fi
+echo ""
+echo -e "Run \033[1mdot init\033[0m to log in with the Polkadot mobile app."
