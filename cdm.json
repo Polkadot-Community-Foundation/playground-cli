@@ -1,20 +1,28 @@
 {
   "targets": {
-    "acc2c3b5e912b762": {
-      "asset-hub": "wss://asset-hub-paseo-rpc.n.dwellir.com",
-      "bulletin": "https://paseo-ipfs.polkadot.io/ipfs"
+    "4963ba95e259237b": {
+      "asset-hub": "wss://paseo-asset-hub-next-rpc.polkadot.io",
+      "bulletin": "https://paseo-bulletin-next-ipfs.polkadot.io",
+      "registry": "0x5c7b23d386ff622c7f7a4e7a95d5c7a67b10a00d"
+    },
+    "8e7e0cf0a51d8e5e": {
+      "asset-hub": "wss://paseo-asset-hub-next-rpc.polkadot.io",
+      "bulletin": "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs",
+      "registry": "0x5c7b23d386ff622c7f7a4e7a95d5c7a67b10a00d"
     }
   },
   "dependencies": {
-    "acc2c3b5e912b762": {
+    "4963ba95e259237b": {},
+    "8e7e0cf0a51d8e5e": {
       "@w3s/playground-registry": "latest"
     }
   },
   "contracts": {
-    "acc2c3b5e912b762": {
+    "4963ba95e259237b": {},
+    "8e7e0cf0a51d8e5e": {
       "@w3s/playground-registry": {
-        "version": 6,
-        "address": "0x4A37B123b0BA2A894cA5953f472264921d44e298",
+        "version": 0,
+        "address": "0xE6A1cAd79b4b1b209fFF12CD5F9FF7a8F9782e55",
         "abi": [
           {
             "type": "constructor",
@@ -451,7 +459,7 @@
             "stateMutability": "view"
           }
         ],
-        "metadataCid": "bafk2bzacebjzx3b65uj6krbsrefkub3ehezhxtrwb2gidj6r6ldcncnqjt4hy"
+        "metadataCid": "bafk2bzacedmabtpbb7ji7hwwctxez7ppsxhin6my7kiykovm6pt3mpsbhk7lm"
       }
     }
   }
