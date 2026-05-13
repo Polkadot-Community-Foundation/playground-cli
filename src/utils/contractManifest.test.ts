@@ -26,6 +26,10 @@ vi.mock("@parity/product-sdk-contracts", () => ({
     createContractFromClient: (...args: unknown[]) => createContractFromClientMock(...args),
 }));
 
+vi.mock("@parity/product-sdk-descriptors/paseo-asset-hub", () => ({
+    paseo_asset_hub: { genesis: "0xasset" },
+}));
+
 import {
     PLAYGROUND_REGISTRY_CONTRACT,
     resolveLiveContractAddresses,
@@ -100,6 +104,7 @@ describe("resolveLiveContractAddresses", () => {
         expect(addresses).toEqual({ [PLAYGROUND_REGISTRY_CONTRACT]: liveAddress });
         expect(createContractFromClientMock).toHaveBeenCalledWith(
             assetHub,
+            { genesis: "0xasset" },
             CDM_REGISTRY_ADDRESS,
             expect.arrayContaining([
                 expect.objectContaining({ name: "getAddress", type: "function" }),
@@ -124,6 +129,7 @@ describe("resolveLiveContractAddresses", () => {
 
         expect(createContractFromClientMock).toHaveBeenCalledWith(
             assetHub,
+            { genesis: "0xasset" },
             CDM_REGISTRY_ADDRESS,
             expect.any(Array),
             expect.objectContaining({ defaultOrigin: origin }),
@@ -200,6 +206,7 @@ describe("withLiveContractAddresses", () => {
 
         expect(createContractFromClientMock).toHaveBeenCalledWith(
             assetHub,
+            { genesis: "0xasset" },
             CDM_REGISTRY_ADDRESS,
             expect.any(Array),
             expect.objectContaining({ defaultOrigin: origin }),
@@ -224,6 +231,7 @@ describe("withLiveContractAddresses", () => {
 
         expect(createContractFromClientMock).toHaveBeenCalledWith(
             assetHub,
+            { genesis: "0xasset" },
             CDM_REGISTRY_ADDRESS,
             expect.any(Array),
             expect.objectContaining({ defaultOrigin: origin }),

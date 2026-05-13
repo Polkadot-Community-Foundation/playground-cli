@@ -18,6 +18,7 @@ import {
     type AbiEntry,
     type CdmJson,
 } from "@parity/product-sdk-contracts";
+import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import type { HexString, PolkadotClient } from "polkadot-api";
 import { CDM_REGISTRY_ADDRESS } from "../config.js";
 
@@ -139,6 +140,7 @@ export async function resolveLiveContractAddresses(
 ): Promise<Record<string, HexString>> {
     const registry = await createContractFromClient(
         assetHub,
+        paseo_asset_hub,
         CDM_REGISTRY_ADDRESS,
         CDM_REGISTRY_ABI,
         { defaultOrigin: options.defaultOrigin },
