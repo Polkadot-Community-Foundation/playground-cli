@@ -118,6 +118,10 @@ export function installSignalHandlers(): void {
     process.on("SIGHUP", () => terminate("SIGHUP"));
 
     // Unhandled rejections should not silently keep the event loop alive.
+    // `@sentry/node`'s `OnUnhandledRejection` integration captures the
+    // rejection to Sentry independently (we override it with `mode: 'none'`
+    // in `telemetry.ts` so it stays silent on stderr); this handler is the
+    // user-facing stderr write + benign-filter + exit path.
     process.on("unhandledRejection", (reason) => {
         if (isBenignUnsubscriptionError(reason)) {
             logSuppressedBenign(reason);
@@ -138,6 +142,10 @@ export function installSignalHandlers(): void {
             logSuppressedBenign(err);
             return;
         }
+        // `@sentry/node`'s `OnUncaughtException` integration captures via
+        // `Sentry.captureException` independently (it doesn't print on its
+        // own when our handler is registered, so no `mode` override is
+        // needed). This stays the user-facing stderr write + exit path.
         process.stderr.write(`\nUncaught exception: ${err?.stack ?? String(err)}\n`);
         runAllCleanupAndExit(1);
     });

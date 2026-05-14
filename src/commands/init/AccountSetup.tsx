@@ -18,6 +18,7 @@ import { useState, useEffect } from "react";
 import { Row, Section, Callout, type MarkKind } from "../../utils/ui/theme/index.js";
 import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
+import { topUpFromBulletinDev } from "../../utils/account/bulletinTopUp.js";
 import { checkMapping, ensureMapped } from "../../utils/account/mapping.js";
 import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID } from "../../config.js";
 import {
@@ -83,7 +84,7 @@ export function AccountSetup({
 }) {
     const [steps, setSteps] = useState<StepState[]>([
         { label: "allowances", status: "pending" },
-        { label: "mapping", status: "pending" },
+        { label: "funding", status: "pending" },
     ]);
     const [phonePrompt, setPhonePrompt] = useState<PhonePrompt | null>(null);
 
@@ -134,10 +135,9 @@ export function AccountSetup({
             const env = DEFAULT_ENV;
 
             // ── Step 0: Resource allowances ─────────────────────────────────
-            // Order matters: allowances must come before mapping because the
-            // `Revive.map_account` transaction is paid in PGAS on paseo-next-v2,
-            // and the user only has PGAS sponsoring after SmartContractAllowance
-            // is granted.
+            // Allowances are requested against the product-derived account
+            // (host-papp's `productAccountId = [PLAYGROUND_PRODUCT_ID, 0]`),
+            // which is the same SS58 used everywhere else in this flow.
             update(0, { status: "active", value: "checking…", valueTone: "muted" });
             let allowancesOk = false;
             try {
@@ -160,7 +160,7 @@ export function AccountSetup({
                     });
                     setPhonePrompt({
                         step: 1,
-                        total: 2,
+                        total: 1,
                         label: "grant resource allowances",
                     });
                     const outcomes = await requestResourceAllocation(
@@ -206,7 +206,24 @@ export function AccountSetup({
                 return;
             }
 
-            // ── Step 1: Revive account mapping ──────────────────────────────
+            // ── Step 1: Top up the product-derived account ──────────────────
+            // paseo-next-v2's pallet_revive::AutoMapper creates the H160
+            // mapping on the first state-changing tx the product account
+            // submits, so we don't run an explicit `Revive.map_account` here
+            // by default. We mirror bulletin-deploy's `attemptTestnetTopUp`
+            // and ensure the product-derived account has enough PAS to cover
+            // the auto-map trigger fee bulletin-deploy submits during
+            // `dot deploy`. Reuses the same dev source signer bulletin-deploy
+            // uses so the funding lands on a chain that is actually
+            // pre-funded (paseo-next-v2).
+            //
+            // Belt-and-braces: after funding, re-check the on-chain mapping
+            // and submit an explicit `Revive.map_account` if AutoMapper did
+            // not fire (e.g. the account pre-existed the AutoMapper runtime
+            // upgrade and a fresh `OnNewAccount` was never triggered). This
+            // covers the cold-start case the deploy preflight error message
+            // ("Account is not mapped in Revive. Run `dot init`...") would
+            // otherwise leave the user stuck on.
             if (!allowancesOk) {
                 update(1, {
                     status: "skipped",
@@ -216,30 +233,31 @@ export function AccountSetup({
                 finish(false);
                 return;
             }
-            update(1, { status: "active", value: "checking…", valueTone: "muted" });
+            update(1, { status: "active", value: "checking balance…", valueTone: "muted" });
             try {
+                const result = await topUpFromBulletinDev(client, address);
+                if (cancelled) return;
+                let detail = result.skipped ? "already funded" : "+1 PAS";
+
+                // `ensureMapped` is a no-op when the account is already
+                // mapped (the underlying SDK helper hard-errors only on
+                // mapping failures we want to surface). `checkMapping`
+                // catches the common case so we don't print "mapping…" on
+                // every re-run.
                 const mapped = await checkMapping(client, address);
                 if (cancelled) return;
-                if (mapped) {
-                    update(1, { status: "ok", value: "mapped", valueTone: "muted" });
-                } else {
+                if (!mapped) {
                     update(1, {
                         status: "active",
-                        value: "approve on your Polkadot mobile app…",
+                        value: "registering H160 mapping…",
                         valueTone: "muted",
-                    });
-                    setPhonePrompt({
-                        step: 2,
-                        total: 2,
-                        label: "map account to H160",
                     });
                     await ensureMapped(client, address, session.signer);
                     if (cancelled) return;
-                    setPhonePrompt(null);
-                    update(1, { status: "ok", value: "mapped", valueTone: "muted" });
+                    detail = `${detail} + mapped`;
                 }
+                update(1, { status: "ok", value: detail, valueTone: "muted" });
             } catch (err) {
-                setPhonePrompt(null);
                 update(1, {
                     status: "failed",
                     error: describe(err),
