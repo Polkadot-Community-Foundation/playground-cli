@@ -19,20 +19,11 @@
  * Queries the on-chain playground registry to verify deploy outcomes.
  */
 
-import { ContractManager } from "@parity/product-sdk-contracts";
-import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
-import { ss58Encode } from "@parity/product-sdk-address";
 import { getTestClient } from "../helpers/chain.js";
-import {
-	PLAYGROUND_REGISTRY_CONTRACT,
-	suppressReviveTraceNoise,
-	withRequiredLiveContractAddresses,
-} from "../../../src/utils/contractManifest.js";
+import { getReadOnlyRegistryContract } from "../../../src/utils/registry.js";
 import { resolveSigner } from "../../../src/utils/signer.js";
 import { publishToPlayground } from "../../../src/utils/deploy/playground.js";
 import { SIGNER } from "./accounts.js";
-
-import cdmJson from "../../../cdm.json";
 
 export interface AppEntry {
 	domain: string;
@@ -40,7 +31,7 @@ export interface AppEntry {
 	metadataUri: string;
 }
 
-type Registry = Awaited<ReturnType<Awaited<ReturnType<typeof ContractManager.fromClient>>["getContract"]>>;
+type Registry = Awaited<ReturnType<typeof getReadOnlyRegistryContract>>;
 
 let registryPromise: Promise<Registry> | null = null;
 
@@ -48,21 +39,7 @@ async function getRegistry(): Promise<Registry> {
 	if (!registryPromise) {
 		registryPromise = (async () => {
 			const client = await getTestClient();
-			const aliceSigner = createDevSigner("Alice");
-			const aliceAddress = ss58Encode(getDevPublicKey("Alice"));
-			// Mirror src/utils/registry.ts — query the CDM meta-registry for the
-			// live address before binding, so the helper reads from the same
-			// contract `dot mod` and `dot deploy` actually use. Without this,
-			// reads land on the cdm.json snapshot and silently diverge from the
-			// command paths after a registry redeploy. See issue #74.
-			const manifest = await withRequiredLiveContractAddresses(cdmJson, client.raw.assetHub, [
-				PLAYGROUND_REGISTRY_CONTRACT,
-			]);
-			const manager = await ContractManager.fromClient(manifest, client.raw.assetHub, {
-				defaultSigner: aliceSigner,
-				defaultOrigin: aliceAddress,
-			});
-			return suppressReviveTraceNoise(manager.getContract(PLAYGROUND_REGISTRY_CONTRACT));
+			return getReadOnlyRegistryContract(client.raw.assetHub);
 		})().catch((err) => {
 			// Reset so the next call can retry instead of replaying the error
 			registryPromise = null;

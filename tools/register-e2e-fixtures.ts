@@ -16,182 +16,224 @@
 // limitations under the License.
 
 /**
- * Register all permanent E2E fixture domains on the live playground-registry
- * contract, signed by the dedicated E2E deployer (SIGNER from
- * e2e/cli/fixtures/accounts.ts). Same-owner re-publish is permitted by the
- * registry contract, so re-running this tool simply updates the metadata in
- * place — idempotent.
+ * Register the fixed E2E playground-registry entries against the active chain.
  *
- * Generalises the old `register-mod-fixture.ts`. The mod fixture
- * (`dot-cli-mod-fixture.dot`) is now one entry in a unified FIXTURES table
- * alongside the new per-cell deploy domains added in Phase 3 (foundry, cdm,
- * hardhat, multi).
- *
- * All fixtures are registered with `visibility = 0` (private) so they don't
- * clutter the public playground.dot grid. The CLI tests that hit these
- * domains use direct `getMetadataUri` queries (`dot mod <domain>`,
- * registry-readback assertions), which are unaffected by visibility.
- *
- * Usage:
- *   bun tools/register-e2e-fixtures.ts                        # register all 5
- *   bun tools/register-e2e-fixtures.ts --domain e2efnd00      # one only
- *   bun tools/register-e2e-fixtures.ts --suri //Alice         # custom signer
- *
- * Auto-tops-up SIGNER from the CLI's funder chain if balance is too low to
- * cover the publish extrinsic, matching the e2e setup behavior.
+ * Uses the same publish path as `dot deploy --playground`: metadata is stored
+ * through `publishToPlayground()`, then the registry entry is written by the
+ * fixture signer. Re-running is idempotent for domains already owned by that
+ * signer.
  */
 
+import { parseArgs } from "node:util";
+import { destroyConnection } from "../src/utils/connection.js";
+import { checkAllowance, ensureAllowance } from "../src/utils/account/allowance.js";
+import { publishToPlayground, normalizeDomain } from "../src/utils/deploy/playground.js";
+import { getReadOnlyRegistryContract } from "../src/utils/registry.js";
 import { resolveSigner } from "../src/utils/signer.js";
-import { publishToPlayground } from "../src/utils/deploy/playground.js";
-import { getConnection, destroyConnection } from "../src/utils/connection.js";
-import { ensureFunded, checkBalance, MIN_BALANCE } from "../src/utils/account/funding.js";
-import { DEDICATED_E2E_DEPLOYER_MNEMONIC } from "../e2e/cli/fixtures/accounts.js";
+import { SIGNER, E2E_DOMAINS } from "../e2e/cli/fixtures/accounts.js";
+import { destroyTestClient, getTestClient } from "../e2e/cli/helpers/chain.js";
+import { fundAccountIfLow } from "../e2e/cli/setup/fund.js";
+
+const DEFAULT_TEMPLATE_DOMAIN = "dot-cli-mod-fixture.dot";
+const DEFAULT_TEMPLATE_REPO = "https://github.com/paritytech/Rock-Paper-Scissors";
+const REGISTRY_READBACK_ATTEMPTS = 5;
+const REGISTRY_READBACK_DELAY_MS = 2_000;
 
 interface Fixture {
 	domain: string;
 	repositoryUrl: string | null;
-	purpose: string;
 }
 
-/**
- * Permanent E2E fixture domains. Registering them is a one-shot bootstrap
- * step per registry-contract lifetime; see Phase 3 of the spec.
- *
- * `dot-cli-mod-fixture.dot` is the only one with a repository URL, because
- * `dot mod <domain>` only works when the registered metadata advertises a
- * source repo. The other domains are deploy targets — same-owner re-publish
- * cycles their metadata on every CI run.
- */
 const FIXTURES: readonly Fixture[] = [
 	{
-		domain: "dot-cli-mod-fixture.dot",
-		repositoryUrl: "https://github.com/paritytech/Rock-Paper-Scissors",
-		purpose: "dot mod E2E fixture (clones into a fresh repo)",
+		domain: process.env.TEST_TEMPLATE_DOMAIN ?? DEFAULT_TEMPLATE_DOMAIN,
+		repositoryUrl: process.env.TEST_TEMPLATE_REPO ?? DEFAULT_TEMPLATE_REPO,
 	},
-	{
-		domain: "e2efnd00",
-		repositoryUrl: null,
-		purpose: "pr-deploy-foundry cell",
-	},
-	{
-		domain: "e2ecdm00",
-		repositoryUrl: null,
-		purpose: "pr-deploy-cdm cell",
-	},
-	{
-		domain: "e2ehat00",
-		repositoryUrl: null,
-		purpose: "nightly-deploy-hardhat cell",
-	},
-	{
-		domain: "e2emul00",
-		repositoryUrl: null,
-		purpose: "nightly-deploy-multi cell",
-	},
+	...[
+		E2E_DOMAINS.preflight,
+		E2E_DOMAINS.storage,
+		E2E_DOMAINS.redeploy,
+		E2E_DOMAINS.collision,
+		E2E_DOMAINS.foundry,
+		E2E_DOMAINS.cdm,
+		E2E_DOMAINS.hardhat,
+		E2E_DOMAINS.multi,
+	].map((domain) => ({ domain, repositoryUrl: null })),
 ];
 
-const DEFAULT_SURI = `${DEDICATED_E2E_DEPLOYER_MNEMONIC}//e2e-deployer`;
-const PAS = 10_000_000_000n;
-const TOPUP_TARGET = 500n * PAS;
-const TOPUP_AMOUNT = 1000n * PAS;
-
-interface Args {
-	onlyDomain: string | null;
-	suri: string;
+function usage(): string {
+	return [
+		"Usage: bun tools/register-e2e-fixtures.ts [--domain <domain>] [--suri <suri>]",
+		"",
+		"Fixtures:",
+		...FIXTURES.map((fixture) => `  ${normalizeDomain(fixture.domain).fullDomain}`),
+	].join("\n");
 }
 
-function parseArgs(argv: string[]): Args {
-	const args: Args = { onlyDomain: null, suri: DEFAULT_SURI };
-	for (let i = 0; i < argv.length; i++) {
-		const arg = argv[i];
-		const next = argv[i + 1];
-		if (arg === "--domain" && next) {
-			args.onlyDomain = next;
-			i++;
-		} else if (arg === "--suri" && next) {
-			args.suri = next;
-			i++;
-		} else if (arg === "--help" || arg === "-h") {
-			console.log("Usage: bun tools/register-e2e-fixtures.ts [--domain X] [--suri Z]");
-			console.log();
-			console.log("Default: registers all permanent E2E fixture domains:");
-			for (const f of FIXTURES) {
-				console.log(`  ${f.domain.padEnd(28)}  — ${f.purpose}`);
-			}
-			process.exit(0);
-		} else {
-			throw new Error(`Unknown arg: ${arg}`);
-		}
-	}
-	return args;
+function selectedFixtures(domain?: string): readonly Fixture[] {
+	if (!domain) return FIXTURES;
+
+	const requested = normalizeDomain(domain).fullDomain.toLowerCase();
+	return FIXTURES.filter(
+		(fixture) => normalizeDomain(fixture.domain).fullDomain.toLowerCase() === requested,
+	);
 }
 
-async function topUpIfLow(client: Awaited<ReturnType<typeof getConnection>>, address: string): Promise<void> {
-	const balance = await checkBalance(client, address, TOPUP_TARGET);
-	console.log(`signer balance: ${balance.free / PAS} PAS`);
-	if (!balance.sufficient) {
-		console.log(`balance below ${TOPUP_TARGET / PAS} PAS — topping up by ${TOPUP_AMOUNT / PAS} PAS…`);
-		await ensureFunded(client, address, TOPUP_TARGET, TOPUP_AMOUNT);
-		const after = await checkBalance(client, address, MIN_BALANCE);
-		console.log(`topped up: ${after.free / PAS} PAS`);
+function describeFixture(fixture: Fixture): string {
+	const fullDomain = normalizeDomain(fixture.domain).fullDomain;
+	return `${fullDomain}  repo=${fixture.repositoryUrl ?? "(none)"}`;
+}
+
+function logPlan(fixtures: readonly Fixture[]): void {
+	console.log(`registering ${fixtures.length} fixture(s) as private Playground apps:`);
+	for (const fixture of fixtures) {
+		console.log(`  - ${describeFixture(fixture)}`);
 	}
 	console.log();
 }
 
-async function registerOne(fixture: Fixture, signer: Awaited<ReturnType<typeof resolveSigner>>): Promise<void> {
-	console.log(`▶ registering ${fixture.domain}`);
-	console.log(`  purpose:    ${fixture.purpose}`);
-	console.log(`  repository: ${fixture.repositoryUrl ?? "(none)"}`);
+function errorText(error: unknown): string {
+	if (error instanceof Error) return `${error.name}: ${error.message}`;
+	return String(error);
+}
+
+function isBulletinTeardownNoise(error: unknown): boolean {
+	const text = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ""}` : String(error);
+	return (
+		text.includes("ChainHead disjointed") ||
+		(text.includes("UnsubscriptionError") && text.includes("Not connected"))
+	);
+}
+
+function suppressStandaloneBulletinTeardownNoise(): () => void {
+	const onUncaught = (error: unknown) => {
+		if (isBulletinTeardownNoise(error)) {
+			console.warn(`ignored Bulletin client teardown noise: ${errorText(error)}`);
+			return;
+		}
+		process.off("uncaughtException", onUncaught);
+		throw error;
+	};
+
+	process.prependListener("uncaughtException", onUncaught);
+	return () => process.off("uncaughtException", onUncaught);
+}
+
+async function delay(ms: number): Promise<void> {
+	await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatAllowance(status: Awaited<ReturnType<typeof checkAllowance>>): string {
+	if (!status.authorized) return "not authorized";
+	return `${status.remainingTxs} tx / ${status.remainingBytes} bytes`;
+}
+
+async function ensureFixtureStorageAllowance(address: string): Promise<void> {
+	const client = await getTestClient();
+	const before = await checkAllowance(client, address);
+	console.log(`Bulletin allowance ${formatAllowance(before)}`);
+
+	await ensureAllowance(client, address);
+
+	const after = await checkAllowance(client, address);
+	if (formatAllowance(after) !== formatAllowance(before)) {
+		console.log(`Bulletin allowance ${formatAllowance(after)}`);
+	}
+	console.log();
+}
+
+async function verifyRegistryEntry(domain: string, metadataCid: string): Promise<void> {
+	const client = await getTestClient();
+	const registry = await getReadOnlyRegistryContract(client.raw.assetHub);
+
+	for (let attempt = 1; attempt <= REGISTRY_READBACK_ATTEMPTS; attempt++) {
+		const result = await registry.getMetadataUri.query(domain);
+		const value = result.value as { isSome?: boolean; value?: string } | undefined;
+		if (result.success && value?.isSome && value.value === metadataCid) return;
+
+		if (attempt < REGISTRY_READBACK_ATTEMPTS) await delay(REGISTRY_READBACK_DELAY_MS);
+	}
+
+	throw new Error(`Registry readback failed for ${domain}: expected metadata CID ${metadataCid}`);
+}
+
+async function registerFixture(
+	fixture: Fixture,
+	signer: Awaited<ReturnType<typeof resolveSigner>>,
+	index: number,
+	total: number,
+): Promise<void> {
+	const fullDomain = normalizeDomain(fixture.domain).fullDomain;
+	const start = Date.now();
+	console.log(`[${index}/${total}] ${fullDomain}`);
+	console.log(`  repository  ${fixture.repositoryUrl ?? "(none)"}`);
+	console.log("  visibility  private");
+
 	const result = await publishToPlayground({
 		domain: fixture.domain,
 		publishSigner: signer,
 		repositoryUrl: fixture.repositoryUrl,
 		isPrivate: true,
 		onLogEvent: (event) => {
-			if (event.kind === "info") console.log(`    • ${event.message}`);
+			if (event.kind === "info") console.log(`  ${event.message}`);
 		},
 	});
-	console.log(`  ✓ published ${result.fullDomain}`);
-	console.log(`    metadataCid  ${result.metadataCid}`);
+
+	await verifyRegistryEntry(result.fullDomain, result.metadataCid);
+
+	const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+	console.log("  verified    registry readback");
+	console.log(`  published   ${result.metadataCid} (${elapsed}s)`);
 	console.log();
 }
 
 async function main(): Promise<number> {
-	const args = parseArgs(process.argv.slice(2));
+	const { values } = parseArgs({
+		options: {
+			domain: { type: "string" },
+			help: { type: "boolean", short: "h" },
+			suri: { type: "string" },
+		},
+	});
 
-	const normalize = (s: string): string => s.replace(/\.dot$/i, "");
-	const targets = args.onlyDomain
-		? FIXTURES.filter((f) => normalize(f.domain) === normalize(args.onlyDomain ?? ""))
-		: FIXTURES;
+	if (values.help) {
+		console.log(usage());
+		return 0;
+	}
 
-	if (targets.length === 0) {
-		console.error(`No fixture matches --domain ${args.onlyDomain}`);
-		console.error(`Known fixtures: ${FIXTURES.map((f) => f.domain).join(", ")}`);
+	let fixtures: readonly Fixture[];
+	try {
+		fixtures = selectedFixtures(values.domain);
+	} catch (err) {
+		console.error(err instanceof Error ? err.message : String(err));
+		console.error(usage());
 		return 2;
 	}
 
-	console.log(`registering ${targets.length} fixture(s):`);
-	for (const f of targets) console.log(`  - ${f.domain}`);
-	console.log();
+	if (fixtures.length === 0) {
+		console.error(`No fixture matches "${values.domain}".`);
+		console.error(usage());
+		return 2;
+	}
 
-	const signer = await resolveSigner({ suri: args.suri });
-	console.log(`signer  ${signer.address} (${signer.source})`);
-	console.log();
-
+	const signer = await resolveSigner({ suri: values.suri ?? SIGNER.suri });
+	const restoreErrorHandling = suppressStandaloneBulletinTeardownNoise();
 	try {
-		const client = await getConnection();
-		// Balance checked once; TOPUP_TARGET (500 PAS) gives ~1000× headroom
-		// for the ~0.1 PAS/publish cost across all 5 fixtures.
-		await topUpIfLow(client, signer.address);
-		for (const fixture of targets) {
-			await registerOne(fixture, signer);
-		}
-		console.log(`✓ all ${targets.length} fixture(s) registered`);
+		logPlan(fixtures);
+		console.log(`signer ${signer.address} (${signer.source})`);
+		await fundAccountIfLow({ name: "fixture signer", address: signer.address });
 		console.log();
-		console.log(`verify with: bun tools/probe-registry-resolution.ts <domain>`);
+		await ensureFixtureStorageAllowance(signer.address);
+
+		for (const [index, fixture] of fixtures.entries()) {
+			await registerFixture(fixture, signer, index + 1, fixtures.length);
+		}
+		console.log(`registered ${fixtures.length} fixture(s)`);
 		return 0;
 	} finally {
+		restoreErrorHandling();
 		signer.destroy();
+		destroyTestClient();
 		destroyConnection();
 	}
 }

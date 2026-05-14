@@ -19,9 +19,8 @@
  * Diagnostic probe for issue paritytech/playground-cli#74.
  *
  * Compares the playground-registry address that the CDM meta-registry
- * currently resolves to (the path `dot mod` takes since 2026-04-30) against
- * the address baked into `cdm.json` (the path the e2e setup helper still
- * uses), and reports whether a target domain is registered against each.
+ * currently resolves to against the address baked into `cdm.json`, and
+ * reports whether a target domain is registered against each.
  *
  * Usage:
  *   bun tools/probe-registry-resolution.ts                 # default domain
@@ -35,6 +34,7 @@
 import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
 import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
 import { ss58Encode } from "@parity/product-sdk-address";
+import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import type { HexString } from "polkadot-api";
 import { getConnection, destroyConnection } from "../src/utils/connection.js";
 import {
@@ -76,7 +76,7 @@ async function queryDomain(
     const manifest = withAddressOverride(cdmJson as unknown as CdmJson, address);
     const aliceSigner = createDevSigner("Alice");
     const aliceAddress = ss58Encode(getDevPublicKey("Alice"));
-    const manager = await ContractManager.fromClient(manifest, rawClient, {
+    const manager = await ContractManager.fromClient(manifest, rawClient, paseo_asset_hub, {
         defaultSigner: aliceSigner,
         defaultOrigin: aliceAddress,
     });

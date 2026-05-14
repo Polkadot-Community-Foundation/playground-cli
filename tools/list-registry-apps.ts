@@ -24,18 +24,10 @@
  *   bun tools/list-registry-apps.ts
  */
 
-import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
-import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
-import { ss58Encode } from "@parity/product-sdk-address";
 import type { HexString } from "polkadot-api";
 import { fetchBulletinJson, getBulletinGateway } from "../src/utils/bulletinGateway.js";
 import { getConnection, destroyConnection } from "../src/utils/connection.js";
-import {
-    PLAYGROUND_REGISTRY_CONTRACT,
-    withRequiredLiveContractAddresses,
-    withoutReviveTraceNoise,
-} from "../src/utils/contractManifest.js";
-import cdmJson from "../cdm.json";
+import { getReadOnlyRegistryContract } from "../src/utils/registry.js";
 
 interface AppMetadata {
     name?: string;
@@ -66,19 +58,9 @@ async function probePublicGithub(repoUrl: string): Promise<{ ok: boolean; status
 async function main(): Promise<number> {
     const client = await getConnection();
     try {
-        const manifest = await withRequiredLiveContractAddresses(
-            cdmJson as unknown as CdmJson,
-            client.raw.assetHub,
-        );
-        const aliceSigner = createDevSigner("Alice");
-        const aliceAddress = ss58Encode(getDevPublicKey("Alice"));
-        const manager = await ContractManager.fromClient(manifest, client.raw.assetHub, {
-            defaultSigner: aliceSigner,
-            defaultOrigin: aliceAddress,
-        });
-        const registry = manager.getContract(PLAYGROUND_REGISTRY_CONTRACT);
+        const registry = await getReadOnlyRegistryContract(client.raw.assetHub);
 
-        const res = await withoutReviveTraceNoise(() => registry.getApps.query(0, 100));
+        const res = await registry.getApps.query(0, 100);
         const value = res.value as { entries: RegistryEntry[]; total: number };
         console.log(`live registry has ${value.total} app(s); inspecting up to 100:\n`);
 
