@@ -23,8 +23,6 @@
  * today; others throw from `getChainConfig` until they're populated.
  */
 
-import { REGISTRY_ADDRESS } from "@dotdm/contracts";
-
 export type Env =
     | "preview"
     | "paseo-next"
@@ -80,7 +78,7 @@ const PASEO_NEXT_V2: ChainConfig = {
     bulletinRpc: "wss://paseo-bulletin-next-rpc.polkadot.io",
     bulletinRpcFallbacks: [],
     peopleEndpoints: ["wss://paseo-people-next-system-rpc.polkadot.io"],
-    bulletinGateway: "https://paseo-bulletin-next-ipfs.polkadot.io/",
+    bulletinGateway: "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
     identityBackendUrl: "https://identity-backend-next.parity-testnet.parity.io",
     appViewerOrigin: "https://dot.li",
     autoAccountMapping: true,
@@ -149,9 +147,6 @@ export function getNetworkLabel(env: Env = DEFAULT_ENV): string {
             return "kusama";
     }
 }
-
-/** CDM meta-registry contract address, sourced from `@dotdm/contracts`. */
-export const CDM_REGISTRY_ADDRESS = REGISTRY_ADDRESS;
 
 /** Identifier the terminal adapter reports during SSO. Kept stable so mobile pairings persist across releases. */
 export const DAPP_ID = "dot-cli";
