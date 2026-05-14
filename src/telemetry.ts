@@ -77,6 +77,25 @@ function sanitizeTelemetryValue(value: unknown, depth = 0): unknown {
     return record;
 }
 
+/**
+ * Drop the benign `DestroyedError: Client destroyed` events that polkadot-api
+ * emits when its chainHead teardown races a WS disconnect. The error is
+ * already filtered out of the user-visible stderr write by
+ * `process-guard.ts::isBenignUnsubscriptionError`; mirror that filter here so
+ * Sentry's Failures dashboard isn't inundated with the same teardown noise.
+ * Matches the upstream `Error.name` + `.message` shape from
+ * `@polkadot-api/raw-client/.../DestroyedError.mjs`.
+ */
+function isBenignDestroyedErrorEvent(event: Record<string, unknown>): boolean {
+    const exception = event.exception as
+        | { values?: Array<{ type?: string; value?: string }> }
+        | undefined;
+    if (!exception?.values?.length) return false;
+    return exception.values.some(
+        (entry) => entry?.type === "DestroyedError" && /client destroyed/i.test(entry.value ?? ""),
+    );
+}
+
 export function sanitizeSentryEvent<T extends Record<string, unknown>>(event: T): T {
     const writable = event as Record<string, unknown>;
     writable["server_name"] = anonymousServerName();
@@ -116,7 +135,29 @@ export async function initTelemetry(options: TelemetryInitOptions = {}): Promise
             tracesSampleRate: 1,
             environment: process.env.CI ? "ci" : "local",
             serverName: anonymousServerName(),
+            // Override `@sentry/node`'s default `OnUnhandledRejection`
+            // integration with `mode: 'none'`. The default 'warn' mode
+            // unconditionally prints
+            //   console.warn("This error originated either by ...")
+            //   console.error(reason.stack)
+            // via `consoleSandbox`, which splits the preamble and the
+            // error-type lines across two separate `process.stderr.write`
+            // calls; the bootstrap.ts stderr filter requires both substrings
+            // in a single write so it never matches. `mode: 'none'` keeps the
+            // capture path (`Sentry.captureException` with the full
+            // `mechanism: { handled: false, type: 'onunhandledrejection' }`
+            // metadata, see `@sentry/node-core/.../onunhandledrejection.js`)
+            // and skips the print. `beforeSend` below drops the benign
+            // polkadot-api `DestroyedError: Client destroyed` teardown
+            // artifacts so they don't spam Sentry.
+            integrations: (defaultIntegrations) => [
+                ...defaultIntegrations.filter(
+                    (integration) => integration.name !== "OnUnhandledRejection",
+                ),
+                Sentry.onUnhandledRejectionIntegration({ mode: "none" }),
+            ],
             beforeSend(event) {
+                if (isBenignDestroyedErrorEvent(event)) return null;
                 return sanitizeSentryEvent(
                     event as unknown as Record<string, unknown>,
                 ) as unknown as typeof event;
