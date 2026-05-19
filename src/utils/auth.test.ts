@@ -26,10 +26,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     clearLocalAppStorage,
+    deriveSessionAddresses,
     waitForLogout,
     type LogoutHandle,
     type LogoutStatus,
 } from "./auth.js";
+import type { UserSession } from "@parity/product-sdk-terminal";
 import { DAPP_ID } from "../config.js";
 
 describe("subscribe-before-assignment pattern", () => {
@@ -327,5 +329,99 @@ describe("clearLocalAppStorage", () => {
     it("swallows unlink errors so callers stay on the happy path", async () => {
         // Nothing to delete → nothing to error on, but the promise must resolve.
         await expect(clearLocalAppStorage(dir)).resolves.toBeUndefined();
+    });
+});
+
+/**
+ * `deriveSessionAddresses` is the function this whole branch exists to
+ * make right. The bug it replaced ran `deriveProductAccountPublicKey`
+ * twice — once inside `createPlaygroundSessionSigner` and again inside
+ * `IdentityLines` → `productAccountAddresses` — producing a doubly-
+ * derived ghost product account whose H160 didn't match what the
+ * playground-app actually uses for the same root.
+ *
+ * These tests lock the contract:
+ *
+ *   1. Frozen vectors from a known mnemonic so a regression to a
+ *      doubly-derived shape (or any other algorithm change) fails loud.
+ *   2. `productAddress !== rootAddress` — the most basic sanity check
+ *      that whatever we display under "product account" can't be
+ *      mistaken for the wallet-root row above it.
+ *
+ * The mnemonic used to generate these vectors is
+ * `train snow there sponsor artwork zebra gossip depth narrow blame
+ * change private`, a published test wallet — its derivation match
+ * was verified live against the playground-app's
+ * `[playground.dot] selected account` log:
+ *
+ *   address=5GGpUaN7XNaUp3nEVDPBSR4SQLxFxQsiPHbFwf69Apr3HgDZ
+ *   derivedH160=0x47f68a0851a663dfacb4610d673ec708f05576b0
+ *
+ * If any of these change, mobile or product-sdk-keys has moved out
+ * from under us — that is news, not a test bug to skip.
+ */
+describe("deriveSessionAddresses", () => {
+    // SS58 of the bare-mnemonic sr25519 root for the test mnemonic above —
+    // this is what mobile sends as `rootUserAccountId` in the SSO handshake.
+    // Bytes captured by deriving the mnemonic with `@polkadot-labs/hdkd`'s
+    // sr25519CreateDerive(miniSecret)("").publicKey — they MUST be a valid
+    // ristretto255 point; arbitrary 32-byte buffers won't decode.
+    const TEST_ROOT_SS58 = "5FZEMcMGTjSveipHTD35RsRtMqZf2wk41g2zAPL8j2UwWTrp";
+    const TEST_ROOT_BYTES = Uint8Array.from([
+        0x9a, 0x76, 0x3d, 0x8d, 0x7d, 0xb9, 0x5e, 0xbd, 0xeb, 0x8f, 0xe2, 0x60, 0xb8, 0x90, 0xf3,
+        0x5a, 0x25, 0x3d, 0xb8, 0x27, 0x74, 0xf6, 0x34, 0x46, 0x6c, 0xed, 0x38, 0x7a, 0xa1, 0x4e,
+        0xfd, 0x29,
+    ]);
+    // A second valid sr25519 public key — derived as `//Alice` off the same
+    // mini-secret. Used only to verify that the H160 moves in lock-step with
+    // the product SS58 when the root changes.
+    const ALT_ROOT_BYTES = Uint8Array.from([
+        0xb4, 0x73, 0x69, 0x9f, 0xb2, 0xb2, 0x80, 0x72, 0xe9, 0x25, 0x3e, 0xe6, 0xee, 0x1e, 0x2f,
+        0x3c, 0xf4, 0x14, 0xdd, 0x75, 0xae, 0x0f, 0xcc, 0xb1, 0xbf, 0xf9, 0x26, 0x14, 0xf1, 0x7f,
+        0x20, 0x7a,
+    ]);
+
+    function fakeSession(rootBytes: Uint8Array): UserSession {
+        // `deriveSessionAddresses` only reads `session.rootAccountId`.
+        // The full UserSession type carries signer callbacks we don't
+        // exercise, so the cast keeps the test focused.
+        return { rootAccountId: rootBytes } as unknown as UserSession;
+    }
+
+    it("matches the playground-app's published product address + H160 for a known root", () => {
+        const session = fakeSession(TEST_ROOT_BYTES);
+        const addresses = deriveSessionAddresses(session);
+
+        expect(addresses.rootAddress).toBe(TEST_ROOT_SS58);
+        expect(addresses.productAddress).toBe("5GGpUaN7XNaUp3nEVDPBSR4SQLxFxQsiPHbFwf69Apr3HgDZ");
+        expect(addresses.productH160).toBe("0x47f68a0851a663dfacb4610d673ec708f05576b0");
+    });
+
+    it("returns a product address distinct from the root — guards against double-derivation", () => {
+        const session = fakeSession(TEST_ROOT_BYTES);
+        const addresses = deriveSessionAddresses(session);
+
+        // If someone ever re-introduces a productAccountDisplay-style
+        // helper that takes addresses.productAddress as input and runs
+        // deriveProductAccountPublicKey on it, the resulting "product"
+        // SS58 will still be distinct from the root — but it will also
+        // be distinct from the value this test pins above. The frozen-
+        // vector test catches that path. This second assertion catches
+        // the trivial-mistake path: someone making product = root.
+        expect(addresses.productAddress).not.toBe(addresses.rootAddress);
+    });
+
+    it("derives the H160 from the same pubkey as the product SS58", () => {
+        // Two different rootAccountIds → different product SS58s → and
+        // the H160 must change in lock-step with the SS58. A regression
+        // that derived H160 off the root (or off a doubly-derived
+        // pubkey) would either keep the H160 constant when the root
+        // moves or break the ss58↔h160 pairing.
+        const a = deriveSessionAddresses(fakeSession(TEST_ROOT_BYTES));
+        const b = deriveSessionAddresses(fakeSession(ALT_ROOT_BYTES));
+
+        expect(a.productAddress).not.toBe(b.productAddress);
+        expect(a.productH160).not.toBe(b.productH160);
+        expect(b.productH160).toMatch(/^0x[0-9a-f]{40}$/);
     });
 });
