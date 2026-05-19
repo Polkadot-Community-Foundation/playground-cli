@@ -29,11 +29,13 @@ import {
 } from "../../utils/allowances/host.js";
 import { hasAllowance, markAllowance } from "../../utils/allowances/marker.js";
 import {
+    bulletinAuthorizationHelp,
     hasUsableBulletinSlotAuthorization,
     waitForBulletinSlotAuthorization,
 } from "../../utils/allowances/bulletin.js";
 import {
     extractSlotAccountKey,
+    getSlotAccountAddress,
     hasSlotAccountKey,
     readSlotAccountKey,
     storeSlotAccountKeysFromOutcomes,
@@ -148,8 +150,21 @@ export function AccountSetup({
             // Allowances are requested against the product-derived account
             // (host-papp's `productAccountId = [PLAYGROUND_PRODUCT_ID, 0]`),
             // which is the same SS58 used everywhere else in this flow.
+            //
+            // A note on non-fatal Bulletin timeouts: mobile derives the slot
+            // account from the user's root and submits `claim_long_term_storage`
+            // on People Chain; the authorization is supposed to propagate to
+            // Bulletin Chain via on-chain mechanics. The mobile waits 30s for
+            // visibility and swallows the failure, returning the slot key
+            // regardless. Our wait can therefore time out even on the happy
+            // path where the chain *will* catch up. The slot key + marker are
+            // still cached so the next run / `dot deploy` picks them up, and
+            // the funding + mapping steps below DO NOT depend on Bulletin
+            // authorization — they only need the product account on Asset
+            // Hub. Treat the Bulletin timeout as a soft failure, surface the
+            // faucet help, and continue.
             update(0, { status: "active", value: "checking…", valueTone: "muted" });
-            let allowancesOk = false;
+            let accountSetupOk = true;
             try {
                 const tags = PLAYGROUND_RESOURCES.map((r) => r.tag);
                 const marked = await Promise.all(tags.map((t) => hasAllowance(env, address, t)));
@@ -178,7 +193,6 @@ export function AccountSetup({
                         value: "already granted",
                         valueTone: "muted",
                     });
-                    allowancesOk = true;
                 } else {
                     update(0, {
                         status: "active",
@@ -197,16 +211,17 @@ export function AccountSetup({
                     if (cancelled) return;
                     setPhonePrompt(null);
                     const summary = summarizeOutcomes(outcomes, PLAYGROUND_RESOURCES);
-                    const bulletinKey = extractSlotAccountKey(outcomes, "BulletInAllowance");
-                    if (bulletinKey) {
-                        await waitForBulletinSlotAuthorization(client.bulletin, bulletinKey);
-                    }
+
+                    // Persist every slot key the mobile returned BEFORE the
+                    // Bulletin propagation wait — a `waitForBulletinSlotAuthorization`
+                    // timeout below shouldn't discard a perfectly valid key.
                     await storeSlotAccountKeysFromOutcomes(env, address, outcomes);
                     // RFC-0010 allocation outcomes are independent: keep any
                     // successful keys even if a sibling resource was denied.
                     await Promise.all(
                         summary.granted.map((r) => markAllowance(env, address, r.tag, "host")),
                     );
+
                     if (summary.rejected.length > 0 || summary.unavailable.length > 0) {
                         const denied = [...summary.rejected, ...summary.unavailable]
                             .map(describeResource)
@@ -219,13 +234,38 @@ export function AccountSetup({
                         finish(false);
                         return;
                     }
+
+                    const bulletinKey = extractSlotAccountKey(outcomes, "BulletInAllowance");
+                    if (bulletinKey) {
+                        try {
+                            await waitForBulletinSlotAuthorization(client.bulletin, bulletinKey);
+                        } catch (waitErr) {
+                            // Soft failure: key + marker are cached above, so
+                            // the next run / `dot deploy` will see them. The
+                            // funding/mapping step doesn't need this, so we
+                            // surface the help and keep going.
+                            accountSetupOk = false;
+                            update(0, {
+                                status: "failed",
+                                value: "approve on your Polkadot mobile app…",
+                                error:
+                                    waitErr instanceof Error
+                                        ? waitErr.message
+                                        : bulletinAuthorizationHelp(
+                                              getSlotAccountAddress(bulletinKey),
+                                          ),
+                                valueTone: "warning",
+                            });
+                        }
+                    }
                     if (cancelled) return;
-                    update(0, {
-                        status: "ok",
-                        value: `granted (${summary.granted.length})`,
-                        valueTone: "muted",
-                    });
-                    allowancesOk = true;
+                    if (accountSetupOk) {
+                        update(0, {
+                            status: "ok",
+                            value: `granted (${summary.granted.length})`,
+                            valueTone: "muted",
+                        });
+                    }
                 }
             } catch (err) {
                 setPhonePrompt(null);
@@ -256,15 +296,6 @@ export function AccountSetup({
             // covers the cold-start case the deploy preflight error message
             // ("Account is not mapped in Revive. Run `dot init`...") would
             // otherwise leave the user stuck on.
-            if (!allowancesOk) {
-                update(1, {
-                    status: "skipped",
-                    value: "skipped — allowances missing",
-                    valueTone: "muted",
-                });
-                finish(false);
-                return;
-            }
             update(1, { status: "active", value: "checking balance…", valueTone: "muted" });
             try {
                 const result = await topUpFromBulletinDev(client, address);
@@ -299,7 +330,7 @@ export function AccountSetup({
                 return;
             }
 
-            finish(true);
+            finish(accountSetupOk);
         })();
 
         // Cleanup is the SOLE owner of `session?.destroy()`. Calling destroy()

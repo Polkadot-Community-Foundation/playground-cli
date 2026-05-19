@@ -24,7 +24,8 @@ vi.mock("@parity/product-sdk-bulletin", () => ({
     checkAuthorization: checkAuthorizationMock,
 }));
 
-import { hasUsableBulletinSlotAuthorization } from "./bulletin.js";
+import { BULLETIN_AUTHORIZATION_URL } from "../../config.js";
+import { bulletinAuthorizationHelp, hasUsableBulletinSlotAuthorization } from "./bulletin.js";
 
 const KEY = secretFromSeed(new Uint8Array(32).fill(7));
 
@@ -64,5 +65,16 @@ describe("Bulletin allowance authorization", () => {
             expiration: 1,
         });
         await expect(hasUsableBulletinSlotAuthorization({} as any, KEY, 50)).resolves.toBe(false);
+    });
+});
+
+describe("bulletinAuthorizationHelp", () => {
+    it("includes the faucet URL and the slot account SS58", () => {
+        const help = bulletinAuthorizationHelp("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY");
+        expect(help).toContain(BULLETIN_AUTHORIZATION_URL);
+        expect(help).toContain("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY");
+        // The user needs an actionable instruction, not just a URL drop —
+        // make sure the "re-run dot init" hint stays in the string.
+        expect(help).toMatch(/re-run.*dot init/i);
     });
 });

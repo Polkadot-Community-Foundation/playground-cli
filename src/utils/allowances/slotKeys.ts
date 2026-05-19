@@ -161,18 +161,36 @@ export async function storeSlotAccountKeysFromOutcomes(
     address: string,
     outcomes: AllocationOutcome[],
 ): Promise<void> {
-    await Promise.all(
-        outcomes.map(async (outcome) => {
-            if (outcome.tag !== "Allocated") return;
-            const allocated = outcome.value as
-                | { tag?: ResourceTag; value?: { slotAccountKey?: Uint8Array } }
-                | undefined;
-            if (!allocated?.tag || !isSlotAccountResource(allocated.tag)) return;
-            const key = allocated.value?.slotAccountKey;
-            if (!(key instanceof Uint8Array)) return;
-            await storeSlotAccountKey(env, address, allocated.tag, key);
-        }),
-    );
+    // Single read-modify-write so two slot keys returned in one call
+    // (e.g. BulletInAllowance + StatementStoreAllowance) can't race —
+    // the old `Promise.all([...storeSlotAccountKey])` pattern had each
+    // call load the file, mutate one resource, save the file; the
+    // saves would interleave and the second write would clobber the
+    // first slot key.
+    const file = await loadFile();
+    let mutated = false;
+
+    for (const outcome of outcomes) {
+        if (outcome.tag !== "Allocated") continue;
+        const allocated = outcome.value as
+            | { tag?: ResourceTag; value?: { slotAccountKey?: Uint8Array } }
+            | undefined;
+        if (!allocated?.tag || !isSlotAccountResource(allocated.tag)) continue;
+        const key = allocated.value?.slotAccountKey;
+        if (!(key instanceof Uint8Array)) continue;
+
+        const envBucket = file.envs[env] ?? {};
+        const addrBucket = envBucket[address] ?? {};
+        addrBucket[allocated.tag] = {
+            slotAccountKey: toHex(normalizeSlotAccountKey(key)) as `0x${string}`,
+            storedAt: Date.now(),
+        };
+        envBucket[address] = addrBucket;
+        file.envs[env] = envBucket;
+        mutated = true;
+    }
+
+    if (mutated) await saveFile(file);
 }
 
 export function createSlotAccountSigner(slotAccountKey: Uint8Array): PolkadotSigner {

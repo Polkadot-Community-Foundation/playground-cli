@@ -173,3 +173,13 @@ export const TERMINAL_METADATA_URL =
 
 /** Default build output directory — matches Vite and the interactive prompt default. */
 export const DEFAULT_BUILD_DIR = "dist";
+
+/**
+ * Web faucet for manually authorizing a Bulletin slot account when RFC-0010
+ * People→Bulletin propagation hasn't reflected the mobile-side
+ * `Resources::claim_long_term_storage` claim by the time `dot init` polls.
+ * Surfaced verbatim in `bulletinAuthorizationHelp` so the user has a clear
+ * recovery path. Testnet-only; the Summit devnet bypasses this entirely.
+ */
+export const BULLETIN_AUTHORIZATION_URL =
+    "https://paritytech.github.io/polkadot-bulletin-chain/authorizations";
