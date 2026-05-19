@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import { Box } from "ink";
 import { Header, Row, Section } from "../../utils/ui/theme/index.js";
 import { DependencyList } from "./DependencyList.js";
+import { IdentityLines } from "./IdentityLines.js";
 import { QrLogin } from "./QrLogin.js";
 import { AccountSetup } from "./AccountSetup.js";
 import { computeAllDone } from "./completion.js";
@@ -81,6 +82,8 @@ export function InitScreen({
                     <Row mark="ok" label="logged in" value={existingAddress} tone="muted" />
                 </Section>
             )}
+
+            {loggedInAddress && <IdentityLines address={loggedInAddress} />}
 
             <DependencyList onDone={handleDepsDone} />
 
