@@ -3,6 +3,7 @@ dist/
 
 .cdm/
 docs-internal/
+docs/superpowers/
 .worktrees/
 reference-repos/
 .tokensave
