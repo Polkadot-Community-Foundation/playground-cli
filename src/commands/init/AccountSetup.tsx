@@ -29,11 +29,6 @@ import {
 } from "../../utils/allowances/host.js";
 import { hasAllowance, markAllowance } from "../../utils/allowances/marker.js";
 import {
-    hasUsableBulletinSlotAuthorization,
-    waitForBulletinSlotAuthorization,
-} from "../../utils/allowances/bulletin.js";
-import {
-    extractSlotAccountKey,
     hasSlotAccountKey,
     readSlotAccountKey,
     storeSlotAccountKeysFromOutcomes,
@@ -163,15 +158,7 @@ export function AccountSetup({
                     hasSlotAccountKey(env, address, "StatementStoreAllowance"),
                 ]);
                 if (cancelled) return;
-                const cachedBulletinUsable =
-                    cachedBulletinKey === null
-                        ? false
-                        : await hasUsableBulletinSlotAuthorization(
-                              client.bulletin,
-                              cachedBulletinKey,
-                          );
-                const allMarked =
-                    marked.every(Boolean) && slotKeys.every(Boolean) && cachedBulletinUsable;
+                const allMarked = marked.every(Boolean) && slotKeys.every(Boolean);
                 if (allMarked) {
                     update(0, {
                         status: "ok",
@@ -204,21 +191,6 @@ export function AccountSetup({
                         await markAllowance(env, address, resource.tag, "host");
                     }
 
-                    const bulletinKey = extractSlotAccountKey(outcomes, "BulletInAllowance");
-                    let bulletinReady = true;
-                    if (bulletinKey) {
-                        try {
-                            await waitForBulletinSlotAuthorization(client.bulletin, bulletinKey);
-                        } catch (err) {
-                            bulletinReady = false;
-                            accountSetupOk = false;
-                            update(0, {
-                                status: "failed",
-                                error: describe(err),
-                                valueTone: "danger",
-                            });
-                        }
-                    }
                     if (summary.rejected.length > 0 || summary.unavailable.length > 0) {
                         const denied = [...summary.rejected, ...summary.unavailable]
                             .map(describeResource)
@@ -229,7 +201,7 @@ export function AccountSetup({
                             error: `denied: ${denied}. Re-run \`dot init\` and approve on your phone.`,
                             valueTone: "danger",
                         });
-                    } else if (bulletinReady) {
+                    } else {
                         update(0, {
                             status: "ok",
                             value: `granted (${summary.granted.length})`,

@@ -37,7 +37,7 @@ export interface BulletinAllowanceSignerOptions {
     onRequest?: (policy: OnExistingAllowancePolicy) => void;
 }
 
-const BULLETIN_AUTH_WAIT_MS = 300_000;
+const BULLETIN_AUTH_WAIT_MS = 75_000;
 const BULLETIN_AUTH_POLL_MS = 3_000;
 
 function hasUsableAuthorization(
