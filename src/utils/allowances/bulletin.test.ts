@@ -24,7 +24,8 @@ vi.mock("@parity/product-sdk-bulletin", () => ({
     checkAuthorization: checkAuthorizationMock,
 }));
 
-import { hasUsableBulletinSlotAuthorization } from "./bulletin.js";
+import { getChainConfig } from "../../config.js";
+import { bulletinAuthorizationHelp, hasUsableBulletinSlotAuthorization } from "./bulletin.js";
 
 const KEY = secretFromSeed(new Uint8Array(32).fill(7));
 
@@ -64,5 +65,40 @@ describe("Bulletin allowance authorization", () => {
             expiration: 1,
         });
         await expect(hasUsableBulletinSlotAuthorization({} as any, KEY, 50)).resolves.toBe(false);
+    });
+});
+
+describe("bulletinAuthorizationHelp", () => {
+    const ADDR = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+
+    it("includes the explicitly-passed faucet URL + slot account SS58", () => {
+        const help = bulletinAuthorizationHelp(ADDR, "https://example.test/faucet");
+        expect(help).toContain("https://example.test/faucet");
+        expect(help).toContain(ADDR);
+        // The user needs an actionable instruction, not just a URL drop —
+        // make sure the "re-run dot init" hint stays in the string.
+        expect(help).toMatch(/re-run.*dot init/i);
+    });
+
+    it("falls back to a propagation-pending message when no faucet URL is configured", () => {
+        const help = bulletinAuthorizationHelp(ADDR, null);
+        // Mainnet / closed Summit devnet won't have a public faucet — the
+        // help must not invite users to a URL that doesn't apply.
+        expect(help).not.toMatch(/https?:\/\//);
+        expect(help).toContain(ADDR);
+        expect(help).toMatch(/propagation/i);
+    });
+
+    it("defaults to the active env's bulletinAuthorizationUrl when no URL passed", () => {
+        const help = bulletinAuthorizationHelp(ADDR);
+        const cfgUrl = getChainConfig().bulletinAuthorizationUrl;
+        if (cfgUrl) {
+            expect(help).toContain(cfgUrl);
+            // Pin the literal path component so a future rename of the
+            // constant can't silently produce a wrong user-facing URL.
+            expect(help).toMatch(/paritytech\.github\.io\/polkadot-bulletin-chain\/authorizations/);
+        } else {
+            expect(help).not.toMatch(/https?:\/\//);
+        }
     });
 });

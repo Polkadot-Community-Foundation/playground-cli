@@ -15,7 +15,7 @@
 
 import type { PolkadotSigner } from "polkadot-api";
 import { checkAuthorization, type BulletinApi } from "@parity/product-sdk-bulletin";
-import type { Env } from "../../config.js";
+import { getChainConfig, type Env } from "../../config.js";
 import type { ResolvedSigner } from "../signer.js";
 import { requestResourceAllocation, type OnExistingAllowancePolicy } from "./host.js";
 import { markAllowance } from "./marker.js";
@@ -26,6 +26,32 @@ import {
     readSlotAccountKey,
     storeSlotAccountKey,
 } from "./slotKeys.js";
+
+/**
+ * Help string appended to every Bulletin-allowance error that comes from
+ * the chain-side authorization not being visible on Bulletin yet. The
+ * mobile may have submitted `Resources::claim_long_term_storage` on
+ * People successfully but the People→Bulletin propagation hasn't landed
+ * (or the chain rejected it silently with `LongTermStorageAllocationFailed`,
+ * which mobile's `.logFailure(...)` swallows). Surfacing the slot SS58 +
+ * the env's faucet URL (when one is configured) gives the user a concrete
+ * recovery path on testnets. On envs without a faucet (mainnet / closed
+ * Summit devnet — `bulletinAuthorizationUrl: null`) we fall back to a
+ * generic "propagation pending" message rather than pointing at a URL
+ * that doesn't apply.
+ *
+ * `faucetUrl` defaults to the active env's config so callers don't have
+ * to plumb it through; pass `null` explicitly to render the no-faucet
+ * variant, or override in tests for determinism.
+ */
+export function bulletinAuthorizationHelp(
+    slotAccountAddress: string,
+    faucetUrl: string | null = getChainConfig().bulletinAuthorizationUrl,
+): string {
+    return faucetUrl
+        ? `Open the Bulletin authorization faucet at ${faucetUrl} and authorize account ${slotAccountAddress}, then re-run \`dot init\`.`
+        : `Bulletin allowance for ${slotAccountAddress} is not authorized on chain yet — wait a moment for People→Bulletin propagation, then re-run \`dot init\`.`;
+}
 
 export interface BulletinAllowanceSignerOptions {
     env: Env;
@@ -77,10 +103,11 @@ export async function waitForBulletinSlotAuthorization(
         await new Promise((resolve) => setTimeout(resolve, BULLETIN_AUTH_POLL_MS));
     }
 
+    const help = bulletinAuthorizationHelp(address);
     throw new Error(
         lastAuthorized
-            ? `Bulletin allowance for ${address} is live but does not have enough quota.`
-            : `Mobile returned Bulletin allowance key ${address}, but it is not authorized on Bulletin yet.`,
+            ? `Bulletin allowance for ${address} is live but does not have enough quota. ${help}`
+            : `Mobile returned Bulletin allowance key ${address}, but it is not authorized on Bulletin yet. ${help}`,
     );
 }
 
@@ -104,7 +131,12 @@ export async function getBulletinAllowanceSigner({
             return createSlotAccountSigner(cached);
         }
         if (!publishSigner.userSession) {
-            throw new Error("Cached Bulletin allowance key is not authorized. Run `dot init`.");
+            const slotAddress = getSlotAccountAddress(cached);
+            throw new Error(
+                `Cached Bulletin allowance key ${slotAddress} is not authorized. ${bulletinAuthorizationHelp(
+                    slotAddress,
+                )}`,
+            );
         }
         return await requestAndStoreBulletinAllowanceSigner({
             env,
@@ -164,12 +196,20 @@ export async function requestAndStoreBulletinAllowanceSigner({
         throw new Error(`Bulletin allowance was not granted (${outcome}).`);
     }
 
+    // Persist the key BEFORE the propagation wait. If the wait throws
+    // (chain hasn't reflected the People-side claim yet), we still want
+    // the next `dot init` / `dot deploy` to find the cached key instead
+    // of forcing the user to re-pair from scratch. The mobile derived
+    // it from the user's root via the deterministic
+    // `//allowance//bulletin//<productId>` path, so the same key will
+    // be valid the moment the chain catches up.
+    await storeSlotAccountKey(env, ownerAddress, "BulletInAllowance", key);
+    await markAllowance(env, ownerAddress, "BulletInAllowance", "host");
+
     if (bulletinApi) {
         await waitForBulletinSlotAuthorization(bulletinApi, key, requiredBytes);
     }
 
-    await storeSlotAccountKey(env, ownerAddress, "BulletInAllowance", key);
-    await markAllowance(env, ownerAddress, "BulletInAllowance", "host");
     return createSlotAccountSigner(key);
 }
 
