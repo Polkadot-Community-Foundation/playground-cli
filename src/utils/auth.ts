@@ -68,6 +68,19 @@ function sessionSigningAddress(session: UserSession): string {
     return ss58Encode(createPlaygroundSigner(session).publicKey);
 }
 
+function sessionRemoteAddress(session: UserSession): string | null {
+    const accountId = new Uint8Array(session.remoteAccount.accountId);
+    return accountId.length === 32 ? ss58Encode(accountId) : null;
+}
+
+function sessionLogoutAddress(session: UserSession): string {
+    try {
+        return sessionSigningAddress(session);
+    } catch {
+        return sessionRemoteAddress(session) ?? "(stored session)";
+    }
+}
+
 export type ConnectResult =
     | { kind: "existing"; address: string }
     | { kind: "qr"; qrCode: string; login: LoginHandle };
@@ -324,7 +337,7 @@ export async function findSession(): Promise<LogoutHandle | null> {
         return null;
     }
     const session = sessions[0];
-    const address = sessionSigningAddress(session);
+    const address = sessionLogoutAddress(session);
     return { adapter, address, session };
 }
 

@@ -64,6 +64,18 @@ export interface ProductAccountRef {
     derivationIndex: number;
 }
 
+export const INCOMPLETE_SESSION_MESSAGE =
+    'Stored login session is missing the root account public key. Run "dot logout" and then "dot init" to pair again.';
+
+export function sessionRootPublicKey(session: UserSession): Uint8Array {
+    const rootAccountId = (session as { rootAccountId?: Uint8Array }).rootAccountId;
+    const publicKey = rootAccountId ? new Uint8Array(rootAccountId) : new Uint8Array();
+    if (publicKey.length !== 32) {
+        throw new Error(INCOMPLETE_SESSION_MESSAGE);
+    }
+    return publicKey;
+}
+
 /**
  * Identifiers whose payload PAPI may populate but the PJS adapter doesn't
  * recognize. Mirrors `RELAXED_SIGNED_EXTENSIONS` in the polkadot-app sample.
@@ -114,7 +126,7 @@ export function createPlaygroundSessionSigner(
     // Algorithm parity with mobile/desktop is locked by the frozen vectors in
     // `@parity/product-sdk-keys`'s `product-account.test.ts`.
     const publicKey = deriveProductAccountPublicKey(
-        new Uint8Array(session.rootAccountId),
+        sessionRootPublicKey(session),
         ref.productId,
         ref.derivationIndex,
     );
