@@ -77,6 +77,29 @@ export function sessionRootPublicKey(session: UserSession): Uint8Array {
 }
 
 /**
+ * Soft-derive the product account public key off a wallet root.
+ *
+ * This is the single source of truth for product-account math in the CLI.
+ * Both `createPlaygroundSessionSigner` (which builds the signer used to
+ * actually sign on-chain) and `auth.ts::deriveSessionAddresses` (which
+ * builds the display triple for `dot init`) go through here so a future
+ * change to derivation params can't silently desync the signer from
+ * what we print.
+ *
+ * sr25519 soft derivation is composable on public keys alone, so deriving
+ * from `rootAccountId` locally produces the SAME public key the mobile
+ * derives privately via `mnemonic + "/product/...{idx}"`. Algorithm
+ * parity with mobile/desktop is locked by the frozen vectors in
+ * `@parity/product-sdk-keys`'s `product-account.test.ts`.
+ */
+export function derivePlaygroundProductPublicKey(
+    rootAccountId: Uint8Array,
+    ref: ProductAccountRef,
+): Uint8Array {
+    return deriveProductAccountPublicKey(rootAccountId, ref.productId, ref.derivationIndex);
+}
+
+/**
  * Identifiers whose payload PAPI may populate but the PJS adapter doesn't
  * recognize. Mirrors `RELAXED_SIGNED_EXTENSIONS` in the polkadot-app sample.
  * Add to this set if a future runtime adds another v2-style extension PAPI
@@ -119,17 +142,10 @@ export function createPlaygroundSessionSigner(
     // (the product account derived at `/product/{productId}/{idx}`).
     //
     // `session.rootAccountId` is the handshake-time `rootUserAccountId` —
-    // the user's bare-mnemonic keypair public key (`deriveRootAccount()` =
-    // `derivationPath = null`). Sr25519 soft derivation is composable on
-    // public keys alone, so deriving from it locally produces the SAME public
-    // key the mobile derives privately via `mnemonic + "/product/...{idx}"`.
-    // Algorithm parity with mobile/desktop is locked by the frozen vectors in
-    // `@parity/product-sdk-keys`'s `product-account.test.ts`.
-    const publicKey = deriveProductAccountPublicKey(
-        sessionRootPublicKey(session),
-        ref.productId,
-        ref.derivationIndex,
-    );
+    // the user's bare-mnemonic keypair public key on current mobile builds
+    // (`deriveRootAccount()` = `derivationPath = null`). See the "Accounts"
+    // section in CLAUDE.md for the host-vs-mobile derivation map.
+    const publicKey = derivePlaygroundProductPublicKey(sessionRootPublicKey(session), ref);
     const address = ss58Encode(publicKey);
 
     // Wire-shape identifier passed to host-papp's `signPayload` / `signRaw`.

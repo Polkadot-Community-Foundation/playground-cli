@@ -15,23 +15,41 @@
 
 import { useState, useEffect } from "react";
 import { Row } from "../../utils/ui/theme/index.js";
-import { waitForLogin, type LoginStatus, type LoginHandle } from "../../utils/auth.js";
+import {
+    waitForLogin,
+    type LoginHandle,
+    type LoginStatus,
+    type SessionAddresses,
+} from "../../utils/auth.js";
 
 export function QrLogin({
     login,
     onDone,
 }: {
     login: LoginHandle;
-    onDone: (address: string | null) => void;
+    onDone: (addresses: SessionAddresses | null) => void;
 }) {
     const [status, setStatus] = useState<LoginStatus>({ step: "waiting" });
 
     useEffect(() => {
-        waitForLogin(login, setStatus).then(onDone);
+        // `waitForLogin` resolves with the product-account SS58 string for
+        // back-compat, but the full `SessionAddresses` bundle only lives on
+        // the most-recent "success" status update. Snapshot it via
+        // `setStatus` so we hand the parent the whole triple, not just the
+        // SS58 — the parent needs `rootAddress` for the username lookup.
+        waitForLogin(login, setStatus).then(() => {
+            setStatus((current) => {
+                onDone(current.step === "success" ? current.addresses : null);
+                return current;
+            });
+        });
     }, []);
 
     if (status.step === "success") {
-        return <Row mark="ok" label="logged in" value={status.address} tone="muted" />;
+        // The "logged in" row is rendered by IdentityLines (which also
+        // shows username + product account); QrLogin's success path no
+        // longer prints its own row to avoid duplicating the address.
+        return null;
     }
     if (status.step === "error") {
         return <Row mark="fail" label="login failed" value={status.message} tone="danger" />;
