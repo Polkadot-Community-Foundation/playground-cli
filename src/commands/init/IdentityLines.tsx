@@ -15,40 +15,52 @@
 
 import { useEffect, useState } from "react";
 import { Row, Section } from "../../utils/ui/theme/index.js";
+import type { SessionAddresses } from "../../utils/auth.js";
 import { formatUsernameLine, lookupUsername, type UsernameLookup } from "../../utils/username.js";
-import { productAccountDisplay } from "./identityLine.js";
 
 /**
- * Two-line identity block shown after a successful login:
+ * Three-line identity block shown after a successful login:
  *
+ *   logged in       <wallet root SS58>
  *   username        alice.dot
- *   product account <full ss58> (<full 0x h160>)
+ *   product account <product SS58> (<product 0x H160>)
  *
- * Both the SS58 and the 0x H160 are printed in full so the user can copy
- * them directly. The username lookup is async (queries People parachain)
- * and has a 10s timeout inside `lookupUsername`; the product account is
- * synchronous (pure sr25519 soft derivation). A `(looking up...)`
- * placeholder renders while the lookup is in flight; failures and missing
- * identities fall through to the relevant fallback strings from
- * `formatUsernameLine`.
+ * `logged in` is the SSO-handshake `rootAccountId` (bare-mnemonic on
+ * current mobile builds). It is the storage key for the username
+ * lookup. It is NOT the same address mobile shows as "Wallet account"
+ * on its debug screen — that uses the hard `//wallet` derivation which
+ * the host can't reproduce.
+ *
+ * `product account` is the playground-scoped account derived via
+ * `product/playground.dot/0` off the root; this is what signs txs on
+ * the CLI. The SS58 + H160 are taken straight off the auth-derived
+ * pair so they never drift — the bug we had previously was running
+ * `deriveProductAccountPublicKey` again on the already-derived SS58
+ * and producing a doubly-derived ghost address.
+ *
+ * The username lookup is async (queries People parachain) and has a
+ * 10s timeout inside `lookupUsername`. A `(looking up...)` placeholder
+ * renders while the lookup is in flight; failures and missing
+ * identities fall through to the strings from `formatUsernameLine`.
  */
-export function IdentityLines({ address }: { address: string }) {
+export function IdentityLines({ addresses }: { addresses: SessionAddresses }) {
     const [username, setUsername] = useState<UsernameLookup>({ kind: "loading" });
 
     useEffect(() => {
         let cancelled = false;
-        lookupUsername(address).then((result) => {
+        lookupUsername(addresses.rootAddress).then((result) => {
             if (!cancelled) setUsername(result);
         });
         return () => {
             cancelled = true;
         };
-    }, [address]);
+    }, [addresses.rootAddress]);
 
     const usernameTone = username.kind === "found" ? "default" : "muted";
 
     return (
         <Section>
+            <Row mark="ok" label="logged in" value={addresses.rootAddress} tone="muted" />
             <Row
                 mark="ok"
                 label="username"
@@ -58,7 +70,7 @@ export function IdentityLines({ address }: { address: string }) {
             <Row
                 mark="ok"
                 label="product account"
-                value={productAccountDisplay(address)}
+                value={`${addresses.productAddress} (${addresses.productH160})`}
                 tone="muted"
             />
         </Section>

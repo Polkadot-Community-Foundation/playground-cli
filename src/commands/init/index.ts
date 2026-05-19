@@ -19,7 +19,7 @@ import { render } from "ink";
 import { captureWarning, withSpan, errorMessage } from "../../telemetry.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import { InitScreen } from "./InitScreen.js";
-import { connect, type LoginHandle } from "../../utils/auth.js";
+import { connect, type LoginHandle, type SessionAddresses } from "../../utils/auth.js";
 
 export const initCommand = new Command("init")
     .description("Install prerequisites and login via mobile QR")
@@ -29,7 +29,7 @@ export const initCommand = new Command("init")
             console.log();
 
             let login: LoginHandle | null = null;
-            let existingAddress: string | null = null;
+            let existingAddresses: SessionAddresses | null = null;
 
             if (!opts.yes) {
                 try {
@@ -39,7 +39,7 @@ export const initCommand = new Command("init")
                         () => connect(),
                     );
                     if (result.kind === "existing") {
-                        existingAddress = result.address;
+                        existingAddresses = result.addresses;
                     } else {
                         login = result.login;
                         console.log("  Scan with the Polkadot mobile app to log in:\n");
@@ -57,7 +57,7 @@ export const initCommand = new Command("init")
             const app = render(
                 React.createElement(InitScreen, {
                     login,
-                    existingAddress,
+                    existingAddresses,
                     onDone: () => app.unmount(),
                 }),
             );

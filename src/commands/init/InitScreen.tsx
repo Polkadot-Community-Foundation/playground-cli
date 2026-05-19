@@ -23,19 +23,19 @@ import { AccountSetup } from "./AccountSetup.js";
 import { computeAllDone } from "./completion.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
-import type { LoginHandle } from "../../utils/auth.js";
+import type { LoginHandle, SessionAddresses } from "../../utils/auth.js";
 
 export function InitScreen({
     login,
-    existingAddress,
+    existingAddresses,
     onDone,
 }: {
     login: LoginHandle | null;
-    existingAddress: string | null;
+    existingAddresses: SessionAddresses | null;
     onDone: () => void;
 }) {
     const needsQr = login !== null;
-    const [loggedInAddress, setLoggedInAddress] = useState<string | null>(existingAddress);
+    const [addresses, setAddresses] = useState<SessionAddresses | null>(existingAddresses);
     const [authResolved, setAuthResolved] = useState(!needsQr);
     const [depsComplete, setDepsComplete] = useState(false);
     const [accountComplete, setAccountComplete] = useState(false);
@@ -44,7 +44,7 @@ export function InitScreen({
     const allDone = computeAllDone({
         needsQr,
         authResolved,
-        loggedInAddress,
+        loggedInAddress: addresses?.productAddress ?? null,
         depsComplete,
         accountComplete,
     });
@@ -53,8 +53,8 @@ export function InitScreen({
         setDepsComplete(true);
     };
 
-    const handleAuthDone = (address: string | null) => {
-        if (address) setLoggedInAddress(address);
+    const handleAuthDone = (next: SessionAddresses | null) => {
+        if (next) setAddresses(next);
         setAuthResolved(true);
     };
 
@@ -77,18 +77,13 @@ export function InitScreen({
             />
 
             {needsQr && <QrLogin login={login} onDone={handleAuthDone} />}
-            {!needsQr && existingAddress && (
-                <Section>
-                    <Row mark="ok" label="logged in" value={existingAddress} tone="muted" />
-                </Section>
-            )}
 
-            {loggedInAddress && <IdentityLines address={loggedInAddress} />}
+            {addresses && <IdentityLines addresses={addresses} />}
 
             <DependencyList onDone={handleDepsDone} />
 
-            {loggedInAddress && depsComplete && (
-                <AccountSetup address={loggedInAddress} onDone={handleAccountDone} />
+            {addresses && depsComplete && (
+                <AccountSetup address={addresses.productAddress} onDone={handleAccountDone} />
             )}
 
             {allDone && (

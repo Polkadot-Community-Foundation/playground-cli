@@ -28,7 +28,7 @@ import type { Dirent } from "node:fs";
 import { readdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ss58Encode } from "@parity/product-sdk-address";
+import { deriveH160, ss58Encode } from "@parity/product-sdk-address";
 import {
     createTerminalAdapter,
     waitForSessions,
@@ -44,10 +44,37 @@ import {
     TERMINAL_METADATA_URL,
     getChainConfig,
 } from "../config.js";
-import { createPlaygroundSessionSigner } from "./sessionSigner.js";
+import {
+    createPlaygroundSessionSigner,
+    derivePlaygroundProductPublicKey,
+} from "./sessionSigner.js";
 
 /** How long we wait for the statement store to publish the pairing QR. */
 const QR_TIMEOUT_MS = 60_000;
+
+/**
+ * The three addresses we surface from a paired session.
+ *
+ * - `rootAddress` — SS58 of `session.rootAccountId`. This is the
+ *   `rootUserAccountId` the mobile app sent over the SSO handshake. On
+ *   current mobile builds this is the bare-mnemonic sr25519 root (no
+ *   junction). It is what `Resources.Consumers` on the People parachain
+ *   is keyed by, so it's the right input for `lookupUsername`. It is
+ *   NOT the same address the phone shows as "Wallet account" on its
+ *   debug screen — that uses the hard-junction `//wallet` path which
+ *   the host cannot reproduce from a public key alone.
+ * - `productAddress` — SS58 of the playground product account derived
+ *   via `product/playground.dot/0` from `rootAccountId`. This is what
+ *   actually signs on-chain transactions from the CLI.
+ * - `productH160` — the same product pubkey rendered as a 20-byte EVM
+ *   address (for the Revive / contracts view). Derived from the SAME
+ *   pubkey as `productAddress`; the two MUST stay in lock-step.
+ */
+export interface SessionAddresses {
+    rootAddress: string;
+    productAddress: string;
+    productH160: `0x${string}`;
+}
 
 function createAdapter(): TerminalAdapter {
     return createTerminalAdapter({
@@ -64,12 +91,37 @@ function createPlaygroundSigner(session: UserSession): PolkadotSigner {
     });
 }
 
-function sessionSigningAddress(session: UserSession): string {
-    return ss58Encode(createPlaygroundSigner(session).publicKey);
+/**
+ * Compute the three display addresses from a paired session.
+ *
+ * Shares `derivePlaygroundProductPublicKey` with `createPlaygroundSessionSigner`
+ * so the signer used for signing and the display SS58/H160 are computed by
+ * exactly one function. Re-running `deriveProductAccountPublicKey` on the
+ * SS58 we just produced (the previous `productAccountAddresses` helper did
+ * exactly this) silently double-derives and yields a ghost address — that
+ * was the bug this refactor exists to prevent.
+ *
+ * Exported for tests; `IdentityLines` reads addresses off the
+ * `ConnectResult` / `LoginStatus` / `SessionHandle` already-resolved
+ * triples, never by calling this directly.
+ *
+ * @internal
+ */
+export function deriveSessionAddresses(session: UserSession): SessionAddresses {
+    const rootBytes = new Uint8Array(session.rootAccountId);
+    const productPubkey = derivePlaygroundProductPublicKey(rootBytes, {
+        productId: PLAYGROUND_PRODUCT_ID,
+        derivationIndex: 0,
+    });
+    return {
+        rootAddress: ss58Encode(rootBytes),
+        productAddress: ss58Encode(productPubkey),
+        productH160: deriveH160(productPubkey),
+    };
 }
 
 export type ConnectResult =
-    | { kind: "existing"; address: string }
+    | { kind: "existing"; address: string; addresses: SessionAddresses }
     | { kind: "qr"; qrCode: string; login: LoginHandle };
 
 export type LoginStatus =
@@ -81,7 +133,7 @@ export type LoginStatus =
      * surface to the user verbatim.
      */
     | { step: "pending"; stage: string }
-    | { step: "success"; address: string }
+    | { step: "success"; address: string; addresses: SessionAddresses }
     | { step: "error"; message: string };
 
 export interface LoginHandle {
@@ -101,7 +153,11 @@ export async function connect(): Promise<ConnectResult> {
 
     const sessions = await waitForSessions(adapter);
     if (sessions.length > 0) {
-        return { kind: "existing", address: sessionSigningAddress(sessions[0]) };
+        const addresses = deriveSessionAddresses(sessions[0]);
+        // `address` is kept for back-compat with callers that only need the
+        // product-account SS58 (signer flows). UI consumers should read the
+        // richer `addresses` field instead.
+        return { kind: "existing", address: addresses.productAddress, addresses };
     }
 
     // Start authenticate — this triggers the pairing flow and QR emission
@@ -193,8 +249,9 @@ export async function waitForLogin(
         if (authenticated) {
             const sessions = await waitForSessions(adapter, 3000);
             if (sessions.length > 0) {
-                address = sessionSigningAddress(sessions[0]);
-                onStatus({ step: "success", address });
+                const addresses = deriveSessionAddresses(sessions[0]);
+                address = addresses.productAddress;
+                onStatus({ step: "success", address, addresses });
             } else {
                 onStatus({
                     step: "error",
@@ -224,7 +281,14 @@ export async function waitForLogin(
  * in the right order.
  */
 export interface SessionHandle {
+    /**
+     * Product-account SS58. Kept as a top-level field for back-compat with
+     * `signer.ts::resolveSigner` and its downstream consumers
+     * (`ResolvedSigner.address` ends up here). Equal to
+     * `addresses.productAddress`. UI code should prefer `addresses`.
+     */
     address: string;
+    addresses: SessionAddresses;
     signer: PolkadotSigner;
     userSession: UserSession;
     destroy(): void;
@@ -262,7 +326,7 @@ export async function getSessionSigner(): Promise<SessionHandle | null> {
 
     const session = sessions[0];
     const signer = createPlaygroundSigner(session);
-    const address = ss58Encode(signer.publicKey);
+    const addresses = deriveSessionAddresses(session);
 
     let destroyed = false;
     const destroy = () => {
@@ -278,7 +342,13 @@ export async function getSessionSigner(): Promise<SessionHandle | null> {
         adapter.destroy().catch(() => {});
     };
 
-    return { address, signer, userSession: session, destroy };
+    return {
+        address: addresses.productAddress,
+        addresses,
+        signer,
+        userSession: session,
+        destroy,
+    };
 }
 
 // ── Sign-out flow ─────────────────────────────────────────────────────────────
@@ -324,7 +394,7 @@ export async function findSession(): Promise<LogoutHandle | null> {
         return null;
     }
     const session = sessions[0];
-    const address = sessionSigningAddress(session);
+    const address = deriveSessionAddresses(session).productAddress;
     return { adapter, address, session };
 }
 
