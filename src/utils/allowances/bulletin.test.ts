@@ -40,6 +40,7 @@ vi.mock("./marker.js", () => ({
 }));
 
 import {
+    bulletinAuthorizationHelp,
     getBulletinAllowanceSigner,
     hasUsableBulletinSlotAuthorization,
     requestAndStoreBulletinAllowanceSigner,
@@ -69,6 +70,12 @@ afterEach(async () => {
 });
 
 describe("Bulletin allowance authorization", () => {
+    it("formats manual authorization help for slot-account recovery", () => {
+        expect(bulletinAuthorizationHelp("5Slot")).toBe(
+            "Authorize Bulletin allowance account 5Slot at https://paritytech.github.io/polkadot-bulletin-chain/authorizations, then re-run `dot init`.",
+        );
+    });
+
     it("checks the slot account address derived from the returned private key", async () => {
         checkAuthorizationMock.mockResolvedValue({
             authorized: true,

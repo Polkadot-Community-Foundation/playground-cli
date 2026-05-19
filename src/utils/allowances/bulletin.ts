@@ -15,7 +15,7 @@
 
 import type { PolkadotSigner } from "polkadot-api";
 import { checkAuthorization, type BulletinApi } from "@parity/product-sdk-bulletin";
-import type { Env } from "../../config.js";
+import { BULLETIN_AUTHORIZATION_URL, type Env } from "../../config.js";
 import type { ResolvedSigner } from "../signer.js";
 import { requestResourceAllocation, type OnExistingAllowancePolicy } from "./host.js";
 import { markAllowance } from "./marker.js";
@@ -39,6 +39,10 @@ export interface BulletinAllowanceSignerOptions {
 
 const BULLETIN_AUTH_WAIT_MS = 75_000;
 const BULLETIN_AUTH_POLL_MS = 3_000;
+
+export function bulletinAuthorizationHelp(slotAccountAddress: string): string {
+    return `Authorize Bulletin allowance account ${slotAccountAddress} at ${BULLETIN_AUTHORIZATION_URL}, then re-run \`dot init\`.`;
+}
 
 function hasUsableAuthorization(
     status: Awaited<ReturnType<typeof checkAuthorization>>,
@@ -86,7 +90,7 @@ export async function waitForBulletinSlotAuthorization(
     throw new Error(
         lastAuthorized
             ? `Bulletin allowance for ${address} is live but does not have enough quota.`
-            : `Mobile returned Bulletin allowance key ${address}, but it is not authorized on Bulletin yet. This is usually delayed allowance propagation; re-run \`dot init\` after a minute.`,
+            : `Mobile returned Bulletin allowance key ${address}, but it is not authorized on Bulletin yet. ${bulletinAuthorizationHelp(address)}`,
     );
 }
 
@@ -111,7 +115,9 @@ export async function getBulletinAllowanceSigner({
             return createSlotAccountSigner(cached);
         }
         if (!publishSigner.userSession) {
-            throw new Error("Cached Bulletin allowance key is not authorized. Run `dot init`.");
+            throw new Error(
+                `Cached Bulletin allowance key is not authorized. ${bulletinAuthorizationHelp(getSlotAccountAddress(cached))}`,
+            );
         }
         return await requestAndStoreBulletinAllowanceSigner({
             env,

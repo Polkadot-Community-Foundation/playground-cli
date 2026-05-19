@@ -29,6 +29,12 @@ import {
 } from "../../utils/allowances/host.js";
 import { hasAllowance, markAllowance } from "../../utils/allowances/marker.js";
 import {
+    bulletinAuthorizationHelp,
+    hasUsableBulletinSlotAuthorization,
+} from "../../utils/allowances/bulletin.js";
+import {
+    extractSlotAccountKey,
+    getSlotAccountAddress,
     hasSlotAccountKey,
     readSlotAccountKey,
     storeSlotAccountKeysFromOutcomes,
@@ -158,7 +164,15 @@ export function AccountSetup({
                     hasSlotAccountKey(env, address, "StatementStoreAllowance"),
                 ]);
                 if (cancelled) return;
-                const allMarked = marked.every(Boolean) && slotKeys.every(Boolean);
+                const cachedBulletinUsable =
+                    cachedBulletinKey === null
+                        ? false
+                        : await hasUsableBulletinSlotAuthorization(
+                              client.bulletin,
+                              cachedBulletinKey,
+                          );
+                const allMarked =
+                    marked.every(Boolean) && slotKeys.every(Boolean) && cachedBulletinUsable;
                 if (allMarked) {
                     update(0, {
                         status: "ok",
@@ -191,14 +205,37 @@ export function AccountSetup({
                         await markAllowance(env, address, resource.tag, "host");
                     }
 
+                    const bulletinKey =
+                        extractSlotAccountKey(outcomes, "BulletInAllowance") ?? cachedBulletinKey;
+                    const bulletinDenied =
+                        summary.rejected.some((r) => r.tag === "BulletInAllowance") ||
+                        summary.unavailable.some((r) => r.tag === "BulletInAllowance");
+                    const bulletinReady =
+                        bulletinKey === null
+                            ? !bulletinDenied
+                            : await hasUsableBulletinSlotAuthorization(
+                                  client.bulletin,
+                                  bulletinKey,
+                              );
                     if (summary.rejected.length > 0 || summary.unavailable.length > 0) {
                         const denied = [...summary.rejected, ...summary.unavailable]
                             .map(describeResource)
                             .join(", ");
+                        const bulletinHint =
+                            bulletinDenied && bulletinKey
+                                ? ` ${bulletinAuthorizationHelp(getSlotAccountAddress(bulletinKey))}`
+                                : "";
                         accountSetupOk = false;
                         update(0, {
                             status: "failed",
-                            error: `denied: ${denied}. Re-run \`dot init\` and approve on your phone.`,
+                            error: `denied: ${denied}. Re-run \`dot init\` and approve on your phone.${bulletinHint}`,
+                            valueTone: "danger",
+                        });
+                    } else if (!bulletinReady && bulletinKey) {
+                        accountSetupOk = false;
+                        update(0, {
+                            status: "failed",
+                            error: bulletinAuthorizationHelp(getSlotAccountAddress(bulletinKey)),
                             valueTone: "danger",
                         });
                     } else {

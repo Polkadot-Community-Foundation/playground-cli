@@ -171,5 +171,9 @@ export const PLAYGROUND_PRODUCT_ID = "playground.dot";
 export const TERMINAL_METADATA_URL =
     "https://gist.githubusercontent.com/ReinhardHatko/1967dd3f4afe78683cc0ba14d6ec8744/raw/c1625eb7ed7671b7e09a3fa2a25998dde33c70b8/metadata.json";
 
+/** Manual Bulletin authorization page for slot-account allowance recovery. */
+export const BULLETIN_AUTHORIZATION_URL =
+    "https://paritytech.github.io/polkadot-bulletin-chain/authorizations";
+
 /** Default build output directory — matches Vite and the interactive prompt default. */
 export const DEFAULT_BUILD_DIR = "dist";
