@@ -33,6 +33,7 @@ import {
 } from "./auth.js";
 import type { UserSession } from "@parity/product-sdk-terminal";
 import { DAPP_ID } from "../config.js";
+import { INCOMPLETE_SESSION_MESSAGE } from "./sessionSigner.js";
 
 describe("subscribe-before-assignment pattern", () => {
     /**
@@ -423,5 +424,11 @@ describe("deriveSessionAddresses", () => {
         expect(a.productAddress).not.toBe(b.productAddress);
         expect(a.productH160).not.toBe(b.productH160);
         expect(b.productH160).toMatch(/^0x[0-9a-f]{40}$/);
+    });
+
+    it("reports stale sessions without a root account public key", () => {
+        expect(() => deriveSessionAddresses(fakeSession(new Uint8Array()))).toThrow(
+            INCOMPLETE_SESSION_MESSAGE,
+        );
     });
 });

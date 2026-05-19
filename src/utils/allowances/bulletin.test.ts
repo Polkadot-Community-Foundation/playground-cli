@@ -14,7 +14,10 @@
 // limitations under the License.
 
 import { secretFromSeed } from "@scure/sr25519";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { checkAuthorizationMock } = vi.hoisted(() => ({
     checkAuthorizationMock: vi.fn(),
@@ -24,16 +27,39 @@ vi.mock("@parity/product-sdk-bulletin", () => ({
     checkAuthorization: checkAuthorizationMock,
 }));
 
+import {
+    bulletinAuthorizationHelp,
+    getBulletinAllowanceSigner,
+    hasUsableBulletinSlotAuthorization,
+} from "./bulletin.js";
+import { readSlotAccountKey, storeSlotAccountKey } from "./slotKeys.js";
 import { getChainConfig } from "../../config.js";
-import { bulletinAuthorizationHelp, hasUsableBulletinSlotAuthorization } from "./bulletin.js";
 
 const KEY = secretFromSeed(new Uint8Array(32).fill(7));
+const ENV = "paseo-next-v2";
+const OWNER = "5Owner";
 
-beforeEach(() => {
+let root: string | null = null;
+
+beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "playground-cli-allowances-"));
+    process.env.POLKADOT_ROOT = root;
     checkAuthorizationMock.mockReset();
 });
 
+afterEach(async () => {
+    delete process.env.POLKADOT_ROOT;
+    if (root) await rm(root, { recursive: true, force: true });
+    root = null;
+});
+
 describe("Bulletin allowance authorization", () => {
+    it("formats manual authorization help for slot-account recovery", () => {
+        expect(bulletinAuthorizationHelp("5Slot")).toBe(
+            "Open the Bulletin authorization faucet at https://paritytech.github.io/polkadot-bulletin-chain/authorizations and authorize account 5Slot, then re-run `dot init`.",
+        );
+    });
+
     it("checks the slot account address derived from the returned private key", async () => {
         checkAuthorizationMock.mockResolvedValue({
             authorized: true,
@@ -66,6 +92,57 @@ describe("Bulletin allowance authorization", () => {
         });
         await expect(hasUsableBulletinSlotAuthorization({} as any, KEY, 50)).resolves.toBe(false);
     });
+
+    it("uses a cached slot key when it has enough Bulletin authorization", async () => {
+        await storeSlotAccountKey(ENV, OWNER, "BulletInAllowance", KEY);
+        checkAuthorizationMock.mockResolvedValueOnce({
+            authorized: true,
+            remainingTransactions: 1,
+            remainingBytes: 100n,
+            expiration: 1,
+        });
+
+        const signer = await getBulletinAllowanceSigner({
+            env: ENV,
+            ownerAddress: OWNER,
+            publishSigner: {
+                source: "session",
+                address: OWNER,
+                signer: {} as any,
+                destroy() {},
+            },
+            bulletinApi: {} as any,
+            requiredBytes: 50,
+        });
+
+        expect(signer.publicKey).toHaveLength(32);
+    });
+
+    it("creates a local slot key and points to the faucet when it is not authorized", async () => {
+        checkAuthorizationMock.mockResolvedValueOnce({
+            authorized: false,
+            remainingTransactions: 0,
+            remainingBytes: 0n,
+            expiration: 0,
+        });
+
+        await expect(
+            getBulletinAllowanceSigner({
+                env: ENV,
+                ownerAddress: OWNER,
+                publishSigner: {
+                    source: "session",
+                    address: OWNER,
+                    signer: {} as any,
+                    destroy() {},
+                },
+                bulletinApi: {} as any,
+                requiredBytes: 50,
+            }),
+        ).rejects.toThrow(/Bulletin authorization faucet/);
+
+        await expect(readSlotAccountKey(ENV, OWNER, "BulletInAllowance")).resolves.toHaveLength(64);
+    });
 });
 
 describe("bulletinAuthorizationHelp", () => {
@@ -80,13 +157,13 @@ describe("bulletinAuthorizationHelp", () => {
         expect(help).toMatch(/re-run.*dot init/i);
     });
 
-    it("falls back to a propagation-pending message when no faucet URL is configured", () => {
+    it("falls back to a no-faucet message when no faucet URL is configured", () => {
         const help = bulletinAuthorizationHelp(ADDR, null);
         // Mainnet / closed Summit devnet won't have a public faucet — the
         // help must not invite users to a URL that doesn't apply.
         expect(help).not.toMatch(/https?:\/\//);
         expect(help).toContain(ADDR);
-        expect(help).toMatch(/propagation/i);
+        expect(help).toMatch(/not authorized/i);
     });
 
     it("defaults to the active env's bulletinAuthorizationUrl when no URL passed", () => {

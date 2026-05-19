@@ -47,6 +47,7 @@ import {
 import {
     createPlaygroundSessionSigner,
     derivePlaygroundProductPublicKey,
+    sessionRootPublicKey,
 } from "./sessionSigner.js";
 
 /** How long we wait for the statement store to publish the pairing QR. */
@@ -108,7 +109,7 @@ function createPlaygroundSigner(session: UserSession): PolkadotSigner {
  * @internal
  */
 export function deriveSessionAddresses(session: UserSession): SessionAddresses {
-    const rootBytes = new Uint8Array(session.rootAccountId);
+    const rootBytes = sessionRootPublicKey(session);
     const productPubkey = derivePlaygroundProductPublicKey(rootBytes, {
         productId: PLAYGROUND_PRODUCT_ID,
         derivationIndex: 0,
@@ -118,6 +119,21 @@ export function deriveSessionAddresses(session: UserSession): SessionAddresses {
         productAddress: ss58Encode(productPubkey),
         productH160: deriveH160(productPubkey),
     };
+}
+
+function sessionRemoteAddress(session: UserSession): string | null {
+    const raw = (session as { remoteAccount?: { accountId?: Uint8Array } }).remoteAccount
+        ?.accountId;
+    const accountId = raw ? new Uint8Array(raw) : new Uint8Array();
+    return accountId.length === 32 ? ss58Encode(accountId) : null;
+}
+
+function sessionLogoutAddress(session: UserSession): string {
+    try {
+        return deriveSessionAddresses(session).productAddress;
+    } catch {
+        return sessionRemoteAddress(session) ?? "(stored session)";
+    }
 }
 
 export type ConnectResult =
@@ -394,7 +410,7 @@ export async function findSession(): Promise<LogoutHandle | null> {
         return null;
     }
     const session = sessions[0];
-    const address = deriveSessionAddresses(session).productAddress;
+    const address = sessionLogoutAddress(session);
     return { adapter, address, session };
 }
 

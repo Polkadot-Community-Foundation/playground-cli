@@ -22,6 +22,7 @@ import {
     _internal,
     createSlotAccountSigner,
     extractSlotAccountKey,
+    getOrCreateSlotAccountKey,
     hasSlotAccountKey,
     readSlotAccountKey,
     storeSlotAccountKey,
@@ -31,6 +32,7 @@ import type { AllocationOutcome } from "./host.js";
 
 const ADDR = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 const KEY = secretFromSeed(new Uint8Array(32).fill(7));
+const KEY_2 = secretFromSeed(new Uint8Array(32).fill(8));
 
 let tempRoot: string;
 let originalPolkadotRoot: string | undefined;
@@ -78,12 +80,19 @@ describe("slot account key cache", () => {
                 tag: "Allocated",
                 value: { tag: "BulletInAllowance", value: { slotAccountKey: KEY } },
             },
+            {
+                tag: "Allocated",
+                value: { tag: "StatementStoreAllowance", value: { slotAccountKey: KEY_2 } },
+            },
             { tag: "Allocated", value: { tag: "SmartContractAllowance", value: undefined } },
         ];
 
         expect(extractSlotAccountKey(outcomes, "BulletInAllowance")).toEqual(KEY);
         await storeSlotAccountKeysFromOutcomes("paseo-next-v2", ADDR, outcomes);
         expect(await readSlotAccountKey("paseo-next-v2", ADDR, "BulletInAllowance")).toEqual(KEY);
+        expect(await readSlotAccountKey("paseo-next-v2", ADDR, "StatementStoreAllowance")).toEqual(
+            KEY_2,
+        );
     });
 
     it("preserves sibling slot keys when multiple resources are returned at once", async () => {
@@ -117,5 +126,13 @@ describe("slot account key cache", () => {
 
         expect(signer.publicKey).toHaveLength(32);
         await expect(signer.signBytes(new Uint8Array([1, 2, 3]))).resolves.toHaveLength(64);
+    });
+
+    it("creates and then reuses a local slot key when none is cached", async () => {
+        const first = await getOrCreateSlotAccountKey("paseo-next-v2", ADDR, "BulletInAllowance");
+        const second = await getOrCreateSlotAccountKey("paseo-next-v2", ADDR, "BulletInAllowance");
+
+        expect(first).toHaveLength(64);
+        expect(second).toEqual(first);
     });
 });

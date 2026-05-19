@@ -67,10 +67,9 @@ export interface ChainConfig {
     /** Public faucet URL, or null when allowances replace the funder flow. */
     faucetUrl: string | null;
     /**
-     * Web faucet URL for manually authorizing a Bulletin slot account when
-     * RFC-0010 People→Bulletin propagation lags. Surfaced in
-     * `bulletinAuthorizationHelp` so the user has a recovery path on
-     * testnets. `null` on production / closed-devnet envs where allowances
+     * Web faucet URL for manually authorizing the CLI's Bulletin slot account.
+     * Surfaced in `bulletinAuthorizationHelp` so the user has a recovery path
+     * on testnets. `null` on production / closed-devnet envs where allowances
      * are pre-allocated and no manual path exists.
      */
     bulletinAuthorizationUrl: string | null;

@@ -64,6 +64,18 @@ export interface ProductAccountRef {
     derivationIndex: number;
 }
 
+export const INCOMPLETE_SESSION_MESSAGE =
+    'Stored login session is missing the root account public key. Run "dot logout" and then "dot init" to pair again.';
+
+export function sessionRootPublicKey(session: UserSession): Uint8Array {
+    const rootAccountId = (session as { rootAccountId?: Uint8Array }).rootAccountId;
+    const publicKey = rootAccountId ? new Uint8Array(rootAccountId) : new Uint8Array();
+    if (publicKey.length !== 32) {
+        throw new Error(INCOMPLETE_SESSION_MESSAGE);
+    }
+    return publicKey;
+}
+
 /**
  * Soft-derive the product account public key off a wallet root.
  *
@@ -133,7 +145,7 @@ export function createPlaygroundSessionSigner(
     // the user's bare-mnemonic keypair public key on current mobile builds
     // (`deriveRootAccount()` = `derivationPath = null`). See the "Accounts"
     // section in CLAUDE.md for the host-vs-mobile derivation map.
-    const publicKey = derivePlaygroundProductPublicKey(new Uint8Array(session.rootAccountId), ref);
+    const publicKey = derivePlaygroundProductPublicKey(sessionRootPublicKey(session), ref);
     const address = ss58Encode(publicKey);
 
     // Wire-shape identifier passed to host-papp's `signPayload` / `signRaw`.

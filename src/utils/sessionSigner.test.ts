@@ -103,6 +103,20 @@ describe("init / deploy / playground-app account equivalence", () => {
         expect(cliAddress).not.toEqual(walletAddress);
     });
 
+    test("reports stale sessions without a root account public key", () => {
+        const session = {
+            ...fakeSession(DEV_PHRASE),
+            rootAccountId: new Uint8Array(),
+        } as UserSession;
+
+        expect(() =>
+            createPlaygroundSessionSigner(session, {
+                productId: PLAYGROUND_PRODUCT_ID,
+                derivationIndex: 0,
+            }),
+        ).toThrow('Stored login session is missing the root account public key. Run "dot logout"');
+    });
+
     test("PLAYGROUND_PRODUCT_ID matches the playground-app's default dotNsId", () => {
         // The deployed playground-app defaults to PLAYGROUND_DOTNS_ID = "playground.dot"
         // (see playground-app/src/config.ts::defaultDotNsId for the non-localhost path).

@@ -17,54 +17,28 @@ import type { PolkadotSigner } from "polkadot-api";
 import { checkAuthorization, type BulletinApi } from "@parity/product-sdk-bulletin";
 import { getChainConfig, type Env } from "../../config.js";
 import type { ResolvedSigner } from "../signer.js";
-import { requestResourceAllocation, type OnExistingAllowancePolicy } from "./host.js";
-import { markAllowance } from "./marker.js";
 import {
     createSlotAccountSigner,
-    extractSlotAccountKey,
+    getOrCreateSlotAccountKey,
     getSlotAccountAddress,
-    readSlotAccountKey,
-    storeSlotAccountKey,
 } from "./slotKeys.js";
 
-/**
- * Help string appended to every Bulletin-allowance error that comes from
- * the chain-side authorization not being visible on Bulletin yet. The
- * mobile may have submitted `Resources::claim_long_term_storage` on
- * People successfully but the People→Bulletin propagation hasn't landed
- * (or the chain rejected it silently with `LongTermStorageAllocationFailed`,
- * which mobile's `.logFailure(...)` swallows). Surfacing the slot SS58 +
- * the env's faucet URL (when one is configured) gives the user a concrete
- * recovery path on testnets. On envs without a faucet (mainnet / closed
- * Summit devnet — `bulletinAuthorizationUrl: null`) we fall back to a
- * generic "propagation pending" message rather than pointing at a URL
- * that doesn't apply.
- *
- * `faucetUrl` defaults to the active env's config so callers don't have
- * to plumb it through; pass `null` explicitly to render the no-faucet
- * variant, or override in tests for determinism.
- */
+export interface BulletinAllowanceSignerOptions {
+    env: Env;
+    ownerAddress: string;
+    publishSigner: ResolvedSigner;
+    bulletinApi?: BulletinApi;
+    requiredBytes?: number;
+}
+
 export function bulletinAuthorizationHelp(
     slotAccountAddress: string,
     faucetUrl: string | null = getChainConfig().bulletinAuthorizationUrl,
 ): string {
     return faucetUrl
         ? `Open the Bulletin authorization faucet at ${faucetUrl} and authorize account ${slotAccountAddress}, then re-run \`dot init\`.`
-        : `Bulletin allowance for ${slotAccountAddress} is not authorized on chain yet — wait a moment for People→Bulletin propagation, then re-run \`dot init\`.`;
+        : `Bulletin allowance account ${slotAccountAddress} is not authorized yet. Re-run \`dot init\` after authorizing it.`;
 }
-
-export interface BulletinAllowanceSignerOptions {
-    env: Env;
-    ownerAddress: string;
-    productId: string;
-    publishSigner: ResolvedSigner;
-    bulletinApi?: BulletinApi;
-    requiredBytes?: number;
-    onRequest?: (policy: OnExistingAllowancePolicy) => void;
-}
-
-const BULLETIN_AUTH_WAIT_MS = 75_000;
-const BULLETIN_AUTH_POLL_MS = 3_000;
 
 function hasUsableAuthorization(
     status: Awaited<ReturnType<typeof checkAuthorization>>,
@@ -82,132 +56,40 @@ export async function hasUsableBulletinSlotAuthorization(
     slotAccountKey: Uint8Array,
     requiredBytes = 0,
 ): Promise<boolean> {
-    const address = getSlotAccountAddress(slotAccountKey);
-    const status = await checkAuthorization(bulletinApi, address);
+    const status = await getBulletinSlotAuthorization(bulletinApi, slotAccountKey);
     return hasUsableAuthorization(status, requiredBytes);
 }
 
-export async function waitForBulletinSlotAuthorization(
+async function getBulletinSlotAuthorization(
     bulletinApi: BulletinApi,
     slotAccountKey: Uint8Array,
-    requiredBytes = 0,
-): Promise<void> {
-    const deadline = Date.now() + BULLETIN_AUTH_WAIT_MS;
-    const address = getSlotAccountAddress(slotAccountKey);
-    let lastAuthorized = false;
-
-    while (Date.now() <= deadline) {
-        const status = await checkAuthorization(bulletinApi, address);
-        lastAuthorized = status.authorized;
-        if (hasUsableAuthorization(status, requiredBytes)) return;
-        await new Promise((resolve) => setTimeout(resolve, BULLETIN_AUTH_POLL_MS));
-    }
-
-    const help = bulletinAuthorizationHelp(address);
-    throw new Error(
-        lastAuthorized
-            ? `Bulletin allowance for ${address} is live but does not have enough quota. ${help}`
-            : `Mobile returned Bulletin allowance key ${address}, but it is not authorized on Bulletin yet. ${help}`,
-    );
+): Promise<Awaited<ReturnType<typeof checkAuthorization>>> {
+    return await checkAuthorization(bulletinApi, getSlotAccountAddress(slotAccountKey));
 }
 
 export async function getBulletinAllowanceSigner({
     env,
     ownerAddress,
-    productId,
     publishSigner,
     bulletinApi,
     requiredBytes,
-    onRequest,
 }: BulletinAllowanceSignerOptions): Promise<PolkadotSigner> {
     // Local dev/SURI deploys are the explicit CI escape hatch: the caller
     // supplied a local key and owns making sure it has Bulletin allowance.
     if (publishSigner.source === "dev") return publishSigner.signer;
 
-    const cached = await readSlotAccountKey(env, ownerAddress, "BulletInAllowance");
-    if (cached) {
-        if (!bulletinApi) return createSlotAccountSigner(cached);
-        if (await hasUsableBulletinSlotAuthorization(bulletinApi, cached, requiredBytes)) {
-            return createSlotAccountSigner(cached);
-        }
-        if (!publishSigner.userSession) {
-            const slotAddress = getSlotAccountAddress(cached);
-            throw new Error(
-                `Cached Bulletin allowance key ${slotAddress} is not authorized. ${bulletinAuthorizationHelp(
-                    slotAddress,
-                )}`,
-            );
-        }
-        return await requestAndStoreBulletinAllowanceSigner({
-            env,
-            ownerAddress,
-            productId,
-            publishSigner,
-            bulletinApi,
-            requiredBytes,
-            policy: "Ignore",
-            onRequest,
-        });
-    }
+    const key = await getOrCreateSlotAccountKey(env, ownerAddress, "BulletInAllowance");
 
-    if (!publishSigner.userSession) {
-        throw new Error("Bulletin allowance key missing. Run `dot init` and approve allowances.");
-    }
+    if (!bulletinApi) return createSlotAccountSigner(key);
 
-    return await requestAndStoreBulletinAllowanceSigner({
-        env,
-        ownerAddress,
-        productId,
-        publishSigner,
-        bulletinApi,
-        requiredBytes,
-        policy: "Ignore",
-        onRequest,
-    });
-}
-
-export async function requestAndStoreBulletinAllowanceSigner({
-    env,
-    ownerAddress,
-    productId,
-    publishSigner,
-    bulletinApi,
-    requiredBytes,
-    policy,
-    onRequest,
-}: BulletinAllowanceSignerOptions & {
-    policy: OnExistingAllowancePolicy;
-}): Promise<PolkadotSigner> {
-    if (publishSigner.source === "dev") return publishSigner.signer;
-    if (!publishSigner.userSession) {
-        throw new Error("Cannot request Bulletin allowance without an active mobile session.");
-    }
-
-    onRequest?.(policy);
-    const outcomes = await requestResourceAllocation(
-        publishSigner.userSession,
-        productId,
-        [{ tag: "BulletInAllowance", value: undefined }],
-        policy,
-    );
-    const key = extractSlotAccountKey(outcomes, "BulletInAllowance");
-    if (!key) {
-        const outcome = outcomes[0]?.tag ?? "missing";
-        throw new Error(`Bulletin allowance was not granted (${outcome}).`);
-    }
-
-    // Persist the key BEFORE the propagation wait. If the wait throws
-    // (chain hasn't reflected the People-side claim yet), we still want
-    // the next `dot init` / `dot deploy` to find the cached key instead
-    // of forcing the user to re-pair from scratch. The mobile derived
-    // it from the user's root via the deterministic
-    // `//allowance//bulletin//<productId>` path, so the same key will
-    // be valid the moment the chain catches up.
-    await storeSlotAccountKey(env, ownerAddress, "BulletInAllowance", key);
-    await markAllowance(env, ownerAddress, "BulletInAllowance", "host");
-
-    if (bulletinApi) {
-        await waitForBulletinSlotAuthorization(bulletinApi, key, requiredBytes);
+    const status = await getBulletinSlotAuthorization(bulletinApi, key);
+    if (!hasUsableAuthorization(status, requiredBytes)) {
+        const address = getSlotAccountAddress(key);
+        throw new Error(
+            status.authorized
+                ? `Bulletin allowance for ${address} is live but does not have enough quota. ${bulletinAuthorizationHelp(address)}`
+                : `Bulletin allowance account ${address} is not authorized. ${bulletinAuthorizationHelp(address)}`,
+        );
     }
 
     return createSlotAccountSigner(key);

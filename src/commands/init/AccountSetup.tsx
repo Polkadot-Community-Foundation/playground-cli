@@ -20,7 +20,7 @@ import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
 import { topUpFromBulletinDev } from "../../utils/account/bulletinTopUp.js";
 import { checkMapping, ensureMapped } from "../../utils/account/mapping.js";
-import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID } from "../../config.js";
+import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID, getChainConfig } from "../../config.js";
 import {
     PLAYGROUND_RESOURCES,
     requestResourceAllocation,
@@ -28,14 +28,11 @@ import {
     type AllocatableResource,
 } from "../../utils/allowances/host.js";
 import { hasAllowance, markAllowance } from "../../utils/allowances/marker.js";
+import { hasUsableBulletinSlotAuthorization } from "../../utils/allowances/bulletin.js";
 import {
-    hasUsableBulletinSlotAuthorization,
-    waitForBulletinSlotAuthorization,
-} from "../../utils/allowances/bulletin.js";
-import {
-    extractSlotAccountKey,
+    getOrCreateSlotAccountKey,
+    getSlotAccountAddress,
     hasSlotAccountKey,
-    readSlotAccountKey,
     storeSlotAccountKeysFromOutcomes,
 } from "../../utils/allowances/slotKeys.js";
 
@@ -71,6 +68,10 @@ interface PhonePrompt {
     label: string;
 }
 
+interface BulletinWarning {
+    slotAccountAddress: string;
+}
+
 /** Human-readable name for a resource tag, used in failure messages. */
 function describeResource(r: AllocatableResource): string {
     switch (r.tag) {
@@ -97,6 +98,8 @@ export function AccountSetup({
         { label: "funding", status: "pending" },
     ]);
     const [phonePrompt, setPhonePrompt] = useState<PhonePrompt | null>(null);
+    const [bulletinWarning, setBulletinWarning] = useState<BulletinWarning | null>(null);
+    const bulletinAuthorizationUrl = getChainConfig(DEFAULT_ENV).bulletinAuthorizationUrl;
 
     useEffect(() => {
         let cancelled = false;
@@ -147,44 +150,49 @@ export function AccountSetup({
             // ── Step 0: Resource allowances ─────────────────────────────────
             // Allowances are requested against the product-derived account
             // (host-papp's `productAccountId = [PLAYGROUND_PRODUCT_ID, 0]`),
-            // which is the same SS58 used everywhere else in this flow.
-            //
-            // A note on non-fatal Bulletin timeouts: mobile derives the slot
-            // account from the user's root and submits `claim_long_term_storage`
-            // on People Chain; the authorization is supposed to propagate to
-            // Bulletin Chain via on-chain mechanics. The mobile waits 30s for
-            // visibility and swallows the failure, returning the slot key
-            // regardless. Our wait can therefore time out even on the happy
-            // path where the chain *will* catch up. The slot key + marker are
-            // still cached so the next run / `dot deploy` picks them up, and
-            // the funding + mapping steps below DO NOT depend on Bulletin
-            // authorization — they only need the product account on Asset
-            // Hub. Treat the Bulletin timeout as a soft failure, surface the
-            // faucet help, and continue.
+            // which is the same SS58 used everywhere else in this flow. Bulletin
+            // is intentionally not requested from mobile here: the CLI creates
+            // a local slot account and tells the user to authorize that account
+            // through the Bulletin faucet until product-sdk exposes the proper
+            // host-side preimage path.
             update(0, { status: "active", value: "checking…", valueTone: "muted" });
             let accountSetupOk = true;
             try {
                 const tags = PLAYGROUND_RESOURCES.map((r) => r.tag);
                 const marked = await Promise.all(tags.map((t) => hasAllowance(env, address, t)));
-                const cachedBulletinKey = await readSlotAccountKey(
+                const slotKeys = await Promise.all([
+                    hasSlotAccountKey(env, address, "StatementStoreAllowance"),
+                ]);
+                const bulletinKey = await getOrCreateSlotAccountKey(
                     env,
                     address,
                     "BulletInAllowance",
                 );
-                const slotKeys = await Promise.all([
-                    Promise.resolve(cachedBulletinKey !== null),
-                    hasSlotAccountKey(env, address, "StatementStoreAllowance"),
-                ]);
                 if (cancelled) return;
-                const cachedBulletinUsable =
-                    cachedBulletinKey === null
-                        ? false
-                        : await hasUsableBulletinSlotAuthorization(
-                              client.bulletin,
-                              cachedBulletinKey,
-                          );
-                const allMarked =
-                    marked.every(Boolean) && slotKeys.every(Boolean) && cachedBulletinUsable;
+                let bulletinUsable = false;
+                try {
+                    bulletinUsable = await hasUsableBulletinSlotAuthorization(
+                        client.bulletin,
+                        bulletinKey,
+                        1,
+                    );
+                } catch {
+                    bulletinUsable = false;
+                }
+                if (cancelled) return;
+                const slotAccountAddress = getSlotAccountAddress(bulletinKey);
+                setBulletinWarning(
+                    bulletinUsable
+                        ? null
+                        : {
+                              slotAccountAddress,
+                          },
+                );
+                if (bulletinUsable) {
+                    await markAllowance(env, address, "BulletInAllowance", "host");
+                }
+
+                const allMarked = marked.every(Boolean) && slotKeys.every(Boolean);
                 if (allMarked) {
                     update(0, {
                         status: "ok",
@@ -210,69 +218,41 @@ export function AccountSetup({
                     setPhonePrompt(null);
                     const summary = summarizeOutcomes(outcomes, PLAYGROUND_RESOURCES);
 
-                    // Persist every slot key the mobile returned BEFORE the
-                    // Bulletin propagation wait — a `waitForBulletinSlotAuthorization`
-                    // timeout below shouldn't discard a perfectly valid key.
                     await storeSlotAccountKeysFromOutcomes(env, address, outcomes);
                     // RFC-0010 allocation outcomes are independent: keep any
                     // successful keys even if a sibling resource was denied.
-                    await Promise.all(
-                        summary.granted.map((r) => markAllowance(env, address, r.tag, "host")),
-                    );
+                    for (const resource of summary.granted) {
+                        await markAllowance(env, address, resource.tag, "host");
+                    }
 
                     if (summary.rejected.length > 0 || summary.unavailable.length > 0) {
                         const denied = [...summary.rejected, ...summary.unavailable]
                             .map(describeResource)
                             .join(", ");
+                        accountSetupOk = false;
                         update(0, {
                             status: "failed",
                             error: `denied: ${denied}. Re-run \`dot init\` and approve on your phone.`,
                             valueTone: "danger",
                         });
-                        finish(false);
-                        return;
-                    }
-
-                    const bulletinKey = extractSlotAccountKey(outcomes, "BulletInAllowance");
-                    if (bulletinKey) {
-                        try {
-                            await waitForBulletinSlotAuthorization(client.bulletin, bulletinKey);
-                        } catch (waitErr) {
-                            // Soft failure: key + marker are cached above, so
-                            // the next run / `dot deploy` will see them. The
-                            // funding/mapping step doesn't need this, so we
-                            // surface the help and keep going. The user has
-                            // already approved on their phone at this point
-                            // — the problem is People→Bulletin propagation,
-                            // not a pending mobile prompt, so the row label
-                            // mustn't ask them to re-approve.
-                            accountSetupOk = false;
-                            update(0, {
-                                status: "failed",
-                                value: "Bulletin authorization pending",
-                                error: describe(waitErr),
-                                valueTone: "warning",
-                            });
-                        }
-                    }
-                    if (cancelled) return;
-                    if (accountSetupOk) {
+                    } else {
                         update(0, {
                             status: "ok",
                             value: `granted (${summary.granted.length})`,
                             valueTone: "muted",
                         });
                     }
+
+                    if (cancelled) return;
                 }
             } catch (err) {
                 setPhonePrompt(null);
+                accountSetupOk = false;
                 update(0, {
                     status: "failed",
                     error: describe(err),
                     valueTone: "danger",
                 });
-                finish(false);
-                return;
             }
 
             // ── Step 1: Top up the product-derived account ──────────────────
@@ -366,6 +346,35 @@ export function AccountSetup({
                         approve step {phonePrompt.step} of {phonePrompt.total}:{" "}
                         <Text bold>{phonePrompt.label}</Text>
                     </Text>
+                </Callout>
+            )}
+            {bulletinWarning && (
+                <Callout tone="warning" title="Bulletin authorization needed">
+                    {bulletinAuthorizationUrl ? (
+                        <>
+                            <Text>
+                                Open the Bulletin authorization faucet at{" "}
+                                <Text bold>{bulletinAuthorizationUrl}</Text>
+                            </Text>
+                            <Text>
+                                and authorize account{" "}
+                                <Text bold>{bulletinWarning.slotAccountAddress}</Text>
+                                {", then re-run "}
+                                <Text bold>dot init</Text>.
+                            </Text>
+                        </>
+                    ) : (
+                        <>
+                            <Text>
+                                Bulletin allowance account{" "}
+                                <Text bold>{bulletinWarning.slotAccountAddress}</Text> is not
+                                authorized yet.
+                            </Text>
+                            <Text>
+                                Re-run <Text bold>dot init</Text> after authorizing it.
+                            </Text>
+                        </>
+                    )}
                 </Callout>
             )}
         </Box>
