@@ -20,7 +20,7 @@ import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
 import { topUpFromBulletinDev } from "../../utils/account/bulletinTopUp.js";
 import { checkMapping, ensureMapped } from "../../utils/account/mapping.js";
-import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID, getChainConfig } from "../../config.js";
+import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID } from "../../config.js";
 import {
     PLAYGROUND_RESOURCES,
     requestResourceAllocation,
@@ -67,10 +67,6 @@ interface PhonePrompt {
     label: string;
 }
 
-interface BulletinWarning {
-    slotAccountAddress: string;
-}
-
 /** Human-readable name for a resource tag, used in failure messages. */
 function describeResource(r: AllocatableResource): string {
     switch (r.tag) {
@@ -97,8 +93,6 @@ export function AccountSetup({
         { label: "funding", status: "pending" },
     ]);
     const [phonePrompt, setPhonePrompt] = useState<PhonePrompt | null>(null);
-    const [bulletinWarning, setBulletinWarning] = useState<BulletinWarning | null>(null);
-    const bulletinAuthorizationUrl = getChainConfig(DEFAULT_ENV).bulletinAuthorizationUrl;
 
     useEffect(() => {
         let cancelled = false;
@@ -160,32 +154,22 @@ export function AccountSetup({
                     hasSlotAccountKey(env, address, "StatementStoreAllowance"),
                 ]);
 
-                const refreshBulletinWarning = async () => {
+                const refreshBulletinAllowanceMarker = async () => {
                     const bulletinKey = await readSlotAccountKey(env, address, "BulletInAllowance");
-                    if (!bulletinKey) {
-                        setBulletinWarning(null);
-                        return;
-                    }
+                    if (!bulletinKey) return;
                     try {
                         const authorization = await getBulletinSlotAuthorization(
                             client.bulletin,
                             bulletinKey,
                             1,
                         );
-                        setBulletinWarning(
-                            authorization.usable
-                                ? null
-                                : { slotAccountAddress: authorization.address },
-                        );
                         if (authorization.usable) {
                             await markAllowance(env, address, "BulletInAllowance", "host");
                         }
-                    } catch {
-                        setBulletinWarning(null);
-                    }
+                    } catch {}
                 };
 
-                await refreshBulletinWarning();
+                await refreshBulletinAllowanceMarker();
 
                 const allMarked = marked.every(Boolean) && slotKeys.every(Boolean);
                 if (allMarked) {
@@ -219,7 +203,7 @@ export function AccountSetup({
                     for (const resource of summary.granted) {
                         await markAllowance(env, address, resource.tag, "host");
                     }
-                    await refreshBulletinWarning();
+                    await refreshBulletinAllowanceMarker();
 
                     if (summary.rejected.length > 0 || summary.unavailable.length > 0) {
                         const denied = [...summary.rejected, ...summary.unavailable]
@@ -342,35 +326,6 @@ export function AccountSetup({
                         approve step {phonePrompt.step} of {phonePrompt.total}:{" "}
                         <Text bold>{phonePrompt.label}</Text>
                     </Text>
-                </Callout>
-            )}
-            {bulletinWarning && (
-                <Callout tone="warning" title="Bulletin authorization needed">
-                    {bulletinAuthorizationUrl ? (
-                        <>
-                            <Text>
-                                Open the Bulletin authorization faucet at{" "}
-                                <Text bold>{bulletinAuthorizationUrl}</Text>
-                            </Text>
-                            <Text>
-                                and authorize account{" "}
-                                <Text bold>{bulletinWarning.slotAccountAddress}</Text>
-                                {", then re-run "}
-                                <Text bold>dot init</Text>.
-                            </Text>
-                        </>
-                    ) : (
-                        <>
-                            <Text>
-                                Bulletin allowance account{" "}
-                                <Text bold>{bulletinWarning.slotAccountAddress}</Text> is not
-                                authorized yet.
-                            </Text>
-                            <Text>
-                                Re-run <Text bold>dot init</Text> after authorizing it.
-                            </Text>
-                        </>
-                    )}
                 </Callout>
             )}
         </Box>

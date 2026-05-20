@@ -15,7 +15,7 @@
 
 import type { PolkadotSigner } from "polkadot-api";
 import { checkAuthorization, type BulletinApi } from "@parity/product-sdk-bulletin";
-import { getChainConfig, PLAYGROUND_PRODUCT_ID, type Env } from "../../config.js";
+import { PLAYGROUND_PRODUCT_ID, type Env } from "../../config.js";
 import type { ResolvedSigner } from "../signer.js";
 import {
     createSlotAccountSigner,
@@ -31,15 +31,6 @@ export interface BulletinAllowanceSignerOptions {
     publishSigner: ResolvedSigner;
     bulletinApi?: BulletinApi;
     requiredBytes?: number;
-}
-
-export function bulletinAuthorizationHelp(
-    slotAccountAddress: string,
-    faucetUrl: string | null = getChainConfig().bulletinAuthorizationUrl,
-): string {
-    return faucetUrl
-        ? `Open the Bulletin authorization faucet at ${faucetUrl} and authorize account ${slotAccountAddress}, then re-run \`dot init\`.`
-        : `Bulletin allowance account ${slotAccountAddress} is not authorized yet. Re-run \`dot init\` after authorizing it.`;
 }
 
 function hasUsableAuthorization(
@@ -174,8 +165,8 @@ export async function getBulletinAllowanceSigner({
         const address = authorization.address;
         throw new Error(
             authorization.status.authorized
-                ? `Bulletin allowance for ${address} is live but does not have enough quota. ${bulletinAuthorizationHelp(address)}`
-                : `Bulletin allowance account ${address} is not authorized. ${bulletinAuthorizationHelp(address)}`,
+                ? `Bulletin allowance for ${address} is live but does not have enough quota. Re-run \`dot init\` and approve on your phone.`
+                : `Bulletin allowance account ${address} is not authorized. Re-run \`dot init\` and approve on your phone.`,
         );
     }
 

@@ -27,13 +27,8 @@ vi.mock("@parity/product-sdk-bulletin", () => ({
     checkAuthorization: checkAuthorizationMock,
 }));
 
-import {
-    bulletinAuthorizationHelp,
-    getBulletinAllowanceSigner,
-    hasUsableBulletinSlotAuthorization,
-} from "./bulletin.js";
+import { getBulletinAllowanceSigner, hasUsableBulletinSlotAuthorization } from "./bulletin.js";
 import { readSlotAccountKey, storeSlotAccountKey } from "./slotKeys.js";
-import { getChainConfig } from "../../config.js";
 
 const KEY = secretFromSeed(new Uint8Array(32).fill(7));
 const MOBILE_KEY = schnorrkelBytesFromScureSecret(KEY);
@@ -66,12 +61,6 @@ afterEach(async () => {
 });
 
 describe("Bulletin allowance authorization", () => {
-    it("formats manual authorization help for slot-account recovery", () => {
-        expect(bulletinAuthorizationHelp("5Slot")).toBe(
-            "Open the Bulletin authorization faucet at https://paritytech.github.io/polkadot-bulletin-chain/authorizations and authorize account 5Slot, then re-run `dot init`.",
-        );
-    });
-
     it("checks the slot account address derived from the returned private key", async () => {
         checkAuthorizationMock.mockResolvedValue({
             authorized: true,
@@ -224,7 +213,7 @@ describe("Bulletin allowance authorization", () => {
         expect(signer.publicKey).toHaveLength(32);
     });
 
-    it("points to the faucet when the cached slot key is not authorized", async () => {
+    it("points back to mobile approval when the cached slot key is not authorized", async () => {
         await storeSlotAccountKey(ENV, OWNER, "BulletInAllowance", KEY);
         checkAuthorizationMock.mockResolvedValue({
             authorized: false,
@@ -247,41 +236,6 @@ describe("Bulletin allowance authorization", () => {
                 bulletinApi: {} as any,
                 requiredBytes: 50,
             }),
-        ).rejects.toThrow(/Bulletin authorization faucet/);
-    });
-});
-
-describe("bulletinAuthorizationHelp", () => {
-    const ADDR = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
-
-    it("includes the explicitly-passed faucet URL + slot account SS58", () => {
-        const help = bulletinAuthorizationHelp(ADDR, "https://example.test/faucet");
-        expect(help).toContain("https://example.test/faucet");
-        expect(help).toContain(ADDR);
-        // The user needs an actionable instruction, not just a URL drop —
-        // make sure the "re-run dot init" hint stays in the string.
-        expect(help).toMatch(/re-run.*dot init/i);
-    });
-
-    it("falls back to a no-faucet message when no faucet URL is configured", () => {
-        const help = bulletinAuthorizationHelp(ADDR, null);
-        // Mainnet / closed Summit devnet won't have a public faucet — the
-        // help must not invite users to a URL that doesn't apply.
-        expect(help).not.toMatch(/https?:\/\//);
-        expect(help).toContain(ADDR);
-        expect(help).toMatch(/not authorized/i);
-    });
-
-    it("defaults to the active env's bulletinAuthorizationUrl when no URL passed", () => {
-        const help = bulletinAuthorizationHelp(ADDR);
-        const cfgUrl = getChainConfig().bulletinAuthorizationUrl;
-        if (cfgUrl) {
-            expect(help).toContain(cfgUrl);
-            // Pin the literal path component so a future rename of the
-            // constant can't silently produce a wrong user-facing URL.
-            expect(help).toMatch(/paritytech\.github\.io\/polkadot-bulletin-chain\/authorizations/);
-        } else {
-            expect(help).not.toMatch(/https?:\/\//);
-        }
+        ).rejects.toThrow(/Re-run `dot init` and approve on your phone/);
     });
 });
