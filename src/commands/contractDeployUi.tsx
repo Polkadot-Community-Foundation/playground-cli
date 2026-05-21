@@ -24,14 +24,17 @@ import {
 import { getNetworkLabel } from "../config.js";
 import {
     COLOR,
+    Callout,
     GLYPH,
     Header,
     LogTail,
     Mark,
+    PhoneApprovalCallout,
     Row,
     Section,
     TIMING,
 } from "../utils/ui/theme/index.js";
+import { createSigningCounter, wrapSignerWithEvents } from "../utils/deploy/signingProxy.js";
 import { VERSION_LABEL } from "../utils/version.js";
 import { ContractPipelineStatusAdapter, type ContractStatus } from "./contractPipelineStatus.js";
 
@@ -46,6 +49,7 @@ export interface ContractDeployUiOptions extends Omit<DeployContractsOptions, "o
     bulletinUrl: string;
     ipfsGatewayUrl: string;
     signerAddress: string;
+    signerRequiresApproval?: boolean;
 }
 
 export interface ContractDeployUiResult {
@@ -56,7 +60,15 @@ export interface ContractDeployUiResult {
 export async function runContractDeployWithUI(
     opts: ContractDeployUiOptions,
 ): Promise<ContractDeployUiResult> {
-    const { crates, displayNames } = precomputeDisplay(opts.rootDir, opts.contracts);
+    const {
+        assethubUrl,
+        bulletinUrl,
+        ipfsGatewayUrl,
+        signerAddress,
+        signerRequiresApproval = false,
+        ...deployOpts
+    } = opts;
+    const { crates, displayNames } = precomputeDisplay(deployOpts.rootDir, deployOpts.contracts);
     const adapter = new ContractPipelineStatusAdapter({
         onCdmPackageDetected: (crate, pkg) => displayNames.set(crate, pkg),
     });
@@ -66,18 +78,27 @@ export async function runContractDeployWithUI(
             adapter={adapter}
             crates={crates}
             displayNames={displayNames}
-            signerAddress={opts.signerAddress}
-            registryAddress={opts.registryAddress}
-            assethubUrl={opts.assethubUrl}
-            bulletinUrl={opts.bulletinUrl}
-            ipfsGatewayUrl={opts.ipfsGatewayUrl}
+            signerAddress={signerAddress}
+            registryAddress={deployOpts.registryAddress}
+            assethubUrl={assethubUrl}
+            bulletinUrl={bulletinUrl}
+            ipfsGatewayUrl={ipfsGatewayUrl}
         />,
     );
+    const signingCounter = createSigningCounter(1);
+    const signer = signerRequiresApproval
+        ? wrapSignerWithEvents(deployOpts.signer, {
+              label: "Deploy and register contracts",
+              counter: signingCounter,
+              onEvent: adapter.handleSigningEvent,
+          })
+        : deployOpts.signer;
 
     let summary: DeploySummary;
     try {
         summary = await deployContracts({
-            ...opts,
+            ...deployOpts,
+            signer,
             onEvent: adapter.handleDeployEvent,
         });
     } finally {
@@ -147,6 +168,18 @@ function ContractDeployScreen({
             <Section title="contracts" gapBelow={false}>
                 {adapter.phase && adapter.phase.name !== "done" && (
                     <Row mark="run" label={adapter.phase.description} tone="muted" />
+                )}
+                {adapter.signingPrompt && (
+                    <PhoneApprovalCallout
+                        step={adapter.signingPrompt.step}
+                        total={adapter.signingPrompt.total}
+                        label={adapter.signingPrompt.label}
+                    />
+                )}
+                {adapter.signingError && (
+                    <Callout tone="danger" title="signing failed">
+                        <Text>{adapter.signingError}</Text>
+                    </Callout>
                 )}
                 <DeployTable
                     statuses={adapter.statuses}

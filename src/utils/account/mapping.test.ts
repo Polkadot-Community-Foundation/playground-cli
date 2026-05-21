@@ -137,11 +137,11 @@ describe("ensureMapped", () => {
     it("bubbles up signing errors (e.g. user rejected on phone)", async () => {
         mockCreateInkSdk.mockReturnValue({ addressIsMapped: vi.fn() });
         mockEnsureAccountMapped.mockRejectedValue(
-            new Error("Mobile signing rejected: user rejected"),
+            new Error("Mobile signing failed: user rejected"),
         );
 
         await expect(
             ensureMapped(makeClient({ address: FAKE_H160, original: null }), "5F...", makeSigner()),
-        ).rejects.toThrow(/Mobile signing rejected/);
+        ).rejects.toThrow(/Mobile signing failed/);
     });
 });

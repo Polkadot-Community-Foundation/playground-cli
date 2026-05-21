@@ -21,6 +21,7 @@ import {
     Section,
     Hint,
     Callout,
+    PhoneApprovalCallout,
     Sparkline,
     Select,
     Input,
@@ -811,7 +812,7 @@ function RunningStage({
                     setSigningPrompt(null);
                 } else if (event.event.kind === "sign-error") {
                     setSigningPrompt(null);
-                    queueFrontendLog(`signing rejected: ${event.event.message}`);
+                    queueFrontendLog(`signing failed: ${event.event.message}`);
                 }
             }
         }
@@ -840,12 +841,11 @@ function RunningStage({
             )}
 
             {signingPrompt && signingPrompt.kind === "sign-request" && (
-                <Callout tone="warning" title="check your phone">
-                    <Text>
-                        approve step {signingPrompt.step} of {signingPrompt.total}:{" "}
-                        <Text bold>{signingPrompt.label}</Text>
-                    </Text>
-                </Callout>
+                <PhoneApprovalCallout
+                    step={signingPrompt.step}
+                    total={signingPrompt.total}
+                    label={signingPrompt.label}
+                />
             )}
         </Box>
     );

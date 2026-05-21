@@ -25,6 +25,7 @@ import { getWsProvider } from "polkadot-api/ws";
 import { runCliCommand } from "../cli-runtime.js";
 import { getChainConfig } from "../config.js";
 import { getBulletinAllowanceSigner } from "../utils/allowances/bulletin.js";
+import { ensureSmartContractAllowance } from "../utils/allowances/smartContracts.js";
 import { onProcessShutdown } from "../utils/process-guard.js";
 import { resolveSigner, type ResolvedSigner } from "../utils/signer.js";
 import { runContractDeployWithUI } from "./contractDeployUi.js";
@@ -178,6 +179,11 @@ async function runContractDeploy(opts: ContractDeployOpts): Promise<void> {
 
     try {
         signer = await resolveSigner({ suri: opts.suri });
+        await ensureSmartContractAllowance({
+            env: cfg.env,
+            ownerAddress: signer.address,
+            deploySigner: signer,
+        });
         client = await createContractChainClient(target);
         const metadataSigner = await getBulletinAllowanceSigner({
             env: cfg.env,
@@ -198,6 +204,7 @@ async function runContractDeploy(opts: ContractDeployOpts): Promise<void> {
             bulletinUrl: target.bulletinUrl,
             ipfsGatewayUrl: cfg.bulletinGateway,
             signerAddress: signer.address,
+            signerRequiresApproval: signer.source === "session",
         });
         if (!result.success) process.exitCode = 1;
     } finally {

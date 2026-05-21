@@ -120,4 +120,36 @@ describe("ContractPipelineStatusAdapter", () => {
         expect(adapter.statuses.get("counter")?.state).toBe("built");
         expect(adapter.statuses.get("counter")?.address).toBeUndefined();
     });
+
+    it("surfaces raw signer errors over normalized deploy errors", () => {
+        const adapter = new ContractPipelineStatusAdapter();
+
+        adapter.handleSigningEvent({
+            kind: "sign-request",
+            label: "Deploy and register contracts",
+            step: 1,
+            total: 1,
+        });
+        expect(adapter.signingPrompt?.label).toBe("Deploy and register contracts");
+
+        adapter.handleSigningEvent({
+            kind: "sign-error",
+            label: "Deploy and register contracts",
+            step: 1,
+            total: 1,
+            message: "Mobile signing failed: unsupported payload",
+        });
+        adapter.handleDeployEvent({
+            type: "deploy-register-error",
+            crates: ["counter"],
+            error: "[AssetHub deploy+register chunk 1/1] Transaction signing was rejected.",
+        });
+
+        expect(adapter.signingPrompt).toBeNull();
+        expect(adapter.signingError).toBe("Mobile signing failed: unsupported payload");
+        expect(adapter.statuses.get("counter")).toMatchObject({
+            state: "error",
+            error: "Mobile signing failed: unsupported payload",
+        });
+    });
 });

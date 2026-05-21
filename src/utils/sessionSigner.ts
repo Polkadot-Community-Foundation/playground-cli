@@ -173,7 +173,7 @@ export function createPlaygroundSessionSigner(
             withSignedTransaction: pjs.withSignedTransaction,
         });
         if (result.isErr()) {
-            throw new Error(`Mobile signing rejected: ${result.error.message}`);
+            throw new Error(`Mobile signing failed: ${result.error.message}`);
         }
         const data = result.value;
         return {
@@ -191,7 +191,7 @@ export function createPlaygroundSessionSigner(
             data: { tag: "Bytes", value: fromHex(payload.data as `0x${string}`) },
         });
         if (result.isErr()) {
-            throw new Error(`Mobile signing rejected: ${result.error.message}`);
+            throw new Error(`Mobile signing failed: ${result.error.message}`);
         }
         return { id: 0, signature: toHex(result.value.signature) };
     };

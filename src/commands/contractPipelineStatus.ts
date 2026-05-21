@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import type { BuildEvent, ContractInfo, DeployEvent } from "@dotdm/contracts";
+import type { SigningEvent } from "../utils/deploy/signingProxy.js";
 
 export type ContractState =
     | "waiting"
@@ -69,8 +70,26 @@ export class ContractPipelineStatusAdapter {
     contracts: ContractInfo[] = [];
     cdmPackageMap = new Map<string, string>();
     phase: PhaseInfo | null = null;
+    signingPrompt: Extract<SigningEvent, { kind: "sign-request" }> | null = null;
+    signingError: string | null = null;
 
     constructor(private opts: AdapterOptions = {}) {}
+
+    handleSigningEvent = (event: SigningEvent) => {
+        switch (event.kind) {
+            case "sign-request":
+                this.signingPrompt = event;
+                this.signingError = null;
+                return;
+            case "sign-complete":
+                this.signingPrompt = null;
+                return;
+            case "sign-error":
+                this.signingPrompt = null;
+                this.signingError = event.message;
+                return;
+        }
+    };
 
     handleDeployEvent = (event: DeployEvent) => {
         switch (event.type) {
@@ -98,6 +117,7 @@ export class ContractPipelineStatusAdapter {
             case "deploy-plan":
                 return;
             case "deploy-register-start":
+                this.signingError = null;
                 for (const crate of event.crates) {
                     this.update(crate, "deploying", {
                         deployInProgress: true,
@@ -136,9 +156,10 @@ export class ContractPipelineStatusAdapter {
                 }
                 return;
             case "deploy-register-error":
+                const error = this.signingError ?? event.error;
                 for (const crate of event.crates) {
                     this.update(crate, "error", {
-                        error: event.error,
+                        error,
                         deployInProgress: false,
                         publishInProgress: false,
                         registerInProgress: false,

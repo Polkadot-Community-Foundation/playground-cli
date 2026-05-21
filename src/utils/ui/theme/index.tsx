@@ -40,5 +40,9 @@ export { Select, type SelectOption, type SelectProps } from "./Select.js";
 export { Input, type InputProps } from "./Input.js";
 export { LogTail, type LogTailProps } from "./LogTail.js";
 export { Callout } from "./Callout.js";
+export {
+    PhoneApprovalCallout,
+    type PhoneApprovalCalloutProps,
+} from "./PhoneApprovalCallout.js";
 export { setWindowTitle, clearWindowTitle } from "./window-title.js";
 export { COLOR, GLYPH, LAYOUT, TIMING } from "./tokens.js";
