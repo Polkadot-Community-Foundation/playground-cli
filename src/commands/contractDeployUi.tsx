@@ -458,13 +458,6 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1_000_000).toFixed(1)}MB`;
 }
 
-function truncateMiddle(value: string, maxLength: number): string {
-    if (value.length <= maxLength) return value;
-    const prefix = Math.max(4, Math.floor((maxLength - 3) * 0.6));
-    const suffix = Math.max(4, maxLength - 3 - prefix);
-    return `${value.slice(0, prefix)}...${value.slice(-suffix)}`;
-}
-
 function shortHash(value: string): string {
     if (value.startsWith("0x")) return value.slice(2, 6);
     return value.slice(-4);
