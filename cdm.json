@@ -14,8 +14,8 @@
   "contracts": {
     "929b5c63e2cb5202": {
       "@w3s/playground-registry": {
-        "version": 1,
-        "address": "0xbC8C7d2d4032b360901129288d5eEf39b2981a8b",
+        "version": 4,
+        "address": "0x4A2A04037D50aFA31C3DA7277468f6df2F7e474f",
         "abi": [
           {
             "type": "constructor",
@@ -579,7 +579,7 @@
             "stateMutability": "nonpayable"
           }
         ],
-        "metadataCid": "bafk2bzaced4t7n46fsnvkjsajlndhmeq3kuq4wqodeha5w5v5lwyjrg22ahou"
+        "metadataCid": "bafk2bzaceajiw66tkplioguc76xyqxda6sxs2dvvpmthgr65xpnvy3rdbxx4w"
       }
     }
   }
