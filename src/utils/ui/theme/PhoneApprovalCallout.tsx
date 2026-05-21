@@ -13,22 +13,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/**
- * Public surface for build detection + execution.
- *
- * Kept free of React/Ink imports so this module can be consumed from a
- * WebContainer (RevX) as well as the Node CLI.
- */
+import { Text } from "ink";
+import { Callout } from "./Callout.js";
 
-export {
-    detectBuildConfig,
-    detectInstallConfig,
-    detectPackageManager,
-    BuildDetectError,
-    PM_LOCKFILES,
-    type BuildConfig,
-    type DetectInput,
-    type InstallConfig,
-    type PackageManager,
-} from "./detect.js";
-export { loadDetectInput, runBuild, type RunBuildOptions, type RunBuildResult } from "./runner.js";
+export interface PhoneApprovalCalloutProps {
+    step: number;
+    total: number;
+    label: string;
+}
+
+export function PhoneApprovalCallout({ step, total, label }: PhoneApprovalCalloutProps) {
+    return (
+        <Callout tone="warning" title="check your phone">
+            <Text>
+                approve step {step} of {total}: <Text bold>{label}</Text>
+            </Text>
+        </Callout>
+    );
+}

@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Text } from "ink";
+import { Box } from "ink";
 import { useState, useEffect } from "react";
-import { Row, Section, Callout, type MarkKind } from "../../utils/ui/theme/index.js";
+import { Row, Section, PhoneApprovalCallout, type MarkKind } from "../../utils/ui/theme/index.js";
 import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
 import { topUpFromBulletinDev } from "../../utils/account/bulletinTopUp.js";
@@ -328,12 +328,11 @@ export function AccountSetup({
                 ))}
             </Section>
             {phonePrompt && (
-                <Callout tone="warning" title="check your phone">
-                    <Text>
-                        approve step {phonePrompt.step} of {phonePrompt.total}:{" "}
-                        <Text bold>{phonePrompt.label}</Text>
-                    </Text>
-                </Callout>
+                <PhoneApprovalCallout
+                    step={phonePrompt.step}
+                    total={phonePrompt.total}
+                    label={phonePrompt.label}
+                />
             )}
         </Box>
     );

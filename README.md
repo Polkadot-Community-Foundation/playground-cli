@@ -55,15 +55,13 @@ Flags:
 - `--domain <name>` — DotNS label (with or without the `.dot` suffix). Interactive prompt if omitted.
 - `--buildDir <path>` — directory holding the built artifacts (default `dist/`). Interactive prompt if omitted.
 - `--no-build` — skip the frontend build step and deploy whatever is already in `--buildDir`.
-- `--contracts` — also compile and deploy the foundry / hardhat / cdm contract project at the project root (interactive prompt if a contract project is detected and the flag is omitted; skipped automatically when no project is detected).
-- `--no-contract-build` — skip the contract compile step (`forge build --resolc`, `cargo-contract build`, `npx hardhat compile`) and deploy pre-built artifacts. Requires `--contracts` and headless mode (i.e. all of `--signer`, `--domain`, `--buildDir`, `--playground`).
 - `--playground` — publish to the playground registry so the app appears under "my apps". Interactive prompt (default: no) if omitted.
 - `--private` — publish to the playground with private (owner-only) visibility. Requires `--playground`. Not interactively prompted; pass the flag to opt in.
 - `--moddable` / `--no-moddable` — publish the source repo URL alongside the deploy so others can `dot mod` it. Requires `--playground`. Interactive prompt (default: no) if omitted. The CLI reads your existing `origin` and records its URL in the Bulletin metadata; it never creates a repo or pushes for you. The deploy fails with an actionable message if `origin` is unset, points to a private repo, or points to anything other than GitHub (since `dot mod` only fetches from `codeload.github.com`). Set up the repo yourself before re-running: create a public repo on GitHub, then `git remote add origin https://github.com/<user>/<repo>` followed by `git push -u origin main`. (If you happen to have `gh` installed, `gh repo create my-app --public --source=. --push` does both in one shot — `dot` does not require `gh`.)
 - `--suri <suri>` — override signer with a dev secret URI (e.g. `//Alice`). Useful for CI.
 - `--env <env>` — target environment. Defaults to `paseo-next-v2` (the only one fully wired today). Accepts the bulletin-deploy env IDs (`preview`, `paseo-next`, `paseo-review`, `paseo-next-v2`, `polkadot`, `kusama`) plus the legacy `testnet`/`mainnet` aliases — `testnet` maps to `paseo-next-v2`, `mainnet` to `polkadot`. Any env other than `paseo-next-v2` throws "not supported" until its entry is wired up in `src/config.ts::CONFIGS`.
 
-Passing all four of `--signer`, `--domain`, `--buildDir`, and `--playground` runs in fully non-interactive mode. Any absent flag is filled in by the TUI prompt. `--moddable`, `--private`, and `--contracts` are independently optional in both modes — their absence means a non-moddable, public, frontend-only deploy.
+Passing all four of `--signer`, `--domain`, `--buildDir`, and `--playground` runs in fully non-interactive mode. Any absent flag is filled in by the TUI prompt. `--moddable` and `--private` are independently optional in both modes — their absence means a non-moddable, public deploy.
 
 **Requirement**: the `ipfs` CLI (Kubo) must be on `PATH`. `dot init` installs it; if you skipped init you can install it manually (`brew install ipfs` or follow [docs.ipfs.tech/install](https://docs.ipfs.tech/install/)). This is a temporary requirement while `bulletin-deploy`'s pure-JS merkleizer has a bug that makes the browser fallback unusable.
 
@@ -75,9 +73,17 @@ For fully non-interactive (CI) runs, combine `--signer`, `--domain`, `--buildDir
 
 - `--suri //Alice` — required with `--signer dev` so the dev signer has a known keypair (works with any dev name or full BIP-39 mnemonic).
 - `--no-build` — reuse pre-built frontend assets in `--buildDir`.
-- `--contracts` + `--no-contract-build` — reuse pre-built contract artefacts in `out/` / `target/<crate>.release.polkavm` / `artifacts/contracts/` (skips `forge build --resolc`, `cargo-contract build`, or `npx hardhat compile`).
 - `--no-moddable` — explicitly skip source publishing even if `--moddable` would otherwise apply.
 - `--private` — publish to the playground with owner-only visibility.
+
+### `dot contract`
+
+CDM-backed workflows for contracts:
+
+- `dot contract deploy` builds, deploys, and registers CDM contracts with dot's logged-in signer by default. Pass `--suri //Alice` for local/dev signing.
+- `dot contract deploy --features <features>` forwards Cargo feature flags into CDM's build pipeline.
+- `dot contract deploy --registry-address <address>` targets a specific CDM registry.
+- `dot contract install [libraries...]` runs `cdm install [libraries...]`; CDM still owns dependency installation and post-install hooks.
 
 ### `dot mod`
 
@@ -216,7 +222,7 @@ The first two are also enforced in CI; running them locally catches the failure 
 ## Dependency Notes
 
 - `@parity/product-sdk-*` packages use caret ranges (`^0.x.y`) so upstream patch and minor releases auto-resolve on a fresh `pnpm install`. With pre-1.0 versions, `^` only widens patches within the current 0.x line — a 0.x → 0.(x+1) bump still requires an intentional `package.json` change. CI's `Format` job runs a grep guard that fails the build on any direct `@polkadot-apps/*` import in `src/`, `e2e/`, `scripts/`, or `tools/`.
-- `@dotdm/contracts` is on the `^2.0.x` caret. The 2.0 line is the first to consume `@parity/product-sdk-*` directly; the legacy `1.1.1` stable still pulls `@polkadot-apps/*` + `polkadot-api@1.x` and must NOT be downgraded to. Patch bumps within 2.x are safe.
+- `@dotdm/contracts` is on the `^3.x` caret. The legacy `1.1.1` stable still pulls `@polkadot-apps/*` + `polkadot-api@1.x` and must NOT be downgraded to.
 - `@novasamatech/*` packages are forced to `0.7.9-4` via `pnpm.overrides`. They come in transitively from `@parity/product-sdk-terminal` whose `^0.7.7` caret doesn't auto-widen across patches in lockfile updates; the override aligns the tree on the latest published Novasama line (including RFC-0010 `requestResourceAllocation` on `UserSession`). Drop the override once product-sdk-terminal widens its own caret.
 - `polkadot-api` is on `^2.1.x` and `@polkadot-api/sdk-ink` on `^0.7.0`. The lockfile contains a stale `polkadot-api@1.x` only because `@parity/dotns-cli`'s declared dep references it; that CLI ships as a single bundled `dist/cli.js` with all deps inlined, so the 1.x decl is never resolved at runtime. Effectively the runtime is PAPI 2.x-only.
 - `bulletin-deploy` is pinned to an explicit version — not `latest`. Currently `0.7.24`. Previously `latest` pointed at 0.6.8 which had a WebSocket heartbeat bug (40s default < 60s chunk timeout) that tore chunk uploads down as `WS halt (3)`; keeping the pin explicit avoids ever sliding back onto that. When bumping, check the release notes for any changes to `deploy()` / `DotNS` APIs we rely on (`jsMerkle`, `signer`, `signerAddress`, `mnemonic`, `rpc`, `attributes`).

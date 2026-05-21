@@ -14,21 +14,8 @@
 // limitations under the License.
 
 /**
- * Public surface for build detection + execution.
- *
- * Kept free of React/Ink imports so this module can be consumed from a
- * WebContainer (RevX) as well as the Node CLI.
+ * `polkadot-api`'s default is 40s, which is shorter than a single Bulletin
+ * `TransactionStorage.store` submission can take. Keep metadata upload clients
+ * on the same long heartbeat used by bulletin-deploy.
  */
-
-export {
-    detectBuildConfig,
-    detectInstallConfig,
-    detectPackageManager,
-    BuildDetectError,
-    PM_LOCKFILES,
-    type BuildConfig,
-    type DetectInput,
-    type InstallConfig,
-    type PackageManager,
-} from "./detect.js";
-export { loadDetectInput, runBuild, type RunBuildOptions, type RunBuildResult } from "./runner.js";
+export const BULLETIN_WS_HEARTBEAT_MS = 300_000;

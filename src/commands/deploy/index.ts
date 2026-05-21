@@ -36,10 +36,6 @@ import {
 } from "../../utils/deploy/availability.js";
 import type { DeployOutcome, DeployEvent } from "../../utils/deploy/run.js";
 import { buildSummaryView } from "./summary.js";
-import { detectContractsType, type ContractsType } from "../../utils/build/detect.js";
-import { loadDetectInput } from "../../utils/build/runner.js";
-import { readSessionAccount, SESSION_MIN_BALANCE } from "../../utils/deploy/session-account.js";
-import { checkBalance } from "../../utils/account/funding.js";
 import { DEFAULT_BUILD_DIR, type Env, resolveLegacyEnv } from "../../config.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
 
@@ -57,15 +53,6 @@ interface DeployOpts {
      * a `--no-foo` option is declared.
      */
     build?: boolean;
-    /**
-     * Commander's auto-negated boolean: defaults to `true`; `--no-contract-build` flips it to `false`.
-     * When false, the contract compile step (forge/hardhat/cargo-contract) is skipped and
-     * pre-existing artifacts on disk are used instead. CI-friendly for environments without
-     * the contract toolchains installed.
-     */
-    contractBuild?: boolean;
-    /** Deploy the project's contracts alongside the frontend. Defaults to false. */
-    contracts?: boolean;
     /** Publish the source repo so others can `dot mod` it. Commander auto-negates: `--no-moddable` ⇒ false. */
     moddable?: boolean;
     env?: Env;
@@ -84,14 +71,6 @@ export const deployCommand = new Command("deploy")
         `Directory containing build artifacts (default: ${DEFAULT_BUILD_DIR})`,
     )
     .option("--no-build", "Skip the build step and deploy existing artifacts in buildDir")
-    .option(
-        "--contracts",
-        "Also deploy any contracts detected in the project (foundry/hardhat/cdm)",
-    )
-    .option(
-        "--no-contract-build",
-        "Skip the contract compile step (forge/hardhat/cargo-contract) and deploy existing pre-built artifacts. Requires --contracts. Useful for CI environments without the contract toolchains installed.",
-    )
     .option("--playground", "Publish to the playground registry")
     .option(
         "--private",
@@ -177,12 +156,6 @@ export const deployCommand = new Command("deploy")
 
             try {
                 const nonInteractive = isFullySpecified(opts);
-
-                if (opts.contractBuild === false && opts.contracts && !nonInteractive) {
-                    throw new Error(
-                        "--no-contract-build requires headless mode (combine with --signer, --domain, --buildDir, --playground).",
-                    );
-                }
 
                 if (nonInteractive) {
                     await runHeadless({ projectDir, env, userSigner, opts });
@@ -294,14 +267,6 @@ async function runHeadless(ctx: {
     const domain = ctx.opts.domain as string;
     const buildDir = ctx.opts.buildDir as string;
     const skipBuild = ctx.opts.build === false;
-    const deployContracts = Boolean(ctx.opts.contracts);
-    const skipContractBuild = ctx.opts.contractBuild === false;
-    const contractsType = safeDetectContractsType(ctx.projectDir);
-    if (deployContracts && contractsType === null) {
-        throw new Error(
-            "--contracts was passed but no foundry/hardhat/cdm project was detected at the root.",
-        );
-    }
 
     // Check availability BEFORE we build + upload, so CI fails fast on a
     // Reserved / already-taken name without wasting a chunk upload.
@@ -355,23 +320,11 @@ async function runHeadless(ctx: {
         );
     }
 
-    const contractsFundingNeeded = await withSpan(
-        "cli.deploy.contracts-funding-check",
-        "check contracts session funding",
-        { "cli.deploy.contracts": deployContracts ? "true" : "false" },
-        () =>
-            computeContractsFundingNeeded({
-                deployContracts,
-                userSigner: ctx.userSigner,
-            }),
-    );
-
     const setup = resolveSignerSetup({
         mode,
         userSigner: ctx.userSigner,
         publishToPlayground,
         plan: availability.plan,
-        contractsFundingNeeded,
     });
     const view = buildSummaryView({
         mode,
@@ -399,7 +352,6 @@ async function runHeadless(ctx: {
             "cli.deploy.mode": mode,
             "cli.deploy.playground": publishToPlayground ? "true" : "false",
             "cli.deploy.moddable": moddable ? "true" : "false",
-            "cli.deploy.contracts": deployContracts ? "true" : "false",
         },
         async () => {
             const { runDeploy } = await import("../../utils/deploy/run.js");
@@ -413,9 +365,6 @@ async function runHeadless(ctx: {
                 playgroundPrivate: Boolean(ctx.opts.private),
                 moddable,
                 repositoryUrl,
-                deployContracts,
-                skipContractBuild,
-                contractsFundingNeeded,
                 userSigner: ctx.userSigner,
                 plan: availability.plan,
                 env: ctx.env,
@@ -427,44 +376,12 @@ async function runHeadless(ctx: {
     printFinalResult(outcome);
 }
 
-/** Best-effort contract-project detection; null on any I/O error. */
-export function safeDetectContractsType(projectDir: string): ContractsType | null {
-    try {
-        return detectContractsType(loadDetectInput(projectDir));
-    } catch {
-        return null;
-    }
-}
-
-/** Whether the contracts phase will need a phone tap to top up the session key. */
-export async function computeContractsFundingNeeded(args: {
-    deployContracts: boolean;
-    userSigner: ResolvedSigner | null;
-}): Promise<boolean> {
-    if (!args.deployContracts) return false;
-    if (args.userSigner?.source !== "session") return false;
-    try {
-        const session = await readSessionAccount();
-        if (session === null) return true;
-        const client = await getConnection();
-        const { sufficient } = await checkBalance(
-            client,
-            session.account.ss58Address,
-            SESSION_MIN_BALANCE,
-        );
-        return !sufficient;
-    } catch {
-        return true;
-    }
-}
-
 function runInteractive(ctx: {
     projectDir: string;
     env: Env;
     userSigner: ResolvedSigner | null;
     opts: DeployOpts;
 }): Promise<void> {
-    const contractsType = safeDetectContractsType(ctx.projectDir);
     return new Promise((resolvePromise, rejectPromise) => {
         let settled = false;
         let app: ReturnType<typeof render> | null = null;
@@ -482,9 +399,6 @@ function runInteractive(ctx: {
                         // Only pre-fill when the user explicitly asked to skip via `--no-build`;
                         // otherwise show the prompt so they can hit Enter on the default "yes".
                         skipBuild: ctx.opts.build === false ? true : null,
-                        contractsType,
-                        deployContracts:
-                            ctx.opts.contracts !== undefined ? ctx.opts.contracts : null,
                         moddable:
                             ctx.opts.moddable === true
                                 ? true

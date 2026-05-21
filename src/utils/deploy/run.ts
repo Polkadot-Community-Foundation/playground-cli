@@ -22,22 +22,8 @@
  * off the same events.
  */
 
-import {
-    runBuild,
-    loadDetectInput,
-    detectBuildConfig,
-    detectContractsType,
-    type BuildConfig,
-    type ContractsType,
-} from "../build/index.js";
+import { runBuild, loadDetectInput, detectBuildConfig, type BuildConfig } from "../build/index.js";
 import { publishToPlayground, normalizeDomain } from "./playground.js";
-import { runContractsPhase, type ContractsPhaseEvent } from "./contracts.js";
-import {
-    getOrCreateSessionAccount,
-    persistSessionAccount,
-    SESSION_FUND_AMOUNT,
-    SESSION_MIN_BALANCE,
-} from "./session-account.js";
 import { resolveSignerSetup, type SignerMode, type DeployApproval } from "./signerMode.js";
 import {
     wrapSignerWithEvents,
@@ -46,20 +32,14 @@ import {
     type SigningEvent,
 } from "./signingProxy.js";
 import type { DeployLogEvent } from "./progress.js";
-import { checkBalance, pickFunder, FUNDER_FEE_BUFFER } from "../account/funding.js";
-import { FAUCET_URL } from "../account/funder.js";
-import { Enum, type PolkadotSigner } from "polkadot-api";
-import { submitAndWatch } from "@parity/product-sdk-tx";
 import { withDeployPhase } from "./phase.js";
 import type { ResolvedSigner } from "../signer.js";
-import { getConnection } from "../connection.js";
 import type { Env } from "../../config.js";
 import type { DeployPlan } from "./availability.js";
-import type { HexString } from "polkadot-api";
 
 // ── Events ───────────────────────────────────────────────────────────────────
 
-export type DeployPhase = "build" | "contracts" | "storage-and-dotns" | "playground" | "done";
+export type DeployPhase = "build" | "storage-and-dotns" | "playground" | "done";
 
 export type DeployEvent =
     | { kind: "plan"; approvals: DeployApproval[] }
@@ -68,7 +48,6 @@ export type DeployEvent =
     | { kind: "phase-skipped"; phase: DeployPhase; reason: string }
     | { kind: "build-log"; line: string }
     | { kind: "build-detected"; config: BuildConfig }
-    | { kind: "contracts-event"; event: ContractsPhaseEvent }
     | { kind: "storage-event"; event: DeployLogEvent }
     | { kind: "signing"; event: SigningEvent }
     | { kind: "error"; phase: DeployPhase; message: string };
@@ -94,14 +73,6 @@ export interface RunDeployOptions {
     moddable?: boolean;
     /** Resolved public repository URL to record in metadata (moddable=true) or `null` (moddable=false). */
     repositoryUrl?: string | null;
-    /** Compile + deploy foundry/hardhat/cdm contracts alongside the frontend. */
-    deployContracts?: boolean;
-    /**
-     * Skip the contract compile step (forge/hardhat/cargo-contract) and use
-     * pre-existing artifacts on disk. CI-friendly for environments without the
-     * contract toolchain installed. Throws if no artifacts are found.
-     */
-    skipContractBuild?: boolean;
     /** The logged-in phone signer. Required for `mode === "phone"` or `publishToPlayground`. */
     userSigner: ResolvedSigner | null;
     /** Event sink — consumed by the TUI / RevX. */
@@ -114,8 +85,6 @@ export interface RunDeployOptions {
      * (3 DotNS taps) if absent and auto-corrects at runtime.
      */
     plan?: DeployPlan;
-    /** Whether the contracts phase needs a phone tap to top up its session key. */
-    contractsFundingNeeded?: boolean;
 }
 
 export interface DeployOutcome {
@@ -131,8 +100,6 @@ export interface DeployOutcome {
     approvalsRequested: DeployApproval[];
     /** URL the user can visit to view their deployed app. */
     appUrl: string;
-    /** Contract addresses deployed this run (empty when contracts phase was skipped). */
-    contracts: Array<{ name: string; address: HexString }>;
 }
 
 // ── Orchestrator ─────────────────────────────────────────────────────────────
@@ -145,18 +112,13 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         userSigner: options.userSigner,
         publishToPlayground: options.publishToPlayground,
         plan: options.plan,
-        contractsFundingNeeded: options.contractsFundingNeeded,
     });
 
     options.onEvent({ kind: "plan", approvals: setup.approvals });
 
     const counter = createSigningCounter(setup.approvals.length);
 
-    // Contracts and frontend build+upload run concurrently; both must finish
-    // before playground publish.
     const buildAbs = options.buildDir;
-
-    const contractsPromise = maybeRunContracts(options, counter);
 
     const frontendPromise = (async () => {
         if (!options.skipBuild) {
@@ -195,10 +157,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         );
     })();
 
-    const [contractsDeployed, storageResult] = await Promise.all([
-        contractsPromise,
-        frontendPromise,
-    ]);
+    const storageResult = await frontendPromise;
 
     // ── Playground publish ───────────────────────────────────────────────
     let metadataCid: string | undefined;
@@ -237,150 +196,9 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         metadataCid,
         approvalsRequested: setup.approvals,
         appUrl,
-        contracts: contractsDeployed,
     };
     options.onEvent({ kind: "phase-complete", phase: "done" });
     return outcome;
-}
-
-// ── Contracts orchestration ──────────────────────────────────────────────────
-
-/**
- * Compile + deploy contracts using the on-disk session key. Fires
- * `phase-skipped` when disabled or no contract project is detected.
- */
-async function maybeRunContracts(
-    options: RunDeployOptions,
-    counter: SigningCounter,
-): Promise<DeployOutcome["contracts"]> {
-    if (!options.deployContracts) {
-        options.onEvent({
-            kind: "phase-skipped",
-            phase: "contracts",
-            reason: "contracts deploy not requested",
-        });
-        return [];
-    }
-
-    const contractsType: ContractsType | null = detectContractsType(
-        loadDetectInput(options.projectDir),
-    );
-    if (contractsType === null) {
-        options.onEvent({
-            kind: "phase-skipped",
-            phase: "contracts",
-            reason: "no foundry/hardhat/cdm project detected at the root",
-        });
-        return [];
-    }
-
-    return await withDeployPhase(
-        "contracts",
-        "cli.deploy.contracts",
-        { "cli.deploy.contracts_type": contractsType },
-        options.onEvent,
-        async () => {
-            const { info: session, created } = await getOrCreateSessionAccount();
-            const client = await getConnection();
-
-            await ensureSessionFunded({
-                client,
-                sessionAddress: session.account.ss58Address,
-                userSigner: options.userSigner,
-                counter,
-                onEvent: options.onEvent,
-            });
-            if (created) {
-                await submitAndWatch(
-                    client.assetHub.tx.Revive.map_account(),
-                    session.account.signer,
-                );
-                await persistSessionAccount(session);
-            }
-
-            const result = await runContractsPhase({
-                projectDir: options.projectDir,
-                contractsType,
-                skipBuild: options.skipContractBuild,
-                // cdm's PipelineChainClient is a structural subset of our
-                // ChainClient — cast keeps the extra `individuality` field out
-                // of the SDK-surface type without affecting runtime behaviour.
-                client: client as unknown as Parameters<typeof runContractsPhase>[0]["client"],
-                signer: session.account.signer,
-                origin: session.account.ss58Address,
-                onEvent: (event) => options.onEvent({ kind: "contracts-event", event }),
-            });
-
-            return result.deployed;
-        },
-    );
-}
-
-/** Top up the contracts session key if it's below `SESSION_MIN_BALANCE`. */
-async function ensureSessionFunded(opts: {
-    client: Awaited<ReturnType<typeof getConnection>>;
-    sessionAddress: string;
-    userSigner: ResolvedSigner | null;
-    counter: SigningCounter;
-    onEvent: RunDeployOptions["onEvent"];
-}): Promise<void> {
-    const emitInfo = (message: string) =>
-        opts.onEvent({ kind: "contracts-event", event: { kind: "info", message } });
-
-    const balance = await checkBalance(opts.client, opts.sessionAddress, SESSION_MIN_BALANCE);
-    if (balance.sufficient) {
-        emitInfo(`session key funded (${opts.sessionAddress})`);
-        return;
-    }
-
-    emitInfo(`funding session key ${opts.sessionAddress}…`);
-
-    // Three-way branch based on who's funding the session key top-up:
-    //
-    //   source === "session"  Phone signer: user pays on-device. Wrap with
-    //                         lifecycle events so the TUI can number the tap
-    //                         and show "📱 Approve on your phone".
-    //
-    //   source === "dev"      Dev-with-SURI: a local keypair (--suri //Alice
-    //                         or a BIP-39 mnemonic) pretending to be the user.
-    //                         Signs immediately in-process — no human in the
-    //                         loop — so wrapping with phone-tap events would
-    //                         be misleading. Sign directly.
-    //
-    //   null                  Pure dev mode (no --suri, no session): pick the
-    //                         first funder in the chain that has enough PAS.
-    //                         If every dev funder is drained, tell the user to
-    //                         switch to a mobile signer rather than silently
-    //                         falling back to anything that might race the drainer.
-    let funder: PolkadotSigner;
-    if (opts.userSigner?.source === "session") {
-        funder = wrapSignerWithEvents(opts.userSigner.signer, {
-            label: "Fund contract deploy session key",
-            counter: opts.counter,
-            onEvent: (event) => opts.onEvent({ kind: "signing", event }),
-        });
-    } else if (opts.userSigner) {
-        // Dev-with-SURI: sign directly, no lifecycle events.
-        funder = opts.userSigner.signer;
-    } else {
-        const picked = await pickFunder(opts.client, SESSION_FUND_AMOUNT + FUNDER_FEE_BUFFER);
-        if (!picked) {
-            throw new Error(
-                `Dev account balance low. Please deploy with mobile signer. To top up funds in your mobile signer, go to the faucet at: ${FAUCET_URL}`,
-            );
-        }
-        funder = picked.signer;
-    }
-
-    await submitAndWatch(
-        opts.client.assetHub.tx.Balances.transfer_keep_alive({
-            dest: Enum("Id", opts.sessionAddress),
-            value: SESSION_FUND_AMOUNT,
-        }),
-        funder,
-    );
-
-    emitInfo("session key funded");
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

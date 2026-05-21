@@ -63,7 +63,6 @@ describe("expected CLI errors", () => {
             isExpectedCliError("foo/bar is private or does not exist — moddable apps must use…"),
         ).toBe(true);
         expect(isExpectedCliError('Invalid domain "bad_domain"')).toBe(true);
-        expect(isExpectedCliError("No foundry/hardhat/cdm project was detected")).toBe(true);
         expect(isExpectedCliError("BadRegistryLookup: CDM registry unavailable")).toBe(true);
     });
 

@@ -53,14 +53,16 @@ interface MarkerFile {
     envs: Partial<Record<Env, Record<string, Partial<Record<ResourceTag, ResourceEntry>>>>>;
 }
 
-const EMPTY: MarkerFile = { version: 1, envs: {} };
+function emptyFile(): MarkerFile {
+    return { version: 1, envs: {} };
+}
 
 async function loadFile(): Promise<MarkerFile> {
     let raw: string;
     try {
         raw = await fs.readFile(getMarkerPath(), "utf8");
     } catch (err: unknown) {
-        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return { ...EMPTY };
+        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return emptyFile();
         throw err;
     }
     try {
@@ -73,7 +75,7 @@ async function loadFile(): Promise<MarkerFile> {
         // will overwrite. We intentionally don't surface the parse error
         // because the marker is best-effort UX, not load-bearing state.
     }
-    return { ...EMPTY };
+    return emptyFile();
 }
 
 async function saveFile(file: MarkerFile): Promise<void> {

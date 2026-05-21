@@ -14,8 +14,8 @@
 // limitations under the License.
 
 /**
- * Streamed child-process helper. Consolidates the copies that used to live
- * in `build/runner.ts`, `deploy/contracts.ts`, and `toolchain.ts`.
+ * Streamed child-process helper. Consolidates process spawning for build and
+ * toolchain operations.
  */
 
 import { spawn } from "node:child_process";

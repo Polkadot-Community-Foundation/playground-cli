@@ -25,7 +25,6 @@ describe("pickNextStage", () => {
                 "dist",
                 "tw33d3r.dot",
                 true,
-                false,
                 true,
                 "git@github.com:charlesHetterich/tw33d3r",
             ),
@@ -33,8 +32,8 @@ describe("pickNextStage", () => {
     });
 
     it("enters moddable preflight when moddable is true and no repository URL is resolved yet", () => {
-        expect(
-            pickNextStage(false, "phone", "dist", "tw33d3r.dot", true, false, true, null),
-        ).toEqual({ kind: "moddable-preflight" });
+        expect(pickNextStage(false, "phone", "dist", "tw33d3r.dot", true, true, null)).toEqual({
+            kind: "moddable-preflight",
+        });
     });
 });

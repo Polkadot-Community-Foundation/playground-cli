@@ -20,7 +20,6 @@
  */
 
 import type { SignerMode, DeployApproval } from "../../utils/deploy/index.js";
-import type { ContractsType } from "../../utils/build/detect.js";
 
 export interface SummaryInputs {
     mode: SignerMode;
@@ -31,8 +30,6 @@ export interface SummaryInputs {
     moddable?: boolean;
     repositoryUrl?: string | null;
     approvals: DeployApproval[];
-    /** Contract project kind + user's yes/no. Omit when no contracts were detected. */
-    contracts?: { type: ContractsType; deploy: boolean };
     /**
      * SS58 of the account that will sign this deploy. Surfaced in the summary
      * so the user can verify it matches what `dot init` set up (the product
@@ -74,12 +71,6 @@ export function buildSummaryView(input: SummaryInputs): SummaryView {
         rows.push({
             label: "Moddable",
             value: input.moddable ? `yes — ${input.repositoryUrl}` : "no",
-        });
-    }
-    if (input.contracts) {
-        rows.push({
-            label: "Contracts",
-            value: input.contracts.deploy ? `deploy (${input.contracts.type})` : "skip",
         });
     }
     return {

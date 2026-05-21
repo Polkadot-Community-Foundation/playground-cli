@@ -46,7 +46,7 @@ export interface InternalContextSignals {
     branch?: string;
 }
 
-export type CliCommandName = "init" | "deploy" | "mod" | "build" | "update" | "logout";
+export type CliCommandName = "init" | "deploy" | "contract" | "mod" | "build" | "update" | "logout";
 export type TelemetryAttribute = string | number | boolean | undefined;
 
 type EnvLike = Record<string, string | undefined>;
