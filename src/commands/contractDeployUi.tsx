@@ -40,8 +40,8 @@ import { ContractPipelineStatusAdapter, type ContractStatus } from "./contractPi
 
 const COL_CONTRACT = 22;
 const COL_BUILD = 18;
-const COL_PHASE = 5;
-const COL_ADDR = 14;
+const COL_REGISTRY = 8;
+const COL_METADATA = 8;
 const BAR_WIDTH = 12;
 
 export interface ContractDeployUiOptions extends Omit<DeployContractsOptions, "onEvent"> {
@@ -158,17 +158,11 @@ function ContractDeployScreen({
                 network={getNetworkLabel()}
                 right={VERSION_LABEL}
             />
-            <Section title="target">
+            <Section gapBelow={false}>
                 <Row label="signer" value={signerAddress} tone="muted" />
                 <Row label="registry" value={registryAddress} tone="muted" />
-                <Row label="asset hub" value={truncateMiddle(assethubUrl, 72)} tone="muted" />
-                <Row label="bulletin" value={truncateMiddle(bulletinUrl, 72)} tone="muted" />
-                <Row label="gateway" value={truncateMiddle(ipfsGatewayUrl, 72)} tone="muted" />
             </Section>
-            <Section title="contracts" gapBelow={false}>
-                {adapter.phase && adapter.phase.name !== "done" && (
-                    <Row mark="run" label={adapter.phase.description} tone="muted" />
-                )}
+            <Box flexDirection="column">
                 {adapter.signingPrompt && (
                     <PhoneApprovalCallout
                         step={adapter.signingPrompt.step}
@@ -186,9 +180,11 @@ function ContractDeployScreen({
                     displayNames={displayNames}
                     crates={crates.length > 0 ? crates : adapter.crates}
                     logLines={adapter.logLines}
+                    assethubUrl={assethubUrl}
+                    ipfsGatewayUrl={ipfsGatewayUrl}
                     tick={tick}
                 />
-            </Section>
+            </Box>
         </Box>
     );
 }
@@ -198,12 +194,16 @@ function DeployTable({
     displayNames,
     crates,
     logLines,
+    assethubUrl,
+    ipfsGatewayUrl,
     tick,
 }: {
     statuses: Map<string, ContractStatus>;
     displayNames: Map<string, string>;
     crates: string[];
     logLines: string[];
+    assethubUrl: string;
+    ipfsGatewayUrl: string;
     tick: number;
 }) {
     const rowCrates = [
@@ -220,6 +220,8 @@ function DeployTable({
                     key={crate}
                     name={displayNames.get(crate) ?? crate}
                     status={statuses.get(crate)}
+                    assethubUrl={assethubUrl}
+                    ipfsGatewayUrl={ipfsGatewayUrl}
                     tick={tick}
                 />
             ))}
@@ -258,17 +260,14 @@ function HeaderRow() {
             <Cell width={COL_BUILD}>
                 <Text dimColor>build</Text>
             </Cell>
-            <Cell width={COL_PHASE}>
-                <Text dimColor>dep</Text>
+            <Cell width={COL_REGISTRY}>
+                <Text dimColor>registry</Text>
             </Cell>
-            <Cell width={COL_PHASE}>
-                <Text dimColor>meta</Text>
+            <Cell width={COL_METADATA}>
+                <Text dimColor>metadata</Text>
             </Cell>
-            <Cell width={COL_PHASE}>
-                <Text dimColor>reg</Text>
-            </Cell>
-            <Cell width={COL_ADDR}>
-                <Text dimColor>addr</Text>
+            <Cell>
+                <Text dimColor>address</Text>
             </Cell>
         </Box>
     );
@@ -277,10 +276,14 @@ function HeaderRow() {
 function ContractRow({
     name,
     status,
+    assethubUrl,
+    ipfsGatewayUrl,
     tick,
 }: {
     name: string;
     status: ContractStatus | undefined;
+    assethubUrl: string;
+    ipfsGatewayUrl: string;
     tick: number;
 }) {
     const state = status?.state ?? "waiting";
@@ -293,16 +296,9 @@ function ContractRow({
                 </Text>
             </Cell>
             <Cell width={COL_BUILD}>{buildCell(status, tick)}</Cell>
-            <Cell width={COL_PHASE}>{deployCell(status, state, tick)}</Cell>
-            <Cell width={COL_PHASE}>{metadataCell(status, state, tick)}</Cell>
-            <Cell width={COL_PHASE}>{registerCell(status, state, tick)}</Cell>
-            <Cell width={COL_ADDR}>
-                {status?.address ? (
-                    <Text dimColor>{truncateMiddle(status.address, 18)}</Text>
-                ) : (
-                    <Idle />
-                )}
-            </Cell>
+            <Cell width={COL_REGISTRY}>{registryCell(status, state, assethubUrl, tick)}</Cell>
+            <Cell width={COL_METADATA}>{metadataCell(status, state, ipfsGatewayUrl, tick)}</Cell>
+            <Cell>{status?.address ? <Text dimColor>{status.address}</Text> : <Idle />}</Cell>
         </Box>
     );
 }
@@ -326,16 +322,29 @@ function buildCell(status: ContractStatus | undefined, tick: number) {
     return <Mark kind="ok" />;
 }
 
-function deployCell(
+function registryCell(
     status: ContractStatus | undefined,
     state: ContractStatus["state"],
+    assethubUrl: string,
     tick: number,
 ) {
-    if (state === "checking" || status?.deployInProgress) return <Spinner tick={tick} />;
-    if (state === "error" && errorPhase(status) === "deploy") return <Mark kind="fail" />;
+    if (state === "checking" || status?.deployInProgress || status?.registerInProgress) {
+        return <Spinner tick={tick} />;
+    }
+    if (
+        state === "error" &&
+        (errorPhase(status) === "deploy" || errorPhase(status) === "register")
+    ) {
+        return <Mark kind="fail" />;
+    }
     if (state === "cached") return <Cached />;
     if (status?.deployTxHash && status.deployBlockHash) {
-        return <HashText value={status.deployTxHash} />;
+        return (
+            <HashText
+                value={status.deployTxHash}
+                url={pjsExplorerUrl(assethubUrl, status.deployBlockHash)}
+            />
+        );
     }
     if (state === "done") return <Mark kind="ok" />;
     return <Idle />;
@@ -344,29 +353,15 @@ function deployCell(
 function metadataCell(
     status: ContractStatus | undefined,
     state: ContractStatus["state"],
+    ipfsGatewayUrl: string,
     tick: number,
 ) {
     if (status?.publishInProgress) return <Spinner tick={tick} />;
     if (state === "error" && errorPhase(status) === "metadata") return <Mark kind="fail" />;
     if (state === "cached") return <Cached />;
     if (status?.cid) {
-        return <HashText value={status.cid} />;
+        return <HashText value={status.cid} url={ipfsUrl(ipfsGatewayUrl, status.cid)} />;
     }
-    return <Idle />;
-}
-
-function registerCell(
-    status: ContractStatus | undefined,
-    state: ContractStatus["state"],
-    tick: number,
-) {
-    if (status?.registerInProgress) return <Spinner tick={tick} />;
-    if (state === "error" && errorPhase(status) === "register") return <Mark kind="fail" />;
-    if (state === "cached") return <Cached />;
-    if (state === "done" && status?.deployTxHash) {
-        return <HashText value={status.deployTxHash} />;
-    }
-    if (state === "done") return <Mark kind="ok" />;
     return <Idle />;
 }
 
@@ -405,11 +400,12 @@ function Idle() {
     return <Text dimColor>{GLYPH.pending}</Text>;
 }
 
-function HashText({ value }: { value: string }) {
-    return <Text color={COLOR.success}>{shortHash(value)}</Text>;
+function HashText({ value, url }: { value: string; url?: string }) {
+    const label = <Text color={COLOR.success}>{shortHash(value)}</Text>;
+    return url ? <Link url={url}>{label}</Link> : label;
 }
 
-function Cell({ children, width }: { children: ReactNode; width: number }) {
+function Cell({ children, width }: { children: ReactNode; width?: number }) {
     return (
         <Box width={width} marginRight={1}>
             {children}
@@ -472,4 +468,22 @@ function truncateMiddle(value: string, maxLength: number): string {
 function shortHash(value: string): string {
     if (value.startsWith("0x")) return value.slice(2, 6);
     return value.slice(-4);
+}
+
+function Link({ url, children }: { url: string; children: ReactNode }) {
+    return (
+        <Text>
+            {`\x1b]8;;${url}\x07`}
+            {children}
+            {"\x1b]8;;\x07"}
+        </Text>
+    );
+}
+
+function pjsExplorerUrl(rpcUrl: string, blockHash: string): string {
+    return `https://polkadot.js.org/apps/?rpc=${encodeURIComponent(rpcUrl)}#/explorer/query/${blockHash}`;
+}
+
+function ipfsUrl(gatewayUrl: string, cid: string): string {
+    return `${gatewayUrl.replace(/\/+$/, "")}/${cid.replace(/^\/+/, "")}`;
 }
