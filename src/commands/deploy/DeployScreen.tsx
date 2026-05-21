@@ -24,8 +24,6 @@ import {
     Sparkline,
     Select,
     Input,
-    Mark,
-    LAYOUT,
     setWindowTitle,
     type MarkKind,
 } from "../../utils/ui/theme/index.js";
@@ -47,15 +45,10 @@ import { buildSummaryView } from "./summary.js";
 import {
     initialRunningState,
     runningReducer,
-    type ContractsSectionState,
     type FrontendSectionState,
     type StepStatus,
 } from "./runningState.js";
-import { readSessionAccount, SESSION_MIN_BALANCE } from "../../utils/deploy/session-account.js";
-import { checkBalance } from "../../utils/account/funding.js";
-import { getConnection } from "../../utils/connection.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
-import type { ContractsType } from "../../utils/build/detect.js";
 import { DEFAULT_BUILD_DIR, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
@@ -69,10 +62,6 @@ export interface DeployScreenInputs {
     /** Publish to the playground with private visibility. Not interactively prompted — set via `--private`. */
     playgroundPrivate: boolean;
     skipBuild: boolean | null;
-    /** Contract-project kind at `projectDir`, or null if none detected. */
-    contractsType: ContractsType | null;
-    /** Whether to deploy the project's contracts. null = ask the user. */
-    deployContracts: boolean | null;
     /** Pre-set moddable from `--moddable` / `--no-moddable`. null = ask. */
     moddable: boolean | null;
     userSigner: ResolvedSigner | null;
@@ -89,7 +78,6 @@ export type Stage =
     | { kind: "prompt-moddable" }
     | { kind: "moddable-preflight" }
     | { kind: "moddable-error"; message: string }
-    | { kind: "prompt-contracts" }
     | { kind: "confirm" }
     | { kind: "running" }
     | { kind: "done"; outcome: DeployOutcome }
@@ -101,7 +89,6 @@ interface Resolved {
     domain: string;
     publishToPlayground: boolean;
     skipBuild: boolean;
-    deployContracts: boolean;
     moddable: boolean;
     repositoryUrl: string | null;
 }
@@ -114,8 +101,6 @@ export function DeployScreen({
     publishToPlayground: initialPublish,
     playgroundPrivate,
     skipBuild: initialSkipBuild,
-    contractsType,
-    deployContracts: initialDeployContracts,
     moddable: initialModdable,
     userSigner,
     onDone,
@@ -125,10 +110,6 @@ export function DeployScreen({
     const [domain, setDomain] = useState<string | null>(initialDomain);
     const [publishToPlayground, setPublishToPlayground] = useState<boolean | null>(initialPublish);
     const [skipBuild, setSkipBuild] = useState<boolean | null>(initialSkipBuild);
-    // null → ask; false short-circuits the prompt when no contracts exist.
-    const [deployContracts, setDeployContracts] = useState<boolean | null>(
-        contractsType === null ? false : initialDeployContracts,
-    );
     const [moddable, setModdable] = useState<boolean | null>(initialModdable);
     const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
     const [domainError, setDomainError] = useState<string | null>(null);
@@ -143,7 +124,6 @@ export function DeployScreen({
             initialBuildDir,
             initialDomain,
             initialPublish,
-            contractsType === null ? false : initialDeployContracts,
             initialModdable,
             null,
         ),
@@ -160,7 +140,6 @@ export function DeployScreen({
         nextBuildDir: string | null = buildDir,
         nextDomain: string | null = domain,
         nextPublish: boolean | null = publishToPlayground,
-        nextDeployContracts: boolean | null = deployContracts,
         nextModdable: boolean | null = moddable,
         nextRepoUrl: string | null = repositoryUrl,
     ) => {
@@ -170,7 +149,6 @@ export function DeployScreen({
             nextBuildDir,
             nextDomain,
             nextPublish,
-            nextDeployContracts,
             nextModdable,
             nextRepoUrl,
         );
@@ -184,7 +162,6 @@ export function DeployScreen({
             domain === null ||
             publishToPlayground === null ||
             skipBuild === null ||
-            deployContracts === null ||
             moddable === null
         )
             return null;
@@ -194,20 +171,10 @@ export function DeployScreen({
             domain,
             publishToPlayground,
             skipBuild,
-            deployContracts,
             moddable,
             repositoryUrl,
         };
-    }, [
-        mode,
-        buildDir,
-        domain,
-        publishToPlayground,
-        skipBuild,
-        deployContracts,
-        moddable,
-        repositoryUrl,
-    ]);
+    }, [mode, buildDir, domain, publishToPlayground, skipBuild, moddable, repositoryUrl]);
 
     // Dynamic terminal tab title: subtitle becomes the domain once we know it.
     const headerSubtitle = resolved?.domain ?? domain ?? undefined;
@@ -322,15 +289,7 @@ export function DeployScreen({
                     onSelect={(yes) => {
                         setPublishToPlayground(yes);
                         if (!yes) setModdable(false);
-                        advance(
-                            skipBuild,
-                            mode,
-                            buildDir,
-                            domain,
-                            yes,
-                            deployContracts,
-                            yes ? moddable : false,
-                        );
+                        advance(skipBuild, mode, buildDir, domain, yes, yes ? moddable : false);
                     }}
                 />
             )}
@@ -352,15 +311,7 @@ export function DeployScreen({
                         if (yes) {
                             setStage({ kind: "moddable-preflight" });
                         } else {
-                            advance(
-                                skipBuild,
-                                mode,
-                                buildDir,
-                                domain,
-                                publishToPlayground,
-                                deployContracts,
-                                false,
-                            );
+                            advance(skipBuild, mode, buildDir, domain, publishToPlayground, false);
                         }
                     }}
                 />
@@ -371,16 +322,7 @@ export function DeployScreen({
                     projectDir={projectDir}
                     onResolved={(url) => {
                         setRepositoryUrl(url);
-                        advance(
-                            skipBuild,
-                            mode,
-                            buildDir,
-                            domain,
-                            publishToPlayground,
-                            deployContracts,
-                            true,
-                            url,
-                        );
+                        advance(skipBuild, mode, buildDir, domain, publishToPlayground, true, url);
                     }}
                     onError={(msg) => {
                         setStage({ kind: "moddable-error", message: msg });
@@ -392,30 +334,10 @@ export function DeployScreen({
                 <ModdableErrorStage message={stage.message} onExit={() => onDone(null)} />
             )}
 
-            {stage.kind === "prompt-contracts" && contractsType !== null && (
-                <Select<boolean>
-                    label={`deploy ${contractsType} contracts?`}
-                    options={[
-                        { value: false, label: "no", hint: "skip the contracts phase" },
-                        {
-                            value: true,
-                            label: "yes",
-                            hint: `compile & deploy via ${contractsType}`,
-                        },
-                    ]}
-                    initialIndex={0}
-                    onSelect={(yes) => {
-                        setDeployContracts(yes);
-                        advance(skipBuild, mode, buildDir, domain, publishToPlayground, yes);
-                    }}
-                />
-            )}
-
             {stage.kind === "confirm" && resolved && (
                 <ConfirmStage
                     projectDir={projectDir}
                     inputs={resolved}
-                    contractsType={contractsType}
                     userSigner={userSigner}
                     plan={plan}
                     onProceed={() => setStage({ kind: "running" })}
@@ -470,20 +392,10 @@ function pickInitialStage(
     buildDir: string | null,
     domain: string | null,
     publish: boolean | null,
-    deployContracts: boolean | null,
     moddable: boolean | null,
     repositoryUrl: string | null,
 ): Stage {
-    return pickNextStage(
-        skipBuild,
-        mode,
-        buildDir,
-        domain,
-        publish,
-        deployContracts,
-        moddable,
-        repositoryUrl,
-    );
+    return pickNextStage(skipBuild, mode, buildDir, domain, publish, moddable, repositoryUrl);
 }
 
 export function pickNextStage(
@@ -492,7 +404,6 @@ export function pickNextStage(
     buildDir: string | null,
     domain: string | null,
     publish: boolean | null,
-    deployContracts: boolean | null,
     moddable: boolean | null,
     repositoryUrl: string | null,
 ): Stage {
@@ -506,7 +417,6 @@ export function pickNextStage(
     if (publish && moddable === true && repositoryUrl === null) {
         return { kind: "moddable-preflight" };
     }
-    if (deployContracts === null) return { kind: "prompt-contracts" };
     return { kind: "confirm" };
 }
 
@@ -650,7 +560,6 @@ function ValidateDomainStage({
 function ConfirmStage({
     projectDir,
     inputs,
-    contractsType,
     userSigner,
     plan,
     onProceed,
@@ -658,40 +567,11 @@ function ConfirmStage({
 }: {
     projectDir: string;
     inputs: Resolved;
-    contractsType: ContractsType | null;
     userSigner: ResolvedSigner | null;
     plan: DeployPlan | null;
     onProceed: () => void;
     onCancel: () => void;
 }) {
-    // Start pessimistic so the approvals list populates immediately; a
-    // balance query refines it. Over-estimating one tap is better than
-    // under-counting.
-    const needsSessionFunding = inputs.deployContracts && userSigner?.source === "session";
-    const [contractsFundingNeeded, setContractsFundingNeeded] =
-        useState<boolean>(needsSessionFunding);
-
-    useEffect(() => {
-        if (!needsSessionFunding) return;
-        let cancelled = false;
-        (async () => {
-            try {
-                const session = await readSessionAccount();
-                if (session === null) return;
-                const client = await getConnection();
-                const { sufficient } = await checkBalance(
-                    client,
-                    session.account.ss58Address,
-                    SESSION_MIN_BALANCE,
-                );
-                if (!cancelled) setContractsFundingNeeded(!sufficient);
-            } catch {}
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [needsSessionFunding]);
-
     const setup = useMemo(() => {
         try {
             return resolveSignerSetup({
@@ -699,7 +579,6 @@ function ConfirmStage({
                 userSigner,
                 publishToPlayground: inputs.publishToPlayground,
                 plan: plan ?? undefined,
-                contractsFundingNeeded,
             });
         } catch (err) {
             return {
@@ -707,7 +586,7 @@ function ConfirmStage({
                 error: err instanceof Error ? err.message : String(err),
             };
         }
-    }, [inputs, userSigner, plan, contractsFundingNeeded]);
+    }, [inputs, userSigner, plan]);
 
     // Only warn on the oversized branch — silent when README is absent or
     // within the cap, per the product decision to inline tacitly and speak
@@ -727,9 +606,6 @@ function ConfirmStage({
         moddable: inputs.moddable,
         repositoryUrl: inputs.repositoryUrl,
         approvals: "approvals" in setup ? setup.approvals : [],
-        contracts: contractsType
-            ? { type: contractsType, deploy: inputs.deployContracts }
-            : undefined,
         // Phone mode always signs as the user's session account. Dev-with-SURI
         // signs as the SURI-derived address. Pure dev mode falls back to
         // bulletin-deploy's built-in DEFAULT_MNEMONIC, which we can't show
@@ -833,12 +709,10 @@ function RunningStage({
 }) {
     const [runningState, setRunningState] = useState(() =>
         initialRunningState({
-            deployContracts: inputs.deployContracts,
             skipBuild: inputs.skipBuild,
             publishToPlayground: inputs.publishToPlayground,
         }),
     );
-    const contractsState = runningState.contracts;
     const frontendState = runningState.frontend;
     const playgroundState = runningState.playground;
     const [signingPrompt, setSigningPrompt] = useState<SigningEvent | null>(null);
@@ -852,27 +726,8 @@ function RunningStage({
     // "Throttle TUI info updates" for the incident that made this mandatory.
     const INFO_THROTTLE_MS = 100;
     const INFO_MAX_LEN = 160;
-    const contractsPendingRef = useRef<string | null>(null);
-    const contractsTimerRef = useRef<NodeJS.Timeout | null>(null);
     const frontendPendingRef = useRef<string | null>(null);
     const frontendTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const queueContractsLog = (line: string) => {
-        const truncated = line.length > INFO_MAX_LEN ? `${line.slice(0, INFO_MAX_LEN - 1)}…` : line;
-        contractsPendingRef.current = truncated;
-        if (contractsTimerRef.current === null) {
-            contractsTimerRef.current = setTimeout(() => {
-                if (contractsPendingRef.current !== null) {
-                    const v = contractsPendingRef.current;
-                    contractsPendingRef.current = null;
-                    setRunningState((s) => ({
-                        ...s,
-                        contracts: { ...s.contracts, latestLog: v },
-                    }));
-                }
-                contractsTimerRef.current = null;
-            }, INFO_THROTTLE_MS);
-        }
-    };
     const queueFrontendLog = (line: string) => {
         const truncated = line.length > INFO_MAX_LEN ? `${line.slice(0, INFO_MAX_LEN - 1)}…` : line;
         frontendPendingRef.current = truncated;
@@ -910,9 +765,6 @@ function RunningStage({
                     playgroundPrivate,
                     moddable: inputs.moddable,
                     repositoryUrl: inputs.repositoryUrl,
-                    deployContracts: inputs.deployContracts,
-                    contractsFundingNeeded:
-                        inputs.deployContracts && userSigner?.source === "session",
                     userSigner,
                     plan: plan ?? undefined,
                     onEvent: (event) => handleEvent(event),
@@ -931,8 +783,6 @@ function RunningStage({
             if (event.kind === "phase-start") {
                 if (event.phase === "build") {
                     setWindowTitle(`dot deploy · ${inputs.domain} · building`);
-                } else if (event.phase === "contracts") {
-                    setWindowTitle(`dot deploy · ${inputs.domain} · contracts`);
                 } else if (event.phase === "storage-and-dotns") {
                     setWindowTitle(`dot deploy · ${inputs.domain} · uploading`);
                 } else if (event.phase === "playground") {
@@ -942,13 +792,6 @@ function RunningStage({
                 queueFrontendLog(event.line);
             } else if (event.kind === "build-detected") {
                 queueFrontendLog(`> ${event.config.description}`);
-            } else if (event.kind === "contracts-event") {
-                const e = event.event;
-                if (e.kind === "info") queueContractsLog(e.message);
-                else if (e.kind === "compile-log") queueContractsLog(e.line);
-                else if (e.kind === "deploy-chunk") {
-                    queueContractsLog(`deploying chunk ${e.chunk}/${e.total}`);
-                }
             } else if (event.kind === "storage-event") {
                 if (event.event.kind === "chunk-progress") {
                     const now = performance.now();
@@ -975,10 +818,6 @@ function RunningStage({
 
         return () => {
             cancelled = true;
-            if (contractsTimerRef.current !== null) {
-                clearTimeout(contractsTimerRef.current);
-                contractsTimerRef.current = null;
-            }
             if (frontendTimerRef.current !== null) {
                 clearTimeout(frontendTimerRef.current);
                 frontendTimerRef.current = null;
@@ -987,10 +826,8 @@ function RunningStage({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const contractsVisible = contractsState.buildStatus !== "skipped";
     return (
         <Box flexDirection="column">
-            {contractsVisible && <ContractsSectionView state={contractsState} />}
             <FrontendSectionView state={frontendState} />
             {playgroundState.status !== "skipped" && (
                 <Box marginTop={1}>
@@ -1011,49 +848,6 @@ function RunningStage({
                 </Callout>
             )}
         </Box>
-    );
-}
-
-function ContractsSectionView({ state }: { state: ContractsSectionState }) {
-    const running =
-        state.buildStatus === "running" ||
-        state.deployStatus === "running" ||
-        state.contracts.some((c) => c.status === "running");
-    return (
-        <Section title="contracts">
-            <Row
-                mark={stepMark(state.buildStatus)}
-                label="build"
-                tone={state.buildStatus === "error" ? "danger" : "muted"}
-            />
-            <Row
-                mark={stepMark(state.deployStatus)}
-                label="deploy"
-                tone={state.deployStatus === "error" ? "danger" : "muted"}
-            />
-            {state.contracts.length > 0 && (
-                <Box flexDirection="column" paddingLeft={LAYOUT.leftMargin + 4}>
-                    {state.contracts.map((c) => (
-                        <Box key={c.name} flexDirection="row">
-                            <Box marginRight={1}>
-                                <Mark kind={stepMark(c.status)} />
-                            </Box>
-                            <Box width={16}>
-                                <Text>{c.name}</Text>
-                            </Box>
-                            {c.address && (
-                                <Box flexGrow={1} paddingRight={2}>
-                                    <Text dimColor wrap="truncate-middle">
-                                        {c.address}
-                                    </Text>
-                                </Box>
-                            )}
-                        </Box>
-                    ))}
-                </Box>
-            )}
-            {running && state.latestLog && <Hint indent={2}>{truncate(state.latestLog, 120)}</Hint>}
-        </Section>
     );
 }
 

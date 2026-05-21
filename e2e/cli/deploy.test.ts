@@ -22,10 +22,6 @@
  * All headless deploys require: --signer, --domain, --buildDir, --playground
  * to trigger the non-interactive path (see isFullySpecified() in deploy/index.ts).
  *
- * Developer-requested priorities:
- * - Projects with multiple contracts (multi-contract fixture)
- * - EVM (Foundry/Hardhat) vs PVM (Rust/CDM) backends
- * - The --contracts flag
  */
 
 import { describe, test, expect } from "vitest";
@@ -45,57 +41,10 @@ function extractMetadataCid(stdout: string): string | null {
 }
 
 const frontendOnly = fixturePath("frontend-only");
-const foundry = fixturePath("foundry");
-const hardhat = fixturePath("hardhat");
-const rustCdm = fixturePath("rust-cdm");
-const multiContract = fixturePath("multi-contract");
 
 /** buildDir must be absolute — it's resolved relative to cwd, not --dir */
 function absBuildDir(fixture: string, dir = "dist"): string {
 	return resolve(fixture, dir);
-}
-
-/**
- * Shared helper for contract-deploy end-to-end tests.
- *
- * `--no-contract-build` skips the toolchain subprocess (forge / npx hardhat
- * compile / cargo-contract) so the CI runner doesn't need the EVM/Rust
- * toolchain installed. Each fixture ships pre-built bytecode in its out/ or
- * artifacts/ directory.
- */
-interface ContractDeployTestConfig {
-	/** describe-block discriminator: "foundry", "hardhat", "multi" */
-	name: string;
-	/** E2E_DOMAINS.<name> */
-	domain: string;
-	/** fixturePath() result */
-	fixture: string;
-}
-
-function runContractDeployTest(cfg: ContractDeployTestConfig): void {
-	describe(`dot deploy — ${cfg.name} (requires Paseo + IPFS)`, () => {
-		test(`${cfg.name} deploy completes end-to-end`, { timeout: 450_000 }, async () => {
-			const result = await dot([
-				"deploy",
-				"--signer", "dev",
-				"--domain", cfg.domain,
-				"--buildDir", absBuildDir(cfg.fixture),
-				"--contracts",
-				"--no-contract-build",
-				"--playground",
-				"--private",
-				"--suri", SIGNER.suri,
-				"--dir", cfg.fixture,
-			], { timeout: 400_000 });
-
-			expect(
-				result.exitCode,
-				`${cfg.name} deploy failed: ${result.stdout}\n${result.stderr}`,
-			).toBe(0);
-			expect(result.stdout).toContain("Deploy complete");
-			expect(result.stdout).toContain(cfg.domain);
-		});
-	});
 }
 
 /**
@@ -132,113 +81,6 @@ describe("dot deploy — preflight and validation", () => {
 		//   "--env polkadot is not yet supported. Use --env paseo-next-v2 (default)."
 		expect(output).toContain("not yet supported");
 		expect(output).toContain("--env paseo-next-v2");
-	});
-
-	test("detects foundry contracts type in project", async () => {
-		const result = await dot([
-			"deploy",
-			"--signer", "dev",
-			"--domain", E2E_DOMAINS.preflight,
-			"--buildDir", absBuildDir(foundry),
-			"--no-build",
-			"--contracts",
-			"--playground",
-			"--private",
-			"--suri", SIGNER.suri,
-			"--dir", foundry,
-		]);
-		const output = result.stdout + result.stderr;
-		// foundry.toml present → should not complain about missing contract project
-		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		// Real checkpoint: only printed after preflight succeeds.
-		expect(
-			output,
-			`expected to reach availability check\n${output}`,
-		).toContain("Checking availability");
-	});
-
-	test("detects hardhat contracts type in project", async () => {
-		const result = await dot([
-			"deploy",
-			"--signer", "dev",
-			"--domain", E2E_DOMAINS.preflight,
-			"--buildDir", absBuildDir(hardhat),
-			"--no-build",
-			"--contracts",
-			"--playground",
-			"--private",
-			"--suri", SIGNER.suri,
-			"--dir", hardhat,
-		]);
-		const output = result.stdout + result.stderr;
-		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		expect(
-			output,
-			`expected to reach availability check\n${output}`,
-		).toContain("Checking availability");
-	});
-
-	test("detects CDM/Rust contracts type in project", async () => {
-		const result = await dot([
-			"deploy",
-			"--signer", "dev",
-			"--domain", E2E_DOMAINS.preflight,
-			"--buildDir", absBuildDir(rustCdm),
-			"--no-build",
-			"--contracts",
-			"--playground",
-			"--private",
-			"--suri", SIGNER.suri,
-			"--dir", rustCdm,
-		]);
-		const output = result.stdout + result.stderr;
-		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		expect(
-			output,
-			`expected to reach availability check\n${output}`,
-		).toContain("Checking availability");
-	});
-
-	test("detects multiple contracts in multi-contract project", async () => {
-		const result = await dot([
-			"deploy",
-			"--signer", "dev",
-			"--domain", E2E_DOMAINS.preflight,
-			"--buildDir", absBuildDir(multiContract),
-			"--no-build",
-			"--contracts",
-			"--playground",
-			"--private",
-			"--suri", SIGNER.suri,
-			"--dir", multiContract,
-		]);
-		const output = result.stdout + result.stderr;
-		expect(output).not.toContain("no foundry/hardhat/cdm project was detected");
-		expect(
-			output,
-			`expected to reach availability check\n${output}`,
-		).toContain("Checking availability");
-	});
-
-	test("--contracts reports error when no contract project detected", async () => {
-		const result = await dot([
-			"deploy",
-			"--signer", "dev",
-			"--domain", E2E_DOMAINS.preflight,
-			"--buildDir", absBuildDir(frontendOnly),
-			"--no-build",
-			"--contracts",
-			"--playground",
-			"--private",
-			"--suri", SIGNER.suri,
-			"--dir", frontendOnly,
-		], { timeout: 400_000 });
-		const output = result.stdout + result.stderr;
-		expect(
-			result.exitCode,
-			`expected non-zero exit when --contracts has no project\n${output}`,
-		).not.toBe(0);
-		expect(output).toContain("no foundry/hardhat/cdm project was detected");
 	});
 
 	test("domain availability check runs before build/upload", { timeout: 300_000 }, async () => {
@@ -407,62 +249,5 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 			`bob deploy unexpectedly succeeded: ${bobDeploy.stdout}\n${bobDeploy.stderr}`,
 		).not.toBe(0);
 		expect(output.toLowerCase()).toMatch(/revert|taken|registered|owned|unavailable|already/);
-	});
-});
-
-// Contract-deploy tests — parametrized via runContractDeployTest
-runContractDeployTest({ name: "foundry", domain: E2E_DOMAINS.foundry, fixture: foundry });
-runContractDeployTest({ name: "hardhat", domain: E2E_DOMAINS.hardhat, fixture: hardhat });
-// Multi-contract foundry project — exercises the contracts-batch publish path
-// (TokenA.sol + TokenB.sol deployed in a single --contracts run).
-runContractDeployTest({ name: "multi", domain: E2E_DOMAINS.multi, fixture: multiContract });
-
-// Rejection test — does NOT require Paseo or IPFS; exits before any chain mutation.
-describe("dot deploy — rejects --no-contract-build with no artefacts", () => {
-	test("foundry project with --no-contract-build but no out/ → clear error", { timeout: 120_000 }, async () => {
-		const constructorArgs = fixturePath("constructor-args");
-		const result = await dot([
-			"deploy",
-			"--signer", "dev",
-			"--domain", E2E_DOMAINS.preflight,
-			"--buildDir", absBuildDir(constructorArgs),
-			"--contracts",
-			"--no-contract-build",
-			"--playground",
-			"--private",
-			"--suri", SIGNER.suri,
-			"--dir", constructorArgs,
-		]);
-		const output = result.stdout + result.stderr;
-		expect(result.exitCode).not.toBe(0);
-		expect(output).toMatch(/no pre-built contract artifacts found/i);
-		expect(output).toMatch(/--no-contract-build/);
-	});
-});
-
-// CDM follows the same CI shape as foundry/hardhat: deploy pre-built artifacts
-// committed with the fixture, without requiring the Rust/PVM toolchain on CI.
-describe("dot deploy — cdm (requires Paseo + IPFS)", () => {
-	test("CDM deploy completes end-to-end", { timeout: 450_000 }, async () => {
-		const domain = E2E_DOMAINS.cdm;
-		const result = await dot([
-			"deploy",
-			"--signer", "dev",
-			"--domain", domain,
-			"--buildDir", absBuildDir(rustCdm),
-			"--contracts",
-			"--no-contract-build",
-			"--playground",
-			"--private",
-			"--suri", SIGNER.suri,
-			"--dir", rustCdm,
-		], { timeout: 400_000 });
-
-		expect(
-			result.exitCode,
-			`CDM deploy failed: ${result.stdout}\n${result.stderr}`,
-		).toBe(0);
-		expect(result.stdout).toContain("Deploy complete");
-		expect(result.stdout).toContain(domain);
 	});
 });

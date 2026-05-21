@@ -77,14 +77,6 @@ async function hasCdm(): Promise<boolean> {
     return (await commandExists("cdm")) && (await commandExists("cargo-pvm-contract"));
 }
 
-async function hasFoundryPolkadot(): Promise<boolean> {
-    // Stock `forge` lacks `--resolc`, which we need for PolkaVM codegen;
-    // `foundryup-polkadot` wires in the polkadot fork.
-    const home = homedir();
-    const foundryupPolkadot = resolve(home, ".foundry/bin/foundryup-polkadot");
-    return (await commandExists("forge")) && existsSync(foundryupPolkadot);
-}
-
 function isIpfsInitialized(): boolean {
     return existsSync(resolve(homedir(), ".ipfs"));
 }
@@ -171,16 +163,5 @@ export const TOOL_STEPS: ToolStep[] = [
             }
         },
         manualHint: "https://git-scm.com/downloads",
-    },
-    {
-        name: "foundry (polkadot)",
-        check: () => hasFoundryPolkadot(),
-        install: (onData) =>
-            runPiped(
-                "curl -L https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash && $HOME/.foundry/bin/foundryup-polkadot",
-                onData,
-            ),
-        manualHint:
-            "curl -L https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash && ~/.foundry/bin/foundryup-polkadot",
     },
 ];

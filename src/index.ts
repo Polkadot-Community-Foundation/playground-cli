@@ -24,6 +24,7 @@ import pkg from "../package.json" with { type: "json" };
 import { initCommand } from "./commands/init/index.js";
 import { modCommand } from "./commands/mod/index.js";
 import { buildCommand } from "./commands/build.js";
+import { contractCommand } from "./commands/contract.js";
 import { logoutCommand } from "./commands/logout/index.js";
 import { updateCommand } from "./commands/update.js";
 import { captureWarning, closeTelemetry, flushTelemetry, initTelemetry } from "./telemetry.js";
@@ -126,6 +127,7 @@ const program = new Command()
 program.addCommand(initCommand);
 program.addCommand(modCommand);
 program.addCommand(buildCommand);
+program.addCommand(contractCommand);
 program.addCommand(await createDeployCommand());
 program.addCommand(logoutCommand);
 program.addCommand(updateCommand);

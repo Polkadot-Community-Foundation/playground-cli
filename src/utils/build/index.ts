@@ -22,13 +22,11 @@
 
 export {
     detectBuildConfig,
-    detectContractsType,
     detectInstallConfig,
     detectPackageManager,
     BuildDetectError,
     PM_LOCKFILES,
     type BuildConfig,
-    type ContractsType,
     type DetectInput,
     type InstallConfig,
     type PackageManager,
