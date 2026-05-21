@@ -20,7 +20,7 @@ import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
 import { topUpFromBulletinDev } from "../../utils/account/bulletinTopUp.js";
 import { checkMapping, ensureMapped } from "../../utils/account/mapping.js";
-import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID, getChainConfig } from "../../config.js";
+import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID } from "../../config.js";
 import {
     PLAYGROUND_RESOURCES,
     requestResourceAllocation,
@@ -28,11 +28,10 @@ import {
     type AllocatableResource,
 } from "../../utils/allowances/host.js";
 import { hasAllowance, markAllowance } from "../../utils/allowances/marker.js";
-import { hasUsableBulletinSlotAuthorization } from "../../utils/allowances/bulletin.js";
+import { getBulletinSlotAuthorization } from "../../utils/allowances/bulletin.js";
 import {
-    getOrCreateSlotAccountKey,
-    getSlotAccountAddress,
     hasSlotAccountKey,
+    readSlotAccountKey,
     storeSlotAccountKeysFromOutcomes,
 } from "../../utils/allowances/slotKeys.js";
 
@@ -68,10 +67,6 @@ interface PhonePrompt {
     label: string;
 }
 
-interface BulletinWarning {
-    slotAccountAddress: string;
-}
-
 /** Human-readable name for a resource tag, used in failure messages. */
 function describeResource(r: AllocatableResource): string {
     switch (r.tag) {
@@ -98,8 +93,6 @@ export function AccountSetup({
         { label: "funding", status: "pending" },
     ]);
     const [phonePrompt, setPhonePrompt] = useState<PhonePrompt | null>(null);
-    const [bulletinWarning, setBulletinWarning] = useState<BulletinWarning | null>(null);
-    const bulletinAuthorizationUrl = getChainConfig(DEFAULT_ENV).bulletinAuthorizationUrl;
 
     useEffect(() => {
         let cancelled = false;
@@ -148,51 +141,43 @@ export function AccountSetup({
             const env = DEFAULT_ENV;
 
             // ── Step 0: Resource allowances ─────────────────────────────────
-            // Allowances are requested against the product-derived account
-            // (host-papp's `productAccountId = [PLAYGROUND_PRODUCT_ID, 0]`),
-            // which is the same SS58 used everywhere else in this flow. Bulletin
-            // is intentionally not requested from mobile here: the CLI creates
-            // a local slot account and tells the user to authorize that account
-            // through the Bulletin faucet until product-sdk exposes the proper
-            // host-side preimage path.
+            // The CLI acts as the Host for terminal sessions: request RFC-0010
+            // allocations from mobile, cache returned slot keys, then use the
+            // Bulletin slot key for metadata uploads.
             update(0, { status: "active", value: "checking…", valueTone: "muted" });
             let accountSetupOk = true;
             try {
                 const tags = PLAYGROUND_RESOURCES.map((r) => r.tag);
                 const marked = await Promise.all(tags.map((t) => hasAllowance(env, address, t)));
                 const slotKeys = await Promise.all([
+                    hasSlotAccountKey(env, address, "BulletInAllowance"),
                     hasSlotAccountKey(env, address, "StatementStoreAllowance"),
                 ]);
-                const bulletinKey = await getOrCreateSlotAccountKey(
-                    env,
-                    address,
-                    "BulletInAllowance",
-                );
-                if (cancelled) return;
-                let bulletinUsable = false;
-                try {
-                    bulletinUsable = await hasUsableBulletinSlotAuthorization(
-                        client.bulletin,
-                        bulletinKey,
-                        1,
-                    );
-                } catch {
-                    bulletinUsable = false;
-                }
-                if (cancelled) return;
-                const slotAccountAddress = getSlotAccountAddress(bulletinKey);
-                setBulletinWarning(
-                    bulletinUsable
-                        ? null
-                        : {
-                              slotAccountAddress,
-                          },
-                );
-                if (bulletinUsable) {
-                    await markAllowance(env, address, "BulletInAllowance", "host");
-                }
 
-                const allMarked = marked.every(Boolean) && slotKeys.every(Boolean);
+                const refreshBulletinAllowanceMarker = async (): Promise<boolean> => {
+                    const bulletinKey = await readSlotAccountKey(env, address, "BulletInAllowance");
+                    if (!bulletinKey) return false;
+                    try {
+                        const authorization = await getBulletinSlotAuthorization(
+                            client.bulletin,
+                            bulletinKey,
+                            1,
+                        );
+                        if (authorization.usable) {
+                            await markAllowance(env, address, "BulletInAllowance", "host");
+                        }
+                        return authorization.usable;
+                    } catch {
+                        return false;
+                    }
+                };
+
+                const bulletinReady = await refreshBulletinAllowanceMarker();
+
+                const resourcesReady = tags.every((tag, index) =>
+                    tag === "BulletInAllowance" ? bulletinReady : marked[index],
+                );
+                const allMarked = resourcesReady && slotKeys.every(Boolean);
                 if (allMarked) {
                     update(0, {
                         status: "ok",
@@ -222,8 +207,10 @@ export function AccountSetup({
                     // RFC-0010 allocation outcomes are independent: keep any
                     // successful keys even if a sibling resource was denied.
                     for (const resource of summary.granted) {
+                        if (resource.tag === "BulletInAllowance") continue;
                         await markAllowance(env, address, resource.tag, "host");
                     }
+                    await refreshBulletinAllowanceMarker();
 
                     if (summary.rejected.length > 0 || summary.unavailable.length > 0) {
                         const denied = [...summary.rejected, ...summary.unavailable]
@@ -346,35 +333,6 @@ export function AccountSetup({
                         approve step {phonePrompt.step} of {phonePrompt.total}:{" "}
                         <Text bold>{phonePrompt.label}</Text>
                     </Text>
-                </Callout>
-            )}
-            {bulletinWarning && (
-                <Callout tone="warning" title="Bulletin authorization needed">
-                    {bulletinAuthorizationUrl ? (
-                        <>
-                            <Text>
-                                Open the Bulletin authorization faucet at{" "}
-                                <Text bold>{bulletinAuthorizationUrl}</Text>
-                            </Text>
-                            <Text>
-                                and authorize account{" "}
-                                <Text bold>{bulletinWarning.slotAccountAddress}</Text>
-                                {", then re-run "}
-                                <Text bold>dot init</Text>.
-                            </Text>
-                        </>
-                    ) : (
-                        <>
-                            <Text>
-                                Bulletin allowance account{" "}
-                                <Text bold>{bulletinWarning.slotAccountAddress}</Text> is not
-                                authorized yet.
-                            </Text>
-                            <Text>
-                                Re-run <Text bold>dot init</Text> after authorizing it.
-                            </Text>
-                        </>
-                    )}
                 </Callout>
             )}
         </Box>

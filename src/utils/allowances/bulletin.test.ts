@@ -27,17 +27,26 @@ vi.mock("@parity/product-sdk-bulletin", () => ({
     checkAuthorization: checkAuthorizationMock,
 }));
 
-import {
-    bulletinAuthorizationHelp,
-    getBulletinAllowanceSigner,
-    hasUsableBulletinSlotAuthorization,
-} from "./bulletin.js";
+import { getBulletinAllowanceSigner, hasUsableBulletinSlotAuthorization } from "./bulletin.js";
 import { readSlotAccountKey, storeSlotAccountKey } from "./slotKeys.js";
-import { getChainConfig } from "../../config.js";
 
 const KEY = secretFromSeed(new Uint8Array(32).fill(7));
+const KEY_2 = secretFromSeed(new Uint8Array(32).fill(8));
+const MOBILE_KEY = schnorrkelBytesFromScureSecret(KEY);
+const MOBILE_KEY_2 = schnorrkelBytesFromScureSecret(KEY_2);
 const ENV = "paseo-next-v2";
 const OWNER = "5Owner";
+
+function schnorrkelBytesFromScureSecret(secret: Uint8Array): Uint8Array {
+    const raw = new Uint8Array(secret);
+    let carry = 0;
+    for (let i = 31; i >= 0; i--) {
+        const value = secret[i] + carry * 256;
+        raw[i] = value >> 3;
+        carry = value & 0x07;
+    }
+    return raw;
+}
 
 let root: string | null = null;
 
@@ -54,12 +63,6 @@ afterEach(async () => {
 });
 
 describe("Bulletin allowance authorization", () => {
-    it("formats manual authorization help for slot-account recovery", () => {
-        expect(bulletinAuthorizationHelp("5Slot")).toBe(
-            "Open the Bulletin authorization faucet at https://paritytech.github.io/polkadot-bulletin-chain/authorizations and authorize account 5Slot, then re-run `dot init`.",
-        );
-    });
-
     it("checks the slot account address derived from the returned private key", async () => {
         checkAuthorizationMock.mockResolvedValue({
             authorized: true,
@@ -101,7 +104,6 @@ describe("Bulletin allowance authorization", () => {
             remainingBytes: 100n,
             expiration: 1,
         });
-
         const signer = await getBulletinAllowanceSigner({
             env: ENV,
             ownerAddress: OWNER,
@@ -118,8 +120,159 @@ describe("Bulletin allowance authorization", () => {
         expect(signer.publicKey).toHaveLength(32);
     });
 
-    it("creates a local slot key and points to the faucet when it is not authorized", async () => {
+    it("normalizes and uses a mobile-returned slot key when none is cached", async () => {
+        const owner = `${OWNER}-mobile`;
+        const requestResourceAllocation = vi.fn(async () => ({
+            isErr: () => false,
+            value: [
+                {
+                    tag: "Allocated",
+                    value: {
+                        tag: "BulletInAllowance",
+                        value: { slotAccountKey: MOBILE_KEY },
+                    },
+                },
+            ],
+        }));
         checkAuthorizationMock.mockResolvedValueOnce({
+            authorized: true,
+            remainingTransactions: 1,
+            remainingBytes: 100n,
+            expiration: 1,
+        });
+        await expect(readSlotAccountKey(ENV, owner, "BulletInAllowance")).resolves.toBeNull();
+
+        const signer = await getBulletinAllowanceSigner({
+            env: ENV,
+            ownerAddress: owner,
+            publishSigner: {
+                source: "session",
+                address: owner,
+                signer: {} as any,
+                userSession: { requestResourceAllocation } as any,
+                destroy() {},
+            },
+            bulletinApi: {} as any,
+            requiredBytes: 50,
+        });
+
+        expect(requestResourceAllocation).toHaveBeenCalledWith({
+            callingProductId: "playground.dot",
+            resources: [{ tag: "BulletInAllowance", value: undefined }],
+            onExisting: "Ignore",
+        });
+        expect(signer.publicKey).toHaveLength(32);
+        await expect(readSlotAccountKey(ENV, owner, "BulletInAllowance")).resolves.toEqual(KEY);
+    });
+
+    it("requests an additional Bulletin slot when cached authorization lacks quota", async () => {
+        await storeSlotAccountKey(ENV, OWNER, "BulletInAllowance", KEY);
+        const requestResourceAllocation = vi.fn(async () => ({
+            isErr: () => false,
+            value: [
+                {
+                    tag: "Allocated",
+                    value: {
+                        tag: "BulletInAllowance",
+                        value: { slotAccountKey: MOBILE_KEY },
+                    },
+                },
+            ],
+        }));
+        checkAuthorizationMock
+            .mockResolvedValueOnce({
+                authorized: true,
+                remainingTransactions: 0,
+                remainingBytes: 100n,
+                expiration: 1,
+            })
+            .mockResolvedValueOnce({
+                authorized: true,
+                remainingTransactions: 1,
+                remainingBytes: 100n,
+                expiration: 1,
+            });
+
+        const signer = await getBulletinAllowanceSigner({
+            env: ENV,
+            ownerAddress: OWNER,
+            publishSigner: {
+                source: "session",
+                address: OWNER,
+                signer: {} as any,
+                userSession: { requestResourceAllocation } as any,
+                destroy() {},
+            },
+            bulletinApi: {} as any,
+            requiredBytes: 50,
+        });
+
+        expect(requestResourceAllocation).toHaveBeenCalledWith({
+            callingProductId: "playground.dot",
+            resources: [{ tag: "BulletInAllowance", value: undefined }],
+            onExisting: "Increase",
+        });
+        expect(signer.publicKey).toHaveLength(32);
+    });
+
+    it("syncs with mobile when the cached slot key is not authorized", async () => {
+        await storeSlotAccountKey(ENV, OWNER, "BulletInAllowance", KEY);
+        const requestResourceAllocation = vi.fn(async () => ({
+            isErr: () => false,
+            value: [
+                {
+                    tag: "Allocated",
+                    value: {
+                        tag: "BulletInAllowance",
+                        value: { slotAccountKey: MOBILE_KEY_2 },
+                    },
+                },
+            ],
+        }));
+        checkAuthorizationMock
+            .mockResolvedValueOnce({
+                authorized: false,
+                remainingTransactions: 0,
+                remainingBytes: 0n,
+                expiration: 0,
+            })
+            .mockResolvedValueOnce({
+                authorized: true,
+                remainingTransactions: 1,
+                remainingBytes: 100n,
+                expiration: 1,
+            });
+
+        const signer = await getBulletinAllowanceSigner({
+            env: ENV,
+            ownerAddress: OWNER,
+            publishSigner: {
+                source: "session",
+                address: OWNER,
+                signer: {} as any,
+                userSession: { requestResourceAllocation } as any,
+                destroy() {},
+            },
+            bulletinApi: {} as any,
+            requiredBytes: 50,
+        });
+
+        expect(requestResourceAllocation).toHaveBeenCalledWith({
+            callingProductId: "playground.dot",
+            resources: [{ tag: "BulletInAllowance", value: undefined }],
+            onExisting: "Ignore",
+        });
+        expect(signer.publicKey).toHaveLength(32);
+        await expect(readSlotAccountKey(ENV, OWNER, "BulletInAllowance")).resolves.toEqual(KEY_2);
+    });
+
+    it("points back to mobile approval when the cached slot key is not authorized", async () => {
+        await storeSlotAccountKey(ENV, OWNER, "BulletInAllowance", KEY);
+        const requestResourceAllocation = vi.fn(async () => ({
+            isErr: () => false,
+            value: [{ tag: "Rejected", value: undefined }],
+        }));
+        checkAuthorizationMock.mockResolvedValue({
             authorized: false,
             remainingTransactions: 0,
             remainingBytes: 0n,
@@ -134,48 +287,17 @@ describe("Bulletin allowance authorization", () => {
                     source: "session",
                     address: OWNER,
                     signer: {} as any,
+                    userSession: { requestResourceAllocation } as any,
                     destroy() {},
                 },
                 bulletinApi: {} as any,
                 requiredBytes: 50,
             }),
-        ).rejects.toThrow(/Bulletin authorization faucet/);
-
-        await expect(readSlotAccountKey(ENV, OWNER, "BulletInAllowance")).resolves.toHaveLength(64);
-    });
-});
-
-describe("bulletinAuthorizationHelp", () => {
-    const ADDR = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
-
-    it("includes the explicitly-passed faucet URL + slot account SS58", () => {
-        const help = bulletinAuthorizationHelp(ADDR, "https://example.test/faucet");
-        expect(help).toContain("https://example.test/faucet");
-        expect(help).toContain(ADDR);
-        // The user needs an actionable instruction, not just a URL drop —
-        // make sure the "re-run dot init" hint stays in the string.
-        expect(help).toMatch(/re-run.*dot init/i);
-    });
-
-    it("falls back to a no-faucet message when no faucet URL is configured", () => {
-        const help = bulletinAuthorizationHelp(ADDR, null);
-        // Mainnet / closed Summit devnet won't have a public faucet — the
-        // help must not invite users to a URL that doesn't apply.
-        expect(help).not.toMatch(/https?:\/\//);
-        expect(help).toContain(ADDR);
-        expect(help).toMatch(/not authorized/i);
-    });
-
-    it("defaults to the active env's bulletinAuthorizationUrl when no URL passed", () => {
-        const help = bulletinAuthorizationHelp(ADDR);
-        const cfgUrl = getChainConfig().bulletinAuthorizationUrl;
-        if (cfgUrl) {
-            expect(help).toContain(cfgUrl);
-            // Pin the literal path component so a future rename of the
-            // constant can't silently produce a wrong user-facing URL.
-            expect(help).toMatch(/paritytech\.github\.io\/polkadot-bulletin-chain\/authorizations/);
-        } else {
-            expect(help).not.toMatch(/https?:\/\//);
-        }
+        ).rejects.toThrow(/Re-run `dot init` and approve on your phone/);
+        expect(requestResourceAllocation).toHaveBeenCalledWith({
+            callingProductId: "playground.dot",
+            resources: [{ tag: "BulletInAllowance", value: undefined }],
+            onExisting: "Ignore",
+        });
     });
 });
