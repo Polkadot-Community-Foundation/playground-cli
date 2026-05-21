@@ -86,7 +86,6 @@ export class ContractPipelineStatusAdapter {
                 this.update(event.crate, "cached", { address: event.address });
                 return;
             case "check-needs-deploy":
-                this.update(event.crate, "checking", { address: event.address });
                 return;
             case "phase":
                 this.phase = {

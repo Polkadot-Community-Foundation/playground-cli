@@ -101,4 +101,23 @@ describe("ContractPipelineStatusAdapter", () => {
 
         expect(adapter.logLines).toEqual(["line 5", "line 6", "line 7", "line 8", "line 9"]);
     });
+
+    it("ignores planned dry-run addresses until deployment submits", () => {
+        const adapter = new ContractPipelineStatusAdapter();
+        adapter.handleDeployEvent({
+            type: "build-done",
+            crate: "counter",
+            durationMs: 1200,
+            bytecodeSize: 4200,
+        });
+
+        adapter.handleDeployEvent({
+            type: "check-needs-deploy",
+            crate: "counter",
+            address: "0x1111111111111111111111111111111111111111",
+        });
+
+        expect(adapter.statuses.get("counter")?.state).toBe("built");
+        expect(adapter.statuses.get("counter")?.address).toBeUndefined();
+    });
 });
