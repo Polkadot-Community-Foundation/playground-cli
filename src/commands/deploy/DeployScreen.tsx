@@ -30,6 +30,7 @@ import {
 } from "../../utils/ui/theme/index.js";
 import {
     resolveSignerSetup,
+    DEV_PUBLISH_ADDRESS,
     type SignerMode,
     type DeployApproval,
 } from "../../utils/deploy/signerMode.js";
@@ -265,7 +266,7 @@ export function DeployScreen({
                             ? userSigner?.address
                             : userSigner?.source === "dev"
                               ? userSigner.address
-                              : undefined
+                              : DEV_PUBLISH_ADDRESS
                     }
                     onAvailable={(result) => {
                         setDomain(result.fullDomain);

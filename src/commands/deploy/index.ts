@@ -26,6 +26,7 @@ import { onProcessShutdown } from "../../utils/process-guard.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import {
     resolveSignerSetup,
+    DEV_PUBLISH_ADDRESS,
     type SignerMode,
     type DeployApproval,
 } from "../../utils/deploy/signerMode.js";
@@ -296,15 +297,16 @@ async function runHeadless(ctx: {
     // `ownerSs58Address` MUST match whoever will actually sign the DotNS
     // `register()` extrinsic — otherwise the preflight reports "taken" on a
     // re-deploy. Phone mode signs with the session account; dev-with-SURI signs
-    // with that local account. Pure dev mode still falls back to bulletin-deploy's
-    // built-in DEFAULT_MNEMONIC, so we omit the address there.
+    // with that local account; dev mode without `--suri` (with or without a
+    // session) falls back to bulletin-deploy's DEFAULT_MNEMONIC bare-root,
+    // which is `DEV_PUBLISH_ADDRESS`.
     process.stdout.write(`\nChecking availability of ${domain.replace(/\.dot$/, "") + ".dot"}…\n`);
     const dotnsOwnerSs58Address =
         mode === "phone"
             ? ctx.userSigner?.address
             : ctx.userSigner?.source === "dev"
               ? ctx.userSigner.address
-              : undefined;
+              : DEV_PUBLISH_ADDRESS;
     const availability = await withSpan(
         "cli.deploy.availability",
         "check domain availability",

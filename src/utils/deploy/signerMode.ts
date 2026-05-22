@@ -43,13 +43,20 @@ import type { ResolvedSigner } from "../signer.js";
 import type { DeployPlan } from "./availability.js";
 
 /**
- * Construct a fresh dev ResolvedSigner for dev-mode publish from
- * `bulletin-deploy`'s `DEFAULT_MNEMONIC` bare-root account (the same
- * identity bulletin-deploy uses internally for storage + DotNS when no
- * explicit signer is provided). All three on-chain phases — storage,
- * DotNS, registry publish — therefore sign as the same account, so
- * `is_authorized_to_republish` accepts dev iteration uniformly and the
- * DotNS name owner equals the registry publisher for dev-mode apps.
+ * The dev account used for dev-mode publish: `bulletin-deploy`'s
+ * `DEFAULT_MNEMONIC` bare-root (the same identity bulletin-deploy uses
+ * internally for storage + DotNS when no explicit signer is provided).
+ * All three on-chain phases — storage, DotNS, registry publish — sign as
+ * the same account, so `is_authorized_to_republish` accepts dev iteration
+ * uniformly and the DotNS name owner equals the registry publisher for
+ * dev-mode apps.
+ *
+ * Derived once at module load to avoid re-running BIP-39 + sr25519 on
+ * every `resolveSignerSetup` call.
+ *
+ * `DEV_PUBLISH_ADDRESS` is exported so callers (e.g. the availability
+ * preflight) can pass it as the expected DotNS owner whenever dev mode
+ * will fall back to bulletin-deploy's default mnemonic.
  *
  * IMPORTANT: do NOT swap to `createDevSigner("Alice")` from
  * `@parity/product-sdk-tx`. That helper uses `//Alice` derivation
@@ -57,23 +64,13 @@ import type { DeployPlan } from "./availability.js";
  * bare-mnemonic root (`5DfhGyQd...`). The `signerModeAlice.test.ts`
  * snapshot test guards against this regression.
  */
-export const DEV_PUBLISH_ADDRESS = (() => {
-    // Hoisted out of the factory so tests can pin "what signerMode actually
-    // synthesises" without instantiating a signer. The factory below is the
-    // production constructor; this constant is the on-chain identity it
-    // produces, derived from the same source.
-    return seedToAccountAddress();
-})();
+const DEV_PUBLISH_ACCOUNT = seedToAccount(DEFAULT_MNEMONIC, "");
+export const DEV_PUBLISH_ADDRESS = ss58Encode(DEV_PUBLISH_ACCOUNT.publicKey);
 
-function seedToAccountAddress(): string {
-    const { publicKey } = seedToAccount(DEFAULT_MNEMONIC, "");
-    return ss58Encode(publicKey);
-}
 function createAliceSignerForDevPublish(): ResolvedSigner {
-    const account = seedToAccount(DEFAULT_MNEMONIC, "");
     return {
-        signer: account.signer,
-        address: ss58Encode(account.publicKey),
+        signer: DEV_PUBLISH_ACCOUNT.signer,
+        address: DEV_PUBLISH_ADDRESS,
         source: "dev",
         destroy() {},
     };
