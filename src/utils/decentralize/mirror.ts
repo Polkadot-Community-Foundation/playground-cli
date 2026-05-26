@@ -23,12 +23,28 @@ export interface MirrorOptions {
     url: string;
     /** Optional callback for streaming wget output, one line at a time. */
     onLine?: (line: string) => void;
+    /**
+     * @internal Override the binary that gets spawned. Tests use this to point
+     * at a deliberately-missing path (to exercise the `WgetMissingError`
+     * branch) or at `/usr/bin/true` (to exercise the empty-mirror branch
+     * without making a network request). Production callers leave this unset.
+     */
+    wgetBinary?: string;
 }
 
 export interface MirrorResult {
-    /** Absolute path to the temp directory containing the mirrored site. */
+    /** Absolute path to the temp directory wget wrote into. Owned by the
+     *  caller — passed to `rm -rf` once the upload finishes. */
     directory: string;
-    /** Number of files written under `directory`. */
+    /**
+     * Directory to actually upload — the parent of the shallowest
+     * `index.html`. Equals `directory` when the URL has no path (`/`); for
+     * URLs like `https://host/foo/bar/`, wget writes to `directory/foo/bar/`
+     * because `--no-host-directories` strips only the hostname segment, so
+     * we resolve down to the actual document root before handing off.
+     */
+    uploadRoot: string;
+    /** Number of files written under `directory` (NOT `uploadRoot`). */
     fileCount: number;
 }
 
@@ -49,7 +65,12 @@ export class InvalidSiteUrlError extends Error {
     }
 }
 
-function validateUrl(input: string): string {
+/**
+ * Normalise a user-typed site URL into the canonical `http(s)://…` form that
+ * `wget` will accept. Exported so the TUI and unit tests can validate
+ * candidate input without going through the whole mirror pipeline.
+ */
+export function validateUrl(input: string): string {
     let parsed: URL;
     try {
         parsed = new URL(input);
@@ -67,7 +88,49 @@ function validateUrl(input: string): string {
     return parsed.toString();
 }
 
-function countFiles(root: string): number {
+/**
+ * BFS for the directory containing the shallowest `index.html`. Used as
+ * the upload root so Bulletin's renderer always sees `index.html` at the
+ * top level regardless of URL path depth.
+ *
+ * Root cause this guards against: `wget --no-host-directories` strips only
+ * the hostname segment, so `https://host/foo/bar/` writes
+ * `<tmp>/foo/bar/index.html` — not `<tmp>/index.html`. Uploading the wget
+ * directory verbatim would put a directory at the IPFS root with no
+ * document, producing "Archive missing index.html" at view time.
+ *
+ * Returns `null` when no `index.html` exists anywhere in the tree (e.g.
+ * dynamic sites that need server-side rendering); callers should surface
+ * that to the user rather than upload an unrenderable archive.
+ */
+export function findIndexHtmlRoot(rootDir: string): string | null {
+    const queue: string[] = [rootDir];
+    while (queue.length > 0) {
+        const dir = queue.shift()!;
+        let entries: string[];
+        try {
+            entries = readdirSync(dir);
+        } catch {
+            continue;
+        }
+        if (entries.includes("index.html")) return dir;
+        for (const entry of entries) {
+            const full = join(dir, entry);
+            try {
+                if (statSync(full).isDirectory()) queue.push(full);
+            } catch {
+                // dangling symlink / permission error — skip
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Recursive file count under `root`. Used after a wget run to detect the
+ * empty-mirror case (success exit, zero files). Exported for tests.
+ */
+export function countFiles(root: string): number {
     let count = 0;
     const walk = (dir: string) => {
         for (const entry of readdirSync(dir)) {
@@ -117,7 +180,9 @@ export async function mirrorSite(options: MirrorOptions): Promise<MirrorResult> 
     ];
 
     await new Promise<void>((resolve, reject) => {
-        const proc = spawn("wget", args, { stdio: ["ignore", "pipe", "pipe"] });
+        const proc = spawn(options.wgetBinary ?? "wget", args, {
+            stdio: ["ignore", "pipe", "pipe"],
+        });
 
         proc.on("error", (err: NodeJS.ErrnoException) => {
             if (err.code === "ENOENT") reject(new WgetMissingError());
@@ -145,5 +210,13 @@ export async function mirrorSite(options: MirrorOptions): Promise<MirrorResult> 
             `wget completed but no files were downloaded from ${url}. The site may be empty or block crawlers.`,
         );
     }
-    return { directory, fileCount };
+    const uploadRoot = findIndexHtmlRoot(directory);
+    if (!uploadRoot) {
+        throw new Error(
+            `wget downloaded ${fileCount} files from ${url} but none was index.html. ` +
+                "Bulletin's viewer needs an index.html at the root — the site may be " +
+                "fully client-side-rendered or served from a redirect.",
+        );
+    }
+    return { directory, uploadRoot, fileCount };
 }
