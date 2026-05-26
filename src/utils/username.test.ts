@@ -16,6 +16,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatUsernameLine, type UsernameLookup } from "./username.js";
 
+const ZERO_H160 = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+
 describe("formatUsernameLine", () => {
     it("returns the full username when present", () => {
         const lookup: UsernameLookup = {
@@ -146,5 +148,86 @@ describe("lookupUsername", () => {
         const { lookupUsername } = await import("./username.js");
         await lookupUsername("5GGpUaN7XNaUp3nEVDPBSR4SQLxFxQsiPHbFwf69Apr3HgDZ");
         expect(mockDestroy).toHaveBeenCalledTimes(1);
+    });
+});
+
+// Mocks for `lookupRegistryUsername`. We don't reuse the lookupUsername mocks
+// because that function uses its own polkadot-api client; `lookupRegistryUsername`
+// goes through the shared `getConnection()` and the read-only registry contract.
+const mockGetConnection = vi.fn();
+const mockGetReadOnlyRegistryContract = vi.fn();
+
+vi.mock("./connection.js", () => ({
+    getConnection: () => mockGetConnection(),
+}));
+
+vi.mock("./registry.js", () => ({
+    getReadOnlyRegistryContract: (rawClient: unknown) => mockGetReadOnlyRegistryContract(rawClient),
+}));
+
+describe("lookupRegistryUsername", () => {
+    beforeEach(() => {
+        vi.resetModules();
+        mockGetConnection.mockReset();
+        mockGetReadOnlyRegistryContract.mockReset();
+
+        // Default: a connection whose raw.assetHub is just a sentinel object —
+        // we never touch it directly, only forward it to the contract factory.
+        mockGetConnection.mockResolvedValue({ raw: { assetHub: { _sentinel: "assetHub" } } });
+    });
+
+    // Regression guard for the v7-deploy degradation path. The CLI ships against
+    // the latest manifest but a target chain may still be running an older
+    // contract that has no `getUsername` method — the SDK returns a registry
+    // handle whose `.getUsername` is undefined. We must NOT throw; the row falls
+    // through to the People-parachain name.
+    it("returns null when the registry has no getUsername method (older contract)", async () => {
+        mockGetReadOnlyRegistryContract.mockResolvedValue({}); // no getUsername key at all
+        const { lookupRegistryUsername } = await import("./username.js");
+        await expect(lookupRegistryUsername(ZERO_H160)).resolves.toBeNull();
+    });
+
+    it("returns null when getUsername exists but .query is undefined", async () => {
+        mockGetReadOnlyRegistryContract.mockResolvedValue({ getUsername: {} });
+        const { lookupRegistryUsername } = await import("./username.js");
+        await expect(lookupRegistryUsername(ZERO_H160)).resolves.toBeNull();
+    });
+
+    it("returns null when the query result is success=false", async () => {
+        mockGetReadOnlyRegistryContract.mockResolvedValue({
+            getUsername: {
+                query: vi.fn().mockResolvedValue({ success: false, value: "ignored" }),
+            },
+        });
+        const { lookupRegistryUsername } = await import("./username.js");
+        await expect(lookupRegistryUsername(ZERO_H160)).resolves.toBeNull();
+    });
+
+    it("returns null when the returned value is the empty-string sentinel", async () => {
+        mockGetReadOnlyRegistryContract.mockResolvedValue({
+            getUsername: {
+                query: vi.fn().mockResolvedValue({ success: true, value: "" }),
+            },
+        });
+        const { lookupRegistryUsername } = await import("./username.js");
+        await expect(lookupRegistryUsername(ZERO_H160)).resolves.toBeNull();
+    });
+
+    it("returns the username on a successful query", async () => {
+        const queryFn = vi.fn().mockResolvedValue({ success: true, value: "alice" });
+        mockGetReadOnlyRegistryContract.mockResolvedValue({ getUsername: { query: queryFn } });
+        const h160 = "0xabcdef0123456789abcdef0123456789abcdef01" as `0x${string}`;
+
+        const { lookupRegistryUsername } = await import("./username.js");
+        const result = await lookupRegistryUsername(h160);
+
+        expect(result).toBe("alice");
+        expect(queryFn).toHaveBeenCalledWith(h160);
+    });
+
+    it("swallows thrown errors and returns null (display-time fallback)", async () => {
+        mockGetReadOnlyRegistryContract.mockRejectedValue(new Error("rpc went poof"));
+        const { lookupRegistryUsername } = await import("./username.js");
+        await expect(lookupRegistryUsername(ZERO_H160)).resolves.toBeNull();
     });
 });
