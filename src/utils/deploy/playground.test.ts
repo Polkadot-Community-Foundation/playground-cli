@@ -563,6 +563,33 @@ describe("publishToPlayground", () => {
         );
     });
 
+    it("forwards moddedFrom captured by `dot mod` in dot.json to registry.publish", async () => {
+        const dir = makeTmpDir();
+        try {
+            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
+            await publishToPlayground({
+                domain: "my-mod",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: dir,
+            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-mod.dot",
+                "bafymeta",
+                1,
+                {
+                    isSome: false,
+                    value: "0x0000000000000000000000000000000000000000",
+                },
+                "original.dot",
+                false,
+                false,
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     it("retries up to 3 times on registry publish failure", async () => {
         publishTx.mockImplementationOnce(async () => {
             throw new Error("nonce race");

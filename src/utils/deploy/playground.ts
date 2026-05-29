@@ -93,8 +93,9 @@ export interface PublishToPlaygroundOptions {
     /**
      * Domain (`<label>.dot`) the user `dot mod`'d this app from, or `""` if
      * this is a first-party publish. Recorded on-chain so the playground-app
-     * can render a "modded from" badge. Capture is not yet built in the CLI;
-     * for now this is always `""`.
+     * can render a "modded from" badge. Normally captured by `dot mod` into
+     * `dot.json` and read via `readModdedFrom`; this option is an explicit
+     * fallback for callers that already know the source domain.
      */
     moddedFrom?: string;
     /**
@@ -350,7 +351,12 @@ export async function publishToPlayground(
             for (let attempt = 1; attempt <= MAX_REGISTRY_RETRIES; attempt++) {
                 try {
                     const visibility = options.isPrivate ? 0 : 1;
-                    const moddedFrom = options.moddedFrom ?? "";
+                    // Prefer the lineage captured by `dot mod` in `dot.json`
+                    // (the `moddedFrom` read above); fall back to an explicit option.
+                    // The contract awards the source owner the "your app is
+                    // modded" XP off this argument, so an empty string here
+                    // means no lineage edge is ever recorded.
+                    const moddedFromArg = moddedFrom ?? options.moddedFrom ?? "";
                     const isModdable = options.isModdable ?? false;
                     const isDevSigner = options.isDevSigner ?? false;
                     const result = await registry.publish.tx(
@@ -358,7 +364,7 @@ export async function publishToPlayground(
                         metadataCid,
                         visibility,
                         owner,
-                        moddedFrom,
+                        moddedFromArg,
                         isModdable,
                         isDevSigner,
                     );
