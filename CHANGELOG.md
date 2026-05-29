@@ -1,5 +1,26 @@
 # playground-cli
 
+## 0.26.1
+
+### Patch Changes
+
+- 0d13595: Point `dot deploy --playground` and `dot mod` at the current CDM meta-registry.
+  The playground-app and playground-constellation migrated to a freshly deployed
+  meta-registry (`0xf62c…`) where the playground-registry contract was redeployed
+  with additive lineage methods (`getLineage`/`getLineageCount`). The CLI was still
+  resolving live contract addresses from the old meta-registry (`0xa7ae…`), so it
+  published to a stale registry the app no longer reads from. The bundled `cdm.json`
+  now targets the new meta-registry and the latest `@w3s/playground-registry` ABI,
+  and `@dotdm/env` is bumped to `2.0.2` so `dot contract` defaults match. The
+  `publish()` signature is unchanged, so mod lineage continues to flow through the
+  `modded_from` argument.
+- 6d2d6dd: Fix `dot deploy --playground` not recording mod lineage on-chain. The
+  `modded_from` argument to the registry `publish()` call was read from a
+  never-set option instead of the `moddedFrom` value `dot mod` captures in
+  `dot.json`, so the contract always received `""` and never awarded the source
+  owner the "your app is modded" XP. The deploy now passes the captured source
+  domain through to the registry.
+
 ## 0.26.0
 
 ### Minor Changes
