@@ -14,11 +14,12 @@
 // limitations under the License.
 
 import { useRef, useState } from "react";
-import { Box } from "ink";
+import { Box, Text } from "ink";
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { StepRunner, type Step } from "../../utils/ui/components/StepRunner.js";
-import { Header, Hint, Row, Section } from "../../utils/ui/theme/index.js";
+import { Header, Hint, Row, Section, Callout } from "../../utils/ui/theme/index.js";
+import { COMMUNITY_NOTICE_TITLE, COMMUNITY_NOTICE_BODY } from "./communityNotice.js";
 import { runCommand } from "../../utils/git.js";
 import { createOptionalGitBaseline } from "../../utils/mod/git-baseline.js";
 import { downloadGitHubTarball, parseGitHubRepoUrl } from "../../utils/mod/source.js";
@@ -139,6 +140,15 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
                 network={getNetworkLabel()}
                 right={VERSION_LABEL}
             />
+
+            {/* The interactive picker already showed this notice above the
+                app list; only the direct `playground mod <domain>` path
+                (no pre-fetched metadata) needs it here. */}
+            {initial === null && (
+                <Callout tone="warning" title={COMMUNITY_NOTICE_TITLE}>
+                    <Text>{COMMUNITY_NOTICE_BODY}</Text>
+                </Callout>
+            )}
 
             <StepRunner
                 title={`modding ${domain}`}

@@ -15,9 +15,10 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
-import { Mark, Hint, COLOR } from "../../utils/ui/theme/index.js";
+import { Mark, Hint, Callout, COLOR } from "../../utils/ui/theme/index.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
 
+import { COMMUNITY_NOTICE_TITLE, COMMUNITY_NOTICE_BODY } from "./communityNotice.js";
 import { filterModdable, type AppEntry } from "./browserFilter.js";
 export type { AppEntry };
 
@@ -37,7 +38,9 @@ function pad(s: string, w: number): string {
 
 export function AppBrowser({ registry, onSelect, onCancel, moddableOnly }: Props) {
     const { stdout } = useStdout();
-    const viewH = Math.max((stdout?.rows ?? 24) - 6, 5);
+    // The community-code callout above the list takes ~8 rows (margins,
+    // borders, title, wrapped body), on top of the 6 rows of list chrome.
+    const viewH = Math.max((stdout?.rows ?? 24) - 14, 5);
 
     const [apps, setApps] = useState<AppEntry[]>([]);
     const [total, setTotal] = useState(0);
@@ -168,54 +171,59 @@ export function AppBrowser({ registry, onSelect, onCancel, moddableOnly }: Props
     const descW = Math.max((stdout?.columns ?? 80) - COL.num - COL.domain - COL.name - 10, 10);
 
     return (
-        <Box flexDirection="column" paddingLeft={2}>
-            <Box>
-                <Text dimColor>
-                    {`${pad(" #", COL.num)}  ${pad("domain", COL.domain)}  ${pad(
-                        "name",
-                        COL.name,
-                    )}  description`}
-                </Text>
-            </Box>
-            <Box>
-                <Text dimColor>{"─".repeat(COL.num + COL.domain + COL.name + descW + 6)}</Text>
-            </Box>
+        <Box flexDirection="column">
+            <Callout tone="warning" title={COMMUNITY_NOTICE_TITLE}>
+                <Text>{COMMUNITY_NOTICE_BODY}</Text>
+            </Callout>
+            <Box flexDirection="column" paddingLeft={2}>
+                <Box>
+                    <Text dimColor>
+                        {`${pad(" #", COL.num)}  ${pad("domain", COL.domain)}  ${pad(
+                            "name",
+                            COL.name,
+                        )}  description`}
+                    </Text>
+                </Box>
+                <Box>
+                    <Text dimColor>{"─".repeat(COL.num + COL.domain + COL.name + descW + 6)}</Text>
+                </Box>
 
-            {visible.map((app, i) => {
-                const idx = scroll + i;
-                const sel = idx === cursor;
-                const num = sel
-                    ? `›${String(idx + 1).padStart(COL.num - 1)}`
-                    : ` ${String(idx + 1).padStart(COL.num - 1)}`;
-                return (
-                    <Box key={idx}>
-                        <Text bold={sel} color={sel ? COLOR.accent : undefined}>
-                            {`${num}  ${pad(app.domain, COL.domain)}  ${pad(
-                                app.name ?? (app.name === null ? "…" : "—"),
-                                COL.name,
-                            )}  ${pad(app.description ?? "", descW)}`}
-                        </Text>
+                {visible.map((app, i) => {
+                    const idx = scroll + i;
+                    const sel = idx === cursor;
+                    const num = sel
+                        ? `›${String(idx + 1).padStart(COL.num - 1)}`
+                        : ` ${String(idx + 1).padStart(COL.num - 1)}`;
+                    return (
+                        <Box key={idx}>
+                            <Text bold={sel} color={sel ? COLOR.accent : undefined}>
+                                {`${num}  ${pad(app.domain, COL.domain)}  ${pad(
+                                    app.name ?? (app.name === null ? "…" : "—"),
+                                    COL.name,
+                                )}  ${pad(app.description ?? "", descW)}`}
+                            </Text>
+                        </Box>
+                    );
+                })}
+
+                {fetching && (
+                    <Box gap={1} marginTop={1} paddingLeft={0}>
+                        <Mark kind="run" />
+                        <Text dimColor>loading apps…</Text>
                     </Box>
-                );
-            })}
-
-            {fetching && (
-                <Box gap={1} marginTop={1} paddingLeft={0}>
-                    <Mark kind="run" />
-                    <Text dimColor>loading apps…</Text>
+                )}
+                {!fetching && filtered.length === 0 && nextStart.current === null && (
+                    <Box marginTop={1}>
+                        <Text dimColor>No moddable apps in the registry yet.</Text>
+                    </Box>
+                )}
+                <Box marginTop={fetching ? 0 : 1}>
+                    <Hint>{`↑↓ navigate  ·  ⏎ select  ·  q quit  ·  ${
+                        moddableOnly
+                            ? `(${filtered.length} moddable, ${apps.length}/${total} scanned)`
+                            : `(${apps.length}/${total})`
+                    }`}</Hint>
                 </Box>
-            )}
-            {!fetching && filtered.length === 0 && nextStart.current === null && (
-                <Box marginTop={1}>
-                    <Text dimColor>No moddable apps in the registry yet.</Text>
-                </Box>
-            )}
-            <Box marginTop={fetching ? 0 : 1}>
-                <Hint>{`↑↓ navigate  ·  ⏎ select  ·  q quit  ·  ${
-                    moddableOnly
-                        ? `(${filtered.length} moddable, ${apps.length}/${total} scanned)`
-                        : `(${apps.length}/${total})`
-                }`}</Hint>
             </Box>
         </Box>
     );
