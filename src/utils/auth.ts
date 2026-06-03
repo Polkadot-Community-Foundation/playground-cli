@@ -90,14 +90,14 @@ function createAdapter(): TerminalAdapter {
 }
 
 export const STALE_SESSION_MESSAGE =
-    'Stored login session is from an older app version and can no longer be read. Run "playground logout" and then "playground init" to pair again.';
+    'Stored login session could not be read — it may have been written by a different app version. Run "playground logout" and then "playground init" to pair again.';
 
 /**
- * Classify a `waitForSessions` failure: decode/shape failures (a session
- * persisted by an older CLI that the novasama 0.8 codec can't read) get the
- * stale-session hint; transport-level failures (statement store unreachable)
- * re-throw verbatim. Deliberately matches on message text — host-papp doesn't
- * expose typed decode errors. Exported for tests.
+ * Classify a `waitForSessions` failure: decode/shape failures (a stored
+ * session the current codec can't read) get the stale-session hint;
+ * transport-level failures (statement store unreachable) re-throw verbatim.
+ * Deliberately matches on message text — host-papp doesn't expose typed
+ * decode errors. Exported for tests.
  *
  * @internal
  */
@@ -107,10 +107,11 @@ export function isStaleSessionDecodeError(err: unknown): boolean {
 }
 
 /**
- * `waitForSessions` with stale-session translation. novasama 0.8 changed the
- * SSO wire/storage format incompatibly vs 0.7: a session persisted by an older
- * CLI may fail to decode. Surface that as an actionable message instead of a
- * raw SCALE/decode error.
+ * `waitForSessions` with stale-session translation. Purely defensive on the
+ * current `@novasamatech@0.7.9` pin (its session format matches what released
+ * CLIs wrote), but any future wire/storage bump can leave sessions on disk
+ * the new codec can't decode — surface that as an actionable message instead
+ * of a raw SCALE/decode error.
  */
 async function loadSessions(adapter: TerminalAdapter, timeoutMs?: number): Promise<UserSession[]> {
     try {
