@@ -83,6 +83,20 @@ export const STALE_SESSION_MESSAGE =
     'Stored login session is from an older app version and can no longer be read. Run "playground logout" and then "playground init" to pair again.';
 
 /**
+ * Classify a `waitForSessions` failure: decode/shape failures (a session
+ * persisted by an older CLI that the novasama 0.8 codec can't read) get the
+ * stale-session hint; transport-level failures (statement store unreachable)
+ * re-throw verbatim. Deliberately matches on message text — host-papp doesn't
+ * expose typed decode errors. Exported for tests.
+ *
+ * @internal
+ */
+export function isStaleSessionDecodeError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /decode|scale|unexpected|invalid|parse/i.test(msg);
+}
+
+/**
  * `waitForSessions` with stale-session translation. novasama 0.8 changed the
  * SSO wire/storage format incompatibly vs 0.7: a session persisted by an older
  * CLI may fail to decode. Surface that as an actionable message instead of a
@@ -92,10 +106,7 @@ async function loadSessions(adapter: TerminalAdapter, timeoutMs?: number): Promi
     try {
         return await waitForSessions(adapter, timeoutMs);
     } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // Transport-level failures (statement store unreachable) re-throw
-        // verbatim; only decode/shape failures get the stale-session hint.
-        if (/decode|scale|unexpected|invalid|parse/i.test(msg)) {
+        if (isStaleSessionDecodeError(err)) {
             throw new Error(STALE_SESSION_MESSAGE, {
                 cause: err instanceof Error ? err : undefined,
             });

@@ -91,8 +91,8 @@ function requireSession(publishSigner: ResolvedSigner) {
  * Resolve the signer used for Bulletin `TransactionStorage.store` calls
  * (metadata uploads). Slot allocation, key caching and signer construction
  * are all the SDK's (`@parity/product-sdk-terminal/host`); this function owns
- * the QUOTA loop: verify the slot's on-chain authorization and, when the
- * allowance is exhausted, ask the phone to `Increase` it.
+ * the QUOTA check: verify the slot's on-chain authorization and, when the
+ * allowance is exhausted, make a single `Increase` retry on the phone.
  */
 export async function getBulletinAllowanceSigner({
     publishSigner,
