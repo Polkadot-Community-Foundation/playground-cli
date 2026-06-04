@@ -177,9 +177,24 @@ describe("renderSummaryText", () => {
                 ],
             }),
         );
-        expect(text).toContain("Phone approvals required: 3");
+        expect(text).toContain("Phone approvals expected: 3");
         expect(text).toContain("1. Reserve domain");
         expect(text).toContain("3. Link content");
+        // Phone mode flags the demand-driven allowance tap the plan can't count.
+        expect(text).toContain("Bulletin storage allowance");
+    });
+
+    it("omits the allowance hint in dev mode — no phone taps ever happen there", () => {
+        const view = buildSummaryView({
+            mode: "dev",
+            domain: "x.dot",
+            buildDir: "dist",
+            skipBuild: false,
+            publishToPlayground: true,
+            approvals: [{ phase: "playground", label: "Publish to Playground registry" }],
+        });
+        expect(view.approvalHint).toBeNull();
+        expect(renderSummaryText(view)).not.toContain("Bulletin storage allowance");
     });
 
     it("appends signerAddress to the Signer row when provided", () => {

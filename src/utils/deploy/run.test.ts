@@ -286,6 +286,10 @@ describe("runDeploy", () => {
             publishSigner: fakeUserSigner,
             bulletinApi: quotaApi,
             requiredBytes: 1234,
+            // The deploy threads a "check your phone" prompt into the
+            // allowance resolution — allocation taps happen outside any
+            // PolkadotSigner, so this hook is their only TUI surface.
+            onPrompt: expect.any(Function),
         });
         expect(quotaDestroyMock).toHaveBeenCalledTimes(1);
 

@@ -159,7 +159,7 @@ async function runHeadless({
                     case "signing":
                         if (ev.event.kind === "sign-request") {
                             process.stdout.write(
-                                `\n  ▸ Check your phone — approve step ${ev.event.step}/${ev.event.total}: ${ev.event.label}\n`,
+                                `\n  ▸ Check your phone — approve step ${ev.event.step}: ${ev.event.label}\n`,
                             );
                         } else if (ev.event.kind === "sign-error") {
                             process.stdout.write(`  ✖ signing failed: ${ev.event.message}\n`);

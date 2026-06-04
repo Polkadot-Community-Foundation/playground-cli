@@ -22,12 +22,14 @@ const {
     checkAuthorizationMock,
     createSlotAccountSignerMock,
     ensureSlotAccountSignerMock,
+    getCachedAllocationMock,
     requestResourceAllocationMock,
     readCachedBulletinSlotSignerMock,
 } = vi.hoisted(() => ({
     checkAuthorizationMock: vi.fn(),
     createSlotAccountSignerMock: vi.fn(),
     ensureSlotAccountSignerMock: vi.fn(),
+    getCachedAllocationMock: vi.fn(),
     requestResourceAllocationMock: vi.fn(),
     readCachedBulletinSlotSignerMock: vi.fn(),
 }));
@@ -39,6 +41,7 @@ vi.mock("@parity/product-sdk-cloud-storage", () => ({
 vi.mock("@parity/product-sdk-terminal/host", () => ({
     createSlotAccountSigner: createSlotAccountSignerMock,
     ensureSlotAccountSigner: ensureSlotAccountSignerMock,
+    getCachedAllocation: getCachedAllocationMock,
     requestResourceAllocation: requestResourceAllocationMock,
 }));
 
@@ -83,11 +86,15 @@ beforeEach(() => {
     checkAuthorizationMock.mockReset();
     createSlotAccountSignerMock.mockReset();
     ensureSlotAccountSignerMock.mockReset();
+    getCachedAllocationMock.mockReset();
     requestResourceAllocationMock.mockReset();
     readCachedBulletinSlotSignerMock.mockReset();
     // Default: no local cache read available — every existing test exercises
     // the SDK-signer fallback path unchanged.
     readCachedBulletinSlotSignerMock.mockResolvedValue(null);
+    // Default: slot key already in the SDK cache, so ensureSlotAccountSigner
+    // resolves silently and no grant prompt fires.
+    getCachedAllocationMock.mockResolvedValue({ tag: "BulletInAllowance" });
 });
 
 describe("getBulletinAllowanceSigner", () => {
@@ -210,6 +217,124 @@ describe("getBulletinAllowanceSigner", () => {
         ).rejects.toThrow(/not authorized on-chain yet/);
         // Never authorized → no Increase attempt (Increase only fires when authorized).
         expect(requestResourceAllocationMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("getBulletinAllowanceSigner — phone approval prompts", () => {
+    // Allocation requests travel over the statement store outside any
+    // PolkadotSigner, so the deploy TUI's signing proxy can't see them. The
+    // onPrompt hook is the only "check your phone" surface for these taps —
+    // these tests pin when it fires and when it must stay silent.
+    function recordingPrompt() {
+        const calls: Array<{ label: string; closed: "complete" | "fail" | null }> = [];
+        const prompt = (label: string) => {
+            const entry = { label, closed: null as "complete" | "fail" | null };
+            calls.push(entry);
+            return {
+                complete: () => {
+                    entry.closed = "complete";
+                },
+                fail: () => {
+                    entry.closed = "fail";
+                },
+            };
+        };
+        return { calls, prompt };
+    }
+
+    it("stays silent when the slot key is cached and quota is fine", async () => {
+        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        checkAuthorizationMock.mockResolvedValue({
+            authorized: true,
+            remainingTransactions: 1,
+            remainingBytes: 100n,
+            expiration: 1,
+        });
+        const { calls, prompt } = recordingPrompt();
+
+        await getBulletinAllowanceSigner({
+            publishSigner: sessionSigner(),
+            bulletinApi: {} as any,
+            requiredBytes: 50,
+            onPrompt: prompt,
+        });
+
+        expect(calls).toEqual([]);
+    });
+
+    it("prompts for the grant on a slot-key cache miss and completes it", async () => {
+        getCachedAllocationMock.mockResolvedValue(null);
+        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        const { calls, prompt } = recordingPrompt();
+
+        await getBulletinAllowanceSigner({ publishSigner: sessionSigner(), onPrompt: prompt });
+
+        expect(calls).toEqual([{ label: "Grant Bulletin storage allowance", closed: "complete" }]);
+    });
+
+    it("fails the grant prompt when the allocation request throws", async () => {
+        getCachedAllocationMock.mockResolvedValue(null);
+        ensureSlotAccountSignerMock.mockRejectedValue(new Error("Rejected on phone"));
+        const { calls, prompt } = recordingPrompt();
+
+        await expect(
+            getBulletinAllowanceSigner({ publishSigner: sessionSigner(), onPrompt: prompt }),
+        ).rejects.toThrow("Rejected on phone");
+
+        expect(calls).toEqual([{ label: "Grant Bulletin storage allowance", closed: "fail" }]);
+    });
+
+    it("prompts for the Increase when the slot is authorized but out of quota", async () => {
+        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        requestResourceAllocationMock.mockResolvedValue([]);
+        checkAuthorizationMock
+            .mockResolvedValueOnce({
+                authorized: true,
+                remainingTransactions: 0,
+                remainingBytes: 100n,
+                expiration: 1,
+            })
+            .mockResolvedValueOnce({
+                authorized: true,
+                remainingTransactions: 1,
+                remainingBytes: 100n,
+                expiration: 1,
+            });
+        const { calls, prompt } = recordingPrompt();
+
+        await getBulletinAllowanceSigner({
+            publishSigner: sessionSigner(),
+            bulletinApi: {} as any,
+            requiredBytes: 50,
+            onPrompt: prompt,
+        });
+
+        expect(calls).toEqual([
+            { label: "Increase Bulletin storage allowance", closed: "complete" },
+        ]);
+    });
+
+    it("fails the Increase prompt when the allocation request throws", async () => {
+        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        requestResourceAllocationMock.mockRejectedValue(new Error("declined"));
+        checkAuthorizationMock.mockResolvedValue({
+            authorized: true,
+            remainingTransactions: 0,
+            remainingBytes: 100n,
+            expiration: 1,
+        });
+        const { calls, prompt } = recordingPrompt();
+
+        await expect(
+            getBulletinAllowanceSigner({
+                publishSigner: sessionSigner(),
+                bulletinApi: {} as any,
+                requiredBytes: 50,
+                onPrompt: prompt,
+            }),
+        ).rejects.toThrow("declined");
+
+        expect(calls).toEqual([{ label: "Increase Bulletin storage allowance", closed: "fail" }]);
     });
 });
 

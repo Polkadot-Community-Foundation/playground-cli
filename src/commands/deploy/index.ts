@@ -505,7 +505,7 @@ function logHeadlessEvent(event: DeployEvent) {
         process.stdout.write(`  chunk ${event.event.current}/${event.event.total}\n`);
     } else if (event.kind === "signing" && event.event.kind === "sign-request") {
         process.stdout.write(
-            `  📱 Approve on your phone: ${event.event.label} (${event.event.step}/${event.event.total})\n`,
+            `  📱 Approve on your phone (step ${event.event.step}): ${event.event.label}\n`,
         );
     } else if (event.kind === "error") {
         process.stderr.write(`  ✖ ${event.phase}: ${event.message}\n`);
