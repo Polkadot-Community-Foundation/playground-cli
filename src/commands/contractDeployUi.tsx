@@ -170,7 +170,7 @@ function ContractDeployScreen({
                     />
                 )}
                 {adapter.signingError && (
-                    <Callout tone="danger" title="signing failed">
+                    <Callout tone="danger" title="Signing Failed">
                         <Text>{adapter.signingError}</Text>
                     </Callout>
                 )}

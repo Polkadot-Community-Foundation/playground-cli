@@ -31,7 +31,7 @@ export interface PhoneApprovalCalloutProps {
 
 export function PhoneApprovalCallout({ step, total, label }: PhoneApprovalCalloutProps) {
     return (
-        <Callout tone="warning" title="check your phone">
+        <Callout tone="warning" title="Check Your Phone">
             <Text>
                 approve step {step}
                 {total !== undefined ? ` of ${total}` : ""}: <Text bold>{label}</Text>

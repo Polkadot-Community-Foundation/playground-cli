@@ -152,7 +152,7 @@ export function DecentralizeScreen({
 
             {stage.kind === "prompt-url" && (
                 <>
-                    <Callout tone="warning" title="about this command">
+                    <Callout tone="warning" title="About This Command">
                         <Text>
                             Mirrors a live static site (https URL) and republishes it as a .dot
                             site.
@@ -621,7 +621,7 @@ function DoneStage({
                 {outcome.metadataCid && <Row label="metadata cid" value={outcome.metadataCid} />}
             </Section>
             {outcome.signerSource === "dev" && (
-                <Callout tone="warning" title="owned by a development account">
+                <Callout tone="warning" title="Owned by a Development Account">
                     <Text>
                         To deploy to a domain owned by you, run `playground init` and re-run
                         `playground decentralize` with the mobile signer.
@@ -644,7 +644,7 @@ function ErrorStage({ message, onExit }: { message: string; onExit: () => void }
 
     return (
         <Box flexDirection="column">
-            <Callout tone="danger" title="decentralize failed">
+            <Callout tone="danger" title="Decentralize Failed">
                 <Text>{message}</Text>
             </Callout>
         </Box>
