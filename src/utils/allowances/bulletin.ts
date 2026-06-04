@@ -23,6 +23,7 @@ import {
 import {
     createSlotAccountSigner,
     ensureSlotAccountSigner,
+    getCachedAllocation,
     requestResourceAllocation,
     type AllocatableResource,
 } from "@parity/product-sdk-terminal/host";
@@ -36,10 +37,33 @@ export const BULLETIN_RESOURCE: AllocatableResource = {
 
 const INIT_HINT = 'Run "playground init" to grant allowances.';
 
+/**
+ * Live handle for one in-flight phone approval. Close it exactly once: with
+ * `complete()` when the wallet answered, or `fail(message)` when the request
+ * threw / was declined.
+ */
+export interface AllowancePromptHandle {
+    complete(): void;
+    fail(message: string): void;
+}
+
+/**
+ * Called right before a step that needs a tap on the phone (slot grant on
+ * first use, quota Increase). RFC-0010 allocation requests travel over the
+ * statement store outside any `PolkadotSigner`, so the deploy TUI's signing
+ * proxy cannot see them — without this hook the phone shows an approval
+ * dialog while the terminal sits silent.
+ * `deploy/signingProxy.ts::createApprovalPrompt` builds a compatible
+ * implementation backed by the deploy's shared step counter.
+ */
+export type AllowancePrompt = (label: string) => AllowancePromptHandle;
+
 export interface BulletinAllowanceSignerOptions {
     publishSigner: ResolvedSigner;
     bulletinApi?: CloudStorageApi;
     requiredBytes?: number;
+    /** Surfaces "check your phone" UI for allocation requests. Optional: headless callers omit it. */
+    onPrompt?: AllowancePrompt;
 }
 
 function hasUsableAuthorization(status: AuthorizationStatus, requiredBytes = 0): boolean {
@@ -125,6 +149,7 @@ export async function getBulletinAllowanceSigner({
     publishSigner,
     bulletinApi,
     requiredBytes,
+    onPrompt,
 }: BulletinAllowanceSignerOptions): Promise<PolkadotSigner> {
     // Local dev/SURI deploys are the explicit CI escape hatch: the caller
     // supplied a local key and owns making sure it has Bulletin allowance.
@@ -134,20 +159,40 @@ export async function getBulletinAllowanceSigner({
 
     // Cache hit → local sr25519 signer; miss → one phone approval. The SDK
     // call owns allocation + caching; the signer itself is rebuilt from the
-    // cached key with the correct derivation (see correctedSlotSigner).
-    let slotSigner = await correctedSlotSigner(
-        await ensureSlotAccountSigner(userSession, adapter, BULLETIN_RESOURCE),
-        adapter,
-    );
+    // cached key with the correct derivation (see correctedSlotSigner). The
+    // cache probe mirrors ensureSlotAccountSigner's own hit/miss decision so
+    // the prompt fires only when the phone will actually be asked.
+    const cachedSlot = await getCachedAllocation(adapter, BULLETIN_RESOURCE);
+    const grantPrompt = cachedSlot
+        ? null
+        : (onPrompt?.("Grant Bulletin storage allowance") ?? null);
+    let slotSigner: PolkadotSigner;
+    try {
+        slotSigner = await correctedSlotSigner(
+            await ensureSlotAccountSigner(userSession, adapter, BULLETIN_RESOURCE),
+            adapter,
+        );
+        grantPrompt?.complete();
+    } catch (err) {
+        grantPrompt?.fail(err instanceof Error ? err.message : String(err));
+        throw err;
+    }
     if (!bulletinApi) return slotSigner;
 
     let authorization = await getBulletinSlotAuthorization(bulletinApi, slotSigner, requiredBytes);
 
     if (!authorization.usable && authorization.status.authorized) {
         // Slot exists on-chain but quota is exhausted: ask for one more slot.
-        await requestResourceAllocation(userSession, adapter, [BULLETIN_RESOURCE], {
-            onExisting: "Increase",
-        });
+        const increasePrompt = onPrompt?.("Increase Bulletin storage allowance") ?? null;
+        try {
+            await requestResourceAllocation(userSession, adapter, [BULLETIN_RESOURCE], {
+                onExisting: "Increase",
+            });
+            increasePrompt?.complete();
+        } catch (err) {
+            increasePrompt?.fail(err instanceof Error ? err.message : String(err));
+            throw err;
+        }
         slotSigner = await correctedSlotSigner(
             await ensureSlotAccountSigner(userSession, adapter, BULLETIN_RESOURCE),
             adapter,

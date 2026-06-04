@@ -85,7 +85,7 @@ export async function runContractDeployWithUI(
             ipfsGatewayUrl={ipfsGatewayUrl}
         />,
     );
-    const signingCounter = createSigningCounter(1);
+    const signingCounter = createSigningCounter();
     const signer = signerRequiresApproval
         ? wrapSignerWithEvents(deployOpts.signer, {
               label: "Deploy and register contracts",
@@ -166,7 +166,6 @@ function ContractDeployScreen({
                 {adapter.signingPrompt && (
                     <PhoneApprovalCallout
                         step={adapter.signingPrompt.step}
-                        total={adapter.signingPrompt.total}
                         label={adapter.signingPrompt.label}
                     />
                 )}

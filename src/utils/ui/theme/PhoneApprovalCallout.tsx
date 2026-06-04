@@ -18,7 +18,14 @@ import { Callout } from "./Callout.js";
 
 export interface PhoneApprovalCalloutProps {
     step: number;
-    total: number;
+    /**
+     * Optional: only pass when the total is exactly known (e.g. a fixed
+     * single-tap flow like the init allowance grant). Deploy flows omit it —
+     * taps are demand-driven (allowance grants, DotNS plan drift), so a
+     * predicted total regularly turned out wrong ("step 4 of 5" with no
+     * fifth step).
+     */
+    total?: number;
     label: string;
 }
 
@@ -26,7 +33,8 @@ export function PhoneApprovalCallout({ step, total, label }: PhoneApprovalCallou
     return (
         <Callout tone="warning" title="check your phone">
             <Text>
-                approve step {step} of {total}: <Text bold>{label}</Text>
+                approve step {step}
+                {total !== undefined ? ` of ${total}` : ""}: <Text bold>{label}</Text>
             </Text>
         </Callout>
     );

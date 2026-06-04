@@ -33,6 +33,7 @@ import {
 import {
     wrapSignerWithEvents,
     createSigningCounter,
+    createApprovalPrompt,
     type SigningCounter,
     type SigningEvent,
 } from "./signingProxy.js";
@@ -122,7 +123,14 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
 
     options.onEvent({ kind: "plan", approvals: setup.approvals });
 
-    const counter = createSigningCounter(setup.approvals.length);
+    const counter = createSigningCounter();
+    // "Check your phone" surface for RFC-0010 allocation taps (Bulletin slot
+    // grant / quota Increase). These ride the statement store outside any
+    // PolkadotSigner, so the signing proxy below can't see them — without
+    // this the phone shows an approval dialog the TUI never mentions.
+    const allowancePrompt = createApprovalPrompt(counter, (event) =>
+        options.onEvent({ kind: "signing", event }),
+    );
 
     const buildAbs = options.buildDir;
 
@@ -175,6 +183,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                               }),
                       }
                     : undefined,
+                allowancePrompt,
             );
         } finally {
             quota?.destroy();
@@ -231,6 +240,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                     repositoryUrl: options.repositoryUrl ?? null,
                     cwd: options.projectDir,
                     onLogEvent: (event) => options.onEvent({ kind: "storage-event", event }),
+                    onAllowancePrompt: allowancePrompt,
                     env: options.env,
                     isPrivate: options.playgroundPrivate,
                     isModdable: options.moddable ?? false,
@@ -265,8 +275,9 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
  * at the start when a PoP upgrade is needed), so `seen === N` → phone shows
  * the Nth entry. If bulletin-deploy ever fires *more* sigs than approvals
  * anticipated, we fall back to the last known label — better than emitting
- * a bogus index — and `createSigningCounter` simultaneously extends `total`
- * so the TUI shows "step N of N" instead of "N of N-1".
+ * a bogus index. The step counter itself is plan-independent (bare
+ * sequential numbers, no predicted total), so extra or skipped sigs can't
+ * desync the displayed count.
  */
 function maybeWrapAuthForSigning(
     auth: ReturnType<typeof resolveSignerSetup>["bulletinDeployAuthOptions"],

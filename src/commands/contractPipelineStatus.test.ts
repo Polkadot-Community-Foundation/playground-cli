@@ -128,7 +128,6 @@ describe("ContractPipelineStatusAdapter", () => {
             kind: "sign-request",
             label: "Deploy and register contracts",
             step: 1,
-            total: 1,
         });
         expect(adapter.signingPrompt?.label).toBe("Deploy and register contracts");
 
@@ -136,7 +135,6 @@ describe("ContractPipelineStatusAdapter", () => {
             kind: "sign-error",
             label: "Deploy and register contracts",
             step: 1,
-            total: 1,
             message: "Mobile signing failed: unsupported payload",
         });
         adapter.handleDeployEvent({

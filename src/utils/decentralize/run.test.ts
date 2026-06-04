@@ -47,6 +47,9 @@ vi.mock("./mirror.js", () => ({ mirrorSite: mirrorSiteMock }));
 vi.mock("@parity/product-sdk-terminal/host", () => ({
     createSlotAccountSigner: vi.fn(),
     ensureSlotAccountSigner: ensureSlotAccountSignerMock,
+    // Slot key reported as cached so no grant prompt fires — these tests
+    // exercise storage-signer routing, not the approval UI.
+    getCachedAllocation: vi.fn(async () => ({ tag: "BulletInAllowance" })),
     requestResourceAllocation: vi.fn(),
 }));
 // Hermeticity: the corrected-derivation path reads the REAL allowance cache

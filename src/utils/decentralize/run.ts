@@ -39,6 +39,7 @@ import {
 } from "../deploy/signerMode.js";
 import {
     createSigningCounter,
+    createApprovalPrompt,
     type SigningCounter,
     type SigningEvent,
     wrapSignerWithEvents,
@@ -153,10 +154,17 @@ export async function runDecentralize(
     // registry-level `claimedOwnerH160`).
     const storageSignerSource: ResolvedSigner["source"] = mode === "phone" ? "session" : "dev";
 
-    // Shared counter across every phone tap (DotNS commitment/finalize/link
-    // + the optional playground publish) so the callout reads "step N of M".
-    const counter = createSigningCounter(setup.approvals.length);
+    // Shared counter across every phone tap (DotNS commitment/finalize/link,
+    // RFC-0010 allowance grants, the optional playground publish) so the
+    // callout reads "step 1", "step 2", … — bare sequential numbers, no
+    // predicted total (plans drifted from runtime and stranded users on
+    // "step 4 of 5").
+    const counter = createSigningCounter();
     const emitSigning = (event: SigningEvent) => onEvent?.({ kind: "signing", event });
+    // "Check your phone" surface for allocation taps (Bulletin slot grant /
+    // quota Increase) — they happen outside any PolkadotSigner, so the
+    // signer wrap below can't see them.
+    const allowancePrompt = createApprovalPrompt(counter, emitSigning);
 
     let mirrorDir: string | null = null;
 
@@ -176,7 +184,12 @@ export async function runDecentralize(
         // Bulletin storage chunks must sign with the local BulletInAllowance
         // slot key, never the phone signer — chunk txs blow the phone's
         // statement-store message cap. See resolveStorageSignerOptions.
-        const storageSignerOptions = await resolveStorageSignerOptions(mode, userSigner);
+        const storageSignerOptions = await resolveStorageSignerOptions(
+            mode,
+            userSigner,
+            undefined,
+            allowancePrompt,
+        );
 
         onEvent?.({ kind: "storage-start", fullDomain });
         const result = await runStorageDeploy({
@@ -240,6 +253,7 @@ export async function runDecentralize(
                 isModdable: false,
                 isDevSigner: setup.publishSigner.source === "dev",
                 onLogEvent: (event) => onEvent?.({ kind: "playground-event", event }),
+                onAllowancePrompt: allowancePrompt,
             });
             metadataCid = publishResult.metadataCid;
             onEvent?.({ kind: "playground-done", metadataCid });

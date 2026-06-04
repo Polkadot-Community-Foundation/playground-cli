@@ -14,36 +14,55 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import { createSigningCounter } from "./signingProxy.js";
+import { createSigningCounter, createApprovalPrompt, type SigningEvent } from "./signingProxy.js";
 
 describe("createSigningCounter", () => {
-    it("returns sequential step numbers against the configured total", () => {
-        const c = createSigningCounter(3);
-        expect(c.next()).toEqual({ step: 1, total: 3 });
-        expect(c.next()).toEqual({ step: 2, total: 3 });
-        expect(c.next()).toEqual({ step: 3, total: 3 });
+    it("returns bare sequential step numbers with no predicted total", () => {
+        // Regression: the counter used to carry a plan-derived total, and a
+        // plan that over-predicted (e.g. a `setUserPopStatus` tx that runtime
+        // skipped) stranded users on "step 4 of 5" with no fifth step. The
+        // counter now just numbers taps as they happen.
+        const c = createSigningCounter();
+        expect(c.next()).toEqual({ step: 1 });
+        expect(c.next()).toEqual({ step: 2 });
+        expect(c.next()).toEqual({ step: 3 });
         expect(c.count()).toBe(3);
     });
+});
 
-    it("clamps total upward when step exceeds the predicted count", () => {
-        // Regression: TUI used to print "approve step 5 of 4" whenever
-        // bulletin-deploy fired an extra `setUserPopStatus` tx that the
-        // predicted plan missed. Clamping the total up to the current step
-        // keeps the display coherent even when the prediction under-shoots.
-        const c = createSigningCounter(2);
-        expect(c.next()).toEqual({ step: 1, total: 2 });
-        expect(c.next()).toEqual({ step: 2, total: 2 });
-        // Predicted 2 taps, but a third fires:
-        expect(c.next()).toEqual({ step: 3, total: 3 });
-        // And a fourth:
-        expect(c.next()).toEqual({ step: 4, total: 4 });
+describe("createApprovalPrompt", () => {
+    it("emits sign-request on open and sign-complete on complete(), sharing the counter", () => {
+        const events: SigningEvent[] = [];
+        const counter = createSigningCounter();
+        const prompt = createApprovalPrompt(counter, (e) => events.push(e));
+
+        // A signing tap reserves step 1 elsewhere…
+        counter.next();
+        // …so the allowance tap continues the same sequence at step 2.
+        const handle = prompt("Grant Bulletin storage allowance");
+        handle.complete();
+
+        expect(events).toEqual([
+            { kind: "sign-request", label: "Grant Bulletin storage allowance", step: 2 },
+            { kind: "sign-complete", label: "Grant Bulletin storage allowance", step: 2 },
+        ]);
     });
 
-    it("count() reflects every reserved step regardless of clamping", () => {
-        const c = createSigningCounter(1);
-        c.next();
-        c.next();
-        c.next();
-        expect(c.count()).toBe(3);
+    it("emits sign-error with the failure message on fail()", () => {
+        const events: SigningEvent[] = [];
+        const prompt = createApprovalPrompt(createSigningCounter(), (e) => events.push(e));
+
+        const handle = prompt("Increase Bulletin storage allowance");
+        handle.fail("declined on phone");
+
+        expect(events).toEqual([
+            { kind: "sign-request", label: "Increase Bulletin storage allowance", step: 1 },
+            {
+                kind: "sign-error",
+                label: "Increase Bulletin storage allowance",
+                step: 1,
+                message: "declined on phone",
+            },
+        ]);
     });
 });

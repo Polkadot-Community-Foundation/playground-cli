@@ -43,7 +43,11 @@ import { getRegistryContract } from "../registry.js";
 import { getConnection } from "../connection.js";
 import { getChainConfig, type Env } from "../../config.js";
 import { captureWarning, withSpan, errorMessage } from "../../telemetry.js";
-import { getBulletinAllowanceSigner, isInvalidPaymentError } from "../allowances/bulletin.js";
+import {
+    getBulletinAllowanceSigner,
+    isInvalidPaymentError,
+    type AllowancePrompt,
+} from "../allowances/bulletin.js";
 import { BULLETIN_WS_HEARTBEAT_MS } from "../bulletinWs.js";
 import type { ResolvedSigner } from "../signer.js";
 import type { DeployLogEvent } from "./progress.js";
@@ -76,6 +80,12 @@ export interface PublishToPlaygroundOptions {
     cwd?: string;
     /** Progress sink for the metadata-upload sub-step. */
     onLogEvent?: (event: DeployLogEvent) => void;
+    /**
+     * Surfaces "check your phone" UI when the metadata upload needs an
+     * RFC-0010 allocation tap (slot grant on first use, quota Increase).
+     * Without it the phone shows an approval dialog the TUI never mentions.
+     */
+    onAllowancePrompt?: AllowancePrompt;
     /** Target environment. */
     env?: Env;
     /**
@@ -299,6 +309,7 @@ export async function publishToPlayground(
                     publishSigner: options.publishSigner,
                     bulletinApi,
                     requiredBytes: metadataBytes.length,
+                    onPrompt: options.onAllowancePrompt,
                 });
                 try {
                     await withRetry(() => submitAndWatch(storeTx, storageSigner));
@@ -314,6 +325,7 @@ export async function publishToPlayground(
                         publishSigner: options.publishSigner,
                         bulletinApi,
                         requiredBytes: metadataBytes.length,
+                        onPrompt: options.onAllowancePrompt,
                     });
                     await withRetry(() => submitAndWatch(storeTx, storageSigner));
                 }

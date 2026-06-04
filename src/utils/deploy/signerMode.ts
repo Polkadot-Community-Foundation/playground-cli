@@ -41,7 +41,7 @@ import { DEFAULT_MNEMONIC, type DeployOptions } from "bulletin-deploy";
 import { ss58Encode } from "@parity/product-sdk-address";
 import type { CloudStorageApi } from "@parity/product-sdk-cloud-storage";
 import { seedToAccount } from "@parity/product-sdk-keys";
-import { getBulletinAllowanceSigner } from "../allowances/bulletin.js";
+import { getBulletinAllowanceSigner, type AllowancePrompt } from "../allowances/bulletin.js";
 import type { ResolvedSigner } from "../signer.js";
 import type { DeployPlan } from "./availability.js";
 
@@ -144,8 +144,10 @@ export interface ResolveOptions {
      * Known DotNS plan from the availability check. Shapes the approvals list
      * to match what bulletin-deploy will actually submit. Absent = we haven't
      * run the check yet, so assume the most common path (new register, no
-     * PoP upgrade, 3 DotNS taps). The signing counter clamps up at runtime if
-     * we under-estimated, so users never see "step 5 of 4" even on this path.
+     * PoP upgrade, 3 DotNS taps). The list drives the pre-deploy summary and
+     * the per-tap labels only — the runtime counter shows bare sequential
+     * step numbers (no predicted total), so a wrong guess here can't strand
+     * the user on "step 4 of 5" with no fifth step.
      */
     plan?: DeployPlan;
 }
@@ -302,6 +304,7 @@ export async function resolveStorageSignerOptions(
         requiredBytes?: number;
         onWarning?: (message: string) => void;
     },
+    onPrompt?: AllowancePrompt,
 ): Promise<Pick<DeployOptions, "storageSigner" | "storageSignerAddress">> {
     if (mode !== "phone" || userSigner?.source !== "session") return {};
 
@@ -310,6 +313,7 @@ export async function resolveStorageSignerOptions(
             publishSigner: userSigner,
             bulletinApi: withQuota ? quota?.bulletinApi : undefined,
             requiredBytes: withQuota ? quota?.requiredBytes : undefined,
+            onPrompt,
         });
         return { storageSigner, storageSignerAddress: ss58Encode(storageSigner.publicKey) };
     };

@@ -51,7 +51,15 @@ export interface SummaryView {
     headline: string;
     rows: Array<{ label: string; value: string }>;
     approvalLines: string[];
+    /**
+     * Expected tap count from the pre-deploy plan. An estimate, not a
+     * promise: the DotNS plan can drift from what bulletin-deploy actually
+     * submits, and RFC-0010 allowance taps are demand-driven. The runtime
+     * counter therefore shows bare sequential steps with no total.
+     */
     totalApprovals: number;
+    /** Extra line shown under the approvals list for demand-driven taps the plan can't count. */
+    approvalHint: string | null;
 }
 
 const MODE_LABEL: Record<SignerMode, string> = {
@@ -94,6 +102,10 @@ export function buildSummaryView(input: SummaryInputs): SummaryView {
         rows,
         approvalLines: input.approvals.map((a, i) => `${i + 1}. ${a.label}`),
         totalApprovals: input.approvals.length,
+        approvalHint:
+            input.mode === "phone"
+                ? "your phone may also ask to grant or top up the Bulletin storage allowance"
+                : null,
     };
 }
 
@@ -104,8 +116,9 @@ export function renderSummaryText(view: SummaryView): string {
         view.totalApprovals === 0
             ? "  No phone approvals required."
             : [
-                  `  Phone approvals required: ${view.totalApprovals}`,
+                  `  Phone approvals expected: ${view.totalApprovals}`,
                   ...view.approvalLines.map((a) => `    ${a}`),
+                  ...(view.approvalHint ? [`    (${view.approvalHint})`] : []),
               ].join("\n");
     return `${view.headline}\n\n${rows}\n\n${approvals}\n`;
 }

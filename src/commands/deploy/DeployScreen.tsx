@@ -647,7 +647,7 @@ function ConfirmStage({
                     <>
                         <Row
                             label="phone approvals"
-                            value={String(view.totalApprovals)}
+                            value={`${view.totalApprovals} expected`}
                             tone="accent"
                         />
                         {view.approvalLines.map((line) => (
@@ -655,6 +655,7 @@ function ConfirmStage({
                                 {line}
                             </Hint>
                         ))}
+                        {view.approvalHint && <Hint indent={2}>({view.approvalHint})</Hint>}
                     </>
                 )}
             </Section>
@@ -845,11 +846,7 @@ function RunningStage({
             )}
 
             {signingPrompt && signingPrompt.kind === "sign-request" && (
-                <PhoneApprovalCallout
-                    step={signingPrompt.step}
-                    total={signingPrompt.total}
-                    label={signingPrompt.label}
-                />
+                <PhoneApprovalCallout step={signingPrompt.step} label={signingPrompt.label} />
             )}
         </Box>
     );
