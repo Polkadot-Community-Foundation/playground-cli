@@ -482,7 +482,7 @@ function ModdableErrorStage({ message, onExit }: { message: string; onExit: () =
     });
     return (
         <Box flexDirection="column">
-            <Callout tone="warning" title="moddable setup needed">
+            <Callout tone="warning" title="Moddable Setup Needed">
                 <Text>{message}</Text>
             </Callout>
             <Box marginTop={1}>
@@ -661,7 +661,7 @@ function ConfirmStage({
             </Section>
 
             {oversizedReadme && (
-                <Callout tone="warning" title="readme will not be uploaded">
+                <Callout tone="warning" title="README Will Not Be Uploaded">
                     <Text>
                         README.md is {formatKbCeil(oversizedReadme.size)} — over the{" "}
                         {README_CAP_BYTES / 1024} KB limit. the rest of the deploy will continue
@@ -722,6 +722,10 @@ function RunningStage({
     const frontendState = runningState.frontend;
     const playgroundState = runningState.playground;
     const [signingPrompt, setSigningPrompt] = useState<SigningEvent | null>(null);
+    // Heads-up rendered from the moment the run starts until the first real
+    // sign-request arrives — once the PhoneApprovalCallout takes over, the
+    // readiness reminder is redundant and stays hidden for the rest of the run.
+    const [showPhoneNotice, setShowPhoneNotice] = useState(inputs.mode === "phone");
 
     // Per-chunk timing for the sparkline on completion. Held in refs to avoid
     // re-renders on every chunk tick.
@@ -775,10 +779,16 @@ function RunningStage({
                     plan: plan ?? undefined,
                     onEvent: (event) => handleEvent(event),
                 });
-                if (!cancelled) onFinish(outcome, chunkTimingsRef.current);
+                if (!cancelled) {
+                    // RunningStage stays mounted through "done"/"error", so
+                    // clear the readiness notice in case no sign-request fired.
+                    setShowPhoneNotice(false);
+                    onFinish(outcome, chunkTimingsRef.current);
+                }
             } catch (err) {
                 if (!cancelled) {
                     const message = err instanceof Error ? err.message : String(err);
+                    setShowPhoneNotice(false);
                     onError(message);
                 }
             }
@@ -812,6 +822,7 @@ function RunningStage({
                 }
             } else if (event.kind === "signing") {
                 if (event.event.kind === "sign-request") {
+                    setShowPhoneNotice(false);
                     setSigningPrompt(event.event);
                 } else if (event.event.kind === "sign-complete") {
                     setSigningPrompt(null);
@@ -834,6 +845,13 @@ function RunningStage({
 
     return (
         <Box flexDirection="column">
+            {showPhoneNotice && (
+                <Callout tone="warning" title="Keep Your Phone Ready">
+                    <Text>
+                        This deploy will ask you to approve transactions in your mobile app.
+                    </Text>
+                </Callout>
+            )}
             <FrontendSectionView state={frontendState} />
             {playgroundState.status !== "skipped" && (
                 <Box marginTop={1}>
