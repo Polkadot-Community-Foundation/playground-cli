@@ -16,6 +16,7 @@
 import React, { useEffect } from "react";
 import { Box, Text, useStdout } from "ink";
 import { LAYOUT } from "./tokens.js";
+import { layoutHeader } from "./headerLayout.js";
 import { setWindowTitle } from "./window-title.js";
 import { Rule } from "./Rule.js";
 
@@ -59,9 +60,19 @@ export function Header({ cmd, subtitle, network, username, right, tabTitle }: He
         setWindowTitle(title);
     }, [cmd, subtitle, tabTitle]);
 
-    const pieces = [cmd, subtitle, network, username].filter((p): p is string => Boolean(p));
     const cols = stdout?.columns ?? 80;
     const width = Math.max(10, Math.min(cols - LAYOUT.leftMargin * 2, LAYOUT.ruleWidthMax));
+    // Pre-compute the breadcrumb so the left side ALWAYS fits within the row.
+    // If it didn't, yoga would distribute the shrink across every Text node —
+    // clipping the cmd, eating the domain's ".dot" tail, and collapsing the
+    // flexGrow gap so the version label glues onto the network piece. The
+    // paddingLeft sits INSIDE the row's width (yoga is border-box), so the
+    // text actually gets width - leftMargin columns.
+    const { pieces, separator } = layoutHeader(
+        { cmd, subtitle, network, username },
+        right,
+        width - LAYOUT.leftMargin,
+    );
 
     return (
         // marginTop guarantees a blank line above the banner even when a
@@ -73,16 +84,13 @@ export function Header({ cmd, subtitle, network, username, right, tabTitle }: He
                 <Box flexGrow={1} flexDirection="row">
                     {pieces.map((piece, i) => (
                         <React.Fragment key={i}>
-                            {i > 0 && <Text dimColor>{"  ·  "}</Text>}
+                            {i > 0 && <Text dimColor>{separator}</Text>}
                             {/*
-                             * wrap="truncate-end" so that an unexpectedly long
-                             * breadcrumb (e.g. a 30-char registry username on
-                             * a narrow terminal) clips with `…` instead of
-                             * wrapping each piece into garbage like
-                             * `dot ini` / `t`. The username is the realistic
-                             * worst-case piece — `validateUsernameClient`
-                             * caps it at 30 chars on the input path, but we
-                             * still defend the header.
+                             * wrap="truncate-end" is a last-resort backstop
+                             * for pathologically narrow terminals where even
+                             * layoutHeader's truncation floors overflow —
+                             * normally the pieces are pre-fitted and yoga
+                             * never has to shrink anything.
                              */}
                             <Text bold={i === 0} dimColor={i > 0} wrap="truncate-end">
                                 {piece}
