@@ -117,20 +117,28 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
         // `quests.json` the picker auto-skips silently. The picker needs a
         // GitHub ref, so we lift the metadata fetch up here for the
         // direct-domain path (the interactive picker already pre-fetched).
+        //
+        // It is interactive-only: in non-TTY contexts (automation, piped
+        // stdin, the e2e suite) we skip it entirely so `playground mod
+        // <domain>` stays fully non-interactive as documented. Otherwise the
+        // Ink picker renders the quest list and blocks forever waiting for an
+        // Enter that never arrives, and the command hangs until its timeout.
         let repoRef: GitHubRepoRef | null = null;
-        if (metadata?.repository) {
-            repoRef = parseGitHubRepoUrl(metadata.repository);
-        } else {
-            try {
-                const fetched = await withSpan(
-                    "cli.mod.fetch-metadata",
-                    "fetch app metadata for quest probe",
-                    () => fetchAppMetadata(registry, domain),
-                );
-                repoRef = fetched.repository ? parseGitHubRepoUrl(fetched.repository) : null;
-            } catch {
-                // Fall through with `repoRef = null` — picker is skipped and
-                // the existing SetupScreen step will surface the same error.
+        if (process.stdin.isTTY) {
+            if (metadata?.repository) {
+                repoRef = parseGitHubRepoUrl(metadata.repository);
+            } else {
+                try {
+                    const fetched = await withSpan(
+                        "cli.mod.fetch-metadata",
+                        "fetch app metadata for quest probe",
+                        () => fetchAppMetadata(registry, domain),
+                    );
+                    repoRef = fetched.repository ? parseGitHubRepoUrl(fetched.repository) : null;
+                } catch {
+                    // Fall through with `repoRef = null` — picker is skipped and
+                    // the existing SetupScreen step will surface the same error.
+                }
             }
         }
         if (repoRef) {
