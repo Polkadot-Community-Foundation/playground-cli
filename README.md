@@ -243,3 +243,23 @@ The first two are also enforced in CI; running them locally catches the failure 
 - **Bulletin delegation** — all storage-side hardening (pool management, chunk retry, nonce fallback, DAG-PB verification, DotNS commit-reveal) stays inside `bulletin-deploy`. We call `deploy(..., { jsMerkle: true })` so the flow stays binary-free and runs unchanged in a WebContainer.
 - **Signing proxy** (`src/utils/deploy/signingProxy.ts`) — wraps the user's `PolkadotSigner` to emit `sign-request`/`-complete`/`-error` lifecycle events. The TUI renders these as "📱 Check your phone" panels with live step counts.
 - **Playground publish is ours** (`src/utils/deploy/playground.ts`) — we deliberately do NOT use `bulletin-deploy`'s `--playground` flag. We call the registry contract from `src/utils/registry.ts` with the user's signer so the contract records their `env::caller()` as the owner — required for the Playground app's "my apps" view.
+
+## Security
+
+> [!WARNING]
+> The following is a prototype, reference implementation, and proof-of-concept. This open source code is provided for research, experimentation, and developer education only. This code has not been audited, is actively experimental, and may contain bugs, vulnerabilities, or incomplete features. Use at your own risk.
+
+This repository contains reference and proof-of-concept code. Unless a specific release states otherwise, it has **not** received a full security audit and is not a production-ready artefact. Even where no Parity-operated production deployment exists today, this code may be used by third parties on live networks, or reused in future production contexts once published.
+
+### What you are responsible for
+
+Before deploying this for real use cases, you are responsible for:
+
+- Reviewing the code yourself — we publish a reference, not a hardened production build.
+- Checking that the dependencies are up to date and free of known vulnerabilities.
+- Securing your own fork or deployment environment (keys, secrets, network configuration).
+- Tracking the latest tagged release/commits for security fixes; older releases are not backported (exceptions might apply).
+
+### Reporting a vulnerability
+
+This repository inherits its disclosure policy from the org-wide [`paritytech/.github` `SECURITY.md`](https://github.com/paritytech/.github/blob/main/SECURITY.md). Do **not** open a public issue for a qualifying vulnerability — email **security@parity.io** with the affected commit/branch/release, reproduction steps, and realistic impact. For Parity's security disclosure process and Bug Bounty programme, see https://parity.io/bug-bounty.
