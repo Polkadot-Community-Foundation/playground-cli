@@ -29,6 +29,7 @@
  * Rules (operate on a BARE label — no `.dot` suffix):
  *   - charset `[a-z0-9-]`, length 3..63, no leading/trailing hyphen
  *   - trailing digits MUST be exactly 0 or 2 (1 or >2 revert on-chain)
+ *   - a 2-digit suffix may not be preceded by a hyphen (strips to a trailing-hyphen base)
  *   - base length = total length − trailing digits:
  *       <= 5            → Reserved (governance)
  *       6..8, 2 digits  → PoP Lite
@@ -84,6 +85,12 @@ export function validateDomainLabel(label: string): LabelValidation {
     const trailingDigits = countTrailingDigits(label);
     if (trailingDigits === 1 || trailingDigits > 2) {
         return { ok: false, reason: "a digit suffix must be exactly two digits (e.g. my-app42)" };
+    }
+    if (trailingDigits === 2 && label[label.length - trailingDigits - 1] === "-") {
+        return {
+            ok: false,
+            reason: "a digit suffix cannot follow a dash (use my-app42, not my-app-42)",
+        };
     }
     return { ok: true };
 }

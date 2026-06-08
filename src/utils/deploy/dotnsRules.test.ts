@@ -73,6 +73,18 @@ describe("validateDomainLabel", () => {
         expect(validateDomainLabel("myapp123").ok).toBe(false);
         expect(validateDomainLabel("myapp12").ok).toBe(true); // exactly two is fine
     });
+
+    it("accepts the exact min and max lengths", () => {
+        expect(validateDomainLabel("abc")).toEqual({ ok: true }); // exactly 3
+        expect(validateDomainLabel("a".repeat(63))).toEqual({ ok: true }); // exactly 63
+    });
+
+    it("rejects a digit suffix preceded by a dash but accepts one that is not", () => {
+        const dashed = validateDomainLabel("my-app-42");
+        expect(dashed.ok).toBe(false);
+        if (!dashed.ok) expect(dashed.reason).toMatch(/dash/i);
+        expect(validateDomainLabel("my-app42")).toEqual({ ok: true });
+    });
 });
 
 describe("classifyLabel", () => {
@@ -100,5 +112,10 @@ describe("classifyLabel", () => {
         // Regression: the old mirror silently allowed a 1-digit suffix.
         expect(classifyLabel("myapp1").status).toBe(POP_STATUS.Reserved);
         expect(classifyLabel("polkadot12345").status).toBe(POP_STATUS.Reserved);
+    });
+
+    it("pins the base-length boundaries at 6 and 9", () => {
+        expect(classifyLabel("abcdef").status).toBe(POP_STATUS.Full); // base 6, td 0 → Full (lower edge)
+        expect(classifyLabel("abcdefghi").status).toBe(POP_STATUS.NoStatus); // base 9, td 0 → NoStatus
     });
 });
