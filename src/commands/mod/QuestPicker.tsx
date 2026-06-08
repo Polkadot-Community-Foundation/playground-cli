@@ -22,9 +22,12 @@ import {
     type QuestEntry,
     type QuestsManifest,
 } from "../../utils/mod/quests.js";
+import { pad, formatDifficulty } from "./questPickerFormat.js";
 
 interface Props {
     repoRef: GitHubRepoRef;
+    /** Branch to read `quests.json` from (defaults to `main`). */
+    branch?: string;
     /** Resolves once the user is done browsing (Start tutorial or skip). */
     onDone: () => void;
     /** User cancelled the whole flow. */
@@ -33,16 +36,7 @@ interface Props {
 
 const COL = { num: 5, id: 16, title: 32, difficulty: 12 };
 
-function pad(s: string, w: number): string {
-    return s.length > w ? `${s.slice(0, w - 1)}…` : s.padEnd(w);
-}
-
-function formatDifficulty(d: number | undefined): string {
-    if (typeof d !== "number" || d <= 0) return "—";
-    return "★".repeat(Math.min(d, 5));
-}
-
-export function QuestPicker({ repoRef, onDone, onCancel }: Props) {
+export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
     const { stdout } = useStdout();
     const viewH = Math.max((stdout?.rows ?? 24) - 10, 5);
 
@@ -53,10 +47,13 @@ export function QuestPicker({ repoRef, onDone, onCancel }: Props) {
 
     const load = useCallback(async () => {
         try {
-            const m = await fetchQuestsManifest(repoRef);
-            if (!m) {
-                // No quests.json — not a quest track. Skip the picker silently
-                // and let the existing download flow run.
+            const m = await fetchQuestsManifest(repoRef, { branch });
+            // Skip the picker silently — and let the existing download flow
+            // run — when there's no `quests.json` (not a quest track) OR the
+            // manifest defines zero quests. The empty case must behave exactly
+            // like the absent one; rendering a quest-less picker would dead-end
+            // the whole `mod` (no "Start tutorial" button, only `q` to quit).
+            if (!m || m.quests.length === 0) {
                 onDone();
                 return;
             }
@@ -67,7 +64,7 @@ export function QuestPicker({ repoRef, onDone, onCancel }: Props) {
         } finally {
             setFetching(false);
         }
-    }, [repoRef, onDone]);
+    }, [repoRef, branch, onDone]);
 
     useEffect(() => {
         load();

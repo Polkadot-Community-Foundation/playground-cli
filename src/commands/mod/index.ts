@@ -124,9 +124,11 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
         // Ink picker renders the quest list and blocks forever waiting for an
         // Enter that never arrives, and the command hangs until its timeout.
         let repoRef: GitHubRepoRef | null = null;
+        let questBranch: string | undefined;
         if (process.stdin.isTTY) {
             if (metadata?.repository) {
                 repoRef = parseGitHubRepoUrl(metadata.repository);
+                questBranch = metadata.branch ?? undefined;
             } else {
                 try {
                     const fetched = await withSpan(
@@ -135,6 +137,17 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
                         () => fetchAppMetadata(registry, domain),
                     );
                     repoRef = fetched.repository ? parseGitHubRepoUrl(fetched.repository) : null;
+                    questBranch = fetched.branch;
+                    // Reuse what we just fetched so SetupScreen doesn't query
+                    // the registry + IPFS a second time for the same domain.
+                    metadata = {
+                        domain,
+                        name: fetched.name ?? null,
+                        description: fetched.description ?? null,
+                        repository: fetched.repository ?? null,
+                        branch: fetched.branch ?? null,
+                        tag: fetched.tag ?? null,
+                    };
                 } catch {
                     // Fall through with `repoRef = null` — picker is skipped and
                     // the existing SetupScreen step will surface the same error.
@@ -142,8 +155,11 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
             }
         }
         if (repoRef) {
+            // Capture into a const so the value type-narrows inside the closure
+            // (a `let` would widen back to `GitHubRepoRef | null`).
+            const ref = repoRef;
             const continued = await withSpan("cli.mod.quest-picker", "browse quests", () =>
-                pickQuest(repoRef),
+                pickQuest(ref, questBranch),
             );
             if (!continued) {
                 process.exitCode = 0;
@@ -214,11 +230,12 @@ async function fetchAppMetadata(registry: any, domain: string): Promise<FetchedA
     return await fetchBulletinJson<FetchedAppMetadata>(cid, getBulletinGateway());
 }
 
-function pickQuest(repoRef: GitHubRepoRef): Promise<boolean> {
+function pickQuest(repoRef: GitHubRepoRef, branch?: string): Promise<boolean> {
     return new Promise((resolve) => {
         const app = render(
             React.createElement(QuestPicker, {
                 repoRef,
+                branch,
                 onDone: () => {
                     app.unmount();
                     resolve(true);

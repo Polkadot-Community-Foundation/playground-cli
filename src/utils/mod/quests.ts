@@ -52,24 +52,40 @@ export interface QuestsManifest {
 
 interface FetchOpts {
     fetch?: typeof fetch;
+    /**
+     * Branch to read `quests.json` from. Defaults to `main`. The mod flow
+     * resolves the app's real default branch from metadata (repos default to
+     * `master`/`develop` too); thread it through so a quest track on a
+     * non-`main` default isn't silently invisible.
+     */
+    branch?: string;
+    /**
+     * Abort the fetch after this many ms so the picker never hangs on the
+     * "fetching…" spinner on flaky WiFi — a timeout is treated as "not a
+     * quest track" and the existing clone flow proceeds untouched.
+     */
+    timeoutMs?: number;
 }
 
 const RAW_HOST = "https://raw.githubusercontent.com";
+const DEFAULT_TIMEOUT_MS = 8_000;
 
 export class QuestNotFoundError extends Error {}
 
 /**
- * Fetch and parse `quests.json` from a public GitHub repo's main branch.
- * Returns `null` when the file is absent (404) so callers can distinguish
- * "not a quest track" from a transport/parse failure.
+ * Fetch and parse `quests.json` from a public GitHub repo. Reads the `main`
+ * branch unless `opts.branch` overrides it. Returns `null` when the file is
+ * absent (404) so callers can distinguish "not a quest track" from a
+ * transport/parse failure.
  */
 export async function fetchQuestsManifest(
     ref: GitHubRepoRef,
     opts: FetchOpts = {},
 ): Promise<QuestsManifest | null> {
     const f = opts.fetch ?? fetch;
-    const url = `${RAW_HOST}/${ref.owner}/${ref.repo}/main/quests.json`;
-    const res = await f(url);
+    const branch = opts.branch ?? "main";
+    const url = `${RAW_HOST}/${ref.owner}/${ref.repo}/${branch}/quests.json`;
+    const res = await f(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS) });
     if (res.status === 404) return null;
     if (!res.ok) {
         throw new Error(`Failed to fetch quests.json from ${url}: ${res.status} ${res.statusText}`);

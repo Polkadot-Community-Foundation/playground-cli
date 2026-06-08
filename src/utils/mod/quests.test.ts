@@ -138,6 +138,21 @@ describe("fetchQuestsManifest", () => {
         expect(m?.track_id).toBe("rock-paper-scissors");
     });
 
+    it("reads a non-main branch when one is supplied", async () => {
+        let seen: string | null = null;
+        const fetchImpl: typeof fetch = async (url) => {
+            seen = String(url);
+            return new Response(JSON.stringify(validManifest), { status: 200 });
+        };
+        await fetchQuestsManifest(
+            { owner: "paritytech", repo: "Rock-Paper-Scissors" },
+            { fetch: fetchImpl, branch: "master" },
+        );
+        expect(seen).toBe(
+            "https://raw.githubusercontent.com/paritytech/Rock-Paper-Scissors/master/quests.json",
+        );
+    });
+
     it("returns null for 404", async () => {
         const fetchImpl: typeof fetch = async () => new Response("not found", { status: 404 });
         const m = await fetchQuestsManifest({ owner: "x", repo: "y" }, { fetch: fetchImpl });
