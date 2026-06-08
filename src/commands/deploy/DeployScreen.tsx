@@ -871,7 +871,7 @@ function RunningStage({
             {showPhoneNotice && (
                 <Callout tone="warning" title="Keep Your Phone Ready">
                     <Text>
-                        This deploy will ask you to approve transactions in your mobile app.
+                        This deploy may ask you to approve transactions in your mobile app.
                     </Text>
                 </Callout>
             )}
