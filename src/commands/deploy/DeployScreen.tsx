@@ -128,12 +128,13 @@ export function DeployScreen({
     const hasSession = userSigner?.source === "session";
     const effectiveInitialMode: SignerMode | null =
         !hasSession && initialMode === "phone" ? null : initialMode;
+    const effectiveInitialSkipBuild = initialDeployContracts === true ? false : initialSkipBuild;
     const [mode, setMode] = useState<SignerMode | null>(effectiveInitialMode);
     const [deployContracts, setDeployContracts] = useState<boolean | null>(initialDeployContracts);
     const [buildDir, setBuildDir] = useState<string | null>(initialBuildDir);
     const [domain, setDomain] = useState<string | null>(initialDomain);
     const [publishToPlayground, setPublishToPlayground] = useState<boolean | null>(initialPublish);
-    const [skipBuild, setSkipBuild] = useState<boolean | null>(initialSkipBuild);
+    const [skipBuild, setSkipBuild] = useState<boolean | null>(effectiveInitialSkipBuild);
     const [moddable, setModdable] = useState<boolean | null>(initialModdable);
     const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
     const [domainError, setDomainError] = useState<string | null>(null);
@@ -143,7 +144,7 @@ export function DeployScreen({
     const [plan, setPlan] = useState<DeployPlan | null>(null);
     const [stage, setStage] = useState<Stage>(() =>
         pickInitialStage(
-            initialSkipBuild,
+            effectiveInitialSkipBuild,
             effectiveInitialMode,
             initialDeployContracts,
             initialBuildDir,
@@ -183,13 +184,14 @@ export function DeployScreen({
     };
 
     const resolved = useMemo<Resolved | null>(() => {
+        const effectiveSkipBuild = deployContracts === true ? false : skipBuild;
         if (
             mode === null ||
             deployContracts === null ||
             buildDir === null ||
             domain === null ||
             publishToPlayground === null ||
-            skipBuild === null ||
+            effectiveSkipBuild === null ||
             moddable === null
         )
             return null;
@@ -199,7 +201,7 @@ export function DeployScreen({
             buildDir,
             domain,
             publishToPlayground,
-            skipBuild,
+            skipBuild: effectiveSkipBuild,
             moddable,
             repositoryUrl,
         };
@@ -279,19 +281,21 @@ export function DeployScreen({
 
             {stage.kind === "prompt-contracts" && (
                 <Select<boolean>
-                    label="deploy contracts before frontend?"
+                    label="changed contracts?"
                     options={[
                         { value: false, label: "no", hint: "frontend deploy only" },
                         {
                             value: true,
                             label: "yes",
-                            hint: "run contract deploy + install first",
+                            hint: "deploy + install, then rebuild frontend",
                         },
                     ]}
                     initialIndex={0}
                     onSelect={(yes) => {
                         setDeployContracts(yes);
-                        advance(skipBuild, mode, yes);
+                        const nextSkipBuild = yes ? false : skipBuild;
+                        if (yes) setSkipBuild(false);
+                        advance(nextSkipBuild, mode, yes);
                     }}
                 />
             )}
@@ -515,9 +519,10 @@ export function pickNextStage(
     moddable: boolean | null,
     repositoryUrl: string | null,
 ): Stage {
-    if (skipBuild === null) return { kind: "prompt-build" };
-    if (mode === null) return { kind: "prompt-signer" };
     if (deployContracts === null) return { kind: "prompt-contracts" };
+    const effectiveSkipBuild = deployContracts ? false : skipBuild;
+    if (effectiveSkipBuild === null) return { kind: "prompt-build" };
+    if (mode === null) return { kind: "prompt-signer" };
     if (buildDir === null) return { kind: "prompt-buildDir" };
     if (domain === null) return { kind: "prompt-domain" };
     if (publish === null) return { kind: "prompt-publish" };

@@ -38,9 +38,15 @@ describe("pickNextStage", () => {
         ).toEqual({ kind: "moddable-preflight" });
     });
 
-    it("asks whether to deploy contracts after signer selection", () => {
-        expect(pickNextStage(false, "phone", null, null, null, null, null, null)).toEqual({
+    it("asks whether contracts changed before the frontend build choice", () => {
+        expect(pickNextStage(null, null, null, null, null, null, null, null)).toEqual({
             kind: "prompt-contracts",
+        });
+    });
+
+    it("skips the frontend build prompt when contracts will be deployed", () => {
+        expect(pickNextStage(null, null, true, null, null, null, null, null)).toEqual({
+            kind: "prompt-signer",
         });
     });
 });

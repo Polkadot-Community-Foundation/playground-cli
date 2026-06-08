@@ -81,7 +81,10 @@ export const deployCommand = new Command("deploy")
         `Directory containing build artifacts (default: ${DEFAULT_BUILD_DIR})`,
     )
     .option("--no-build", "Skip the build step and deploy existing artifacts in buildDir")
-    .option("--contracts", "Run `playground contract deploy` and install deployed packages first")
+    .option(
+        "--contracts",
+        "Use when contracts changed: deploy + install them, then rebuild the frontend",
+    )
     .option("--no-contracts", "Skip the contract deploy/install pre-step")
     .option("--playground", "Publish to the playground registry")
     .option(
@@ -310,8 +313,8 @@ async function runHeadless(ctx: {
     const publishToPlayground = Boolean(ctx.opts.playground);
     const domain = ctx.opts.domain as string;
     const buildDir = ctx.opts.buildDir as string;
-    const skipBuild = ctx.opts.build === false;
     const deployContractsBeforeFrontend = ctx.opts.contracts === true;
+    const skipBuild = deployContractsBeforeFrontend ? false : ctx.opts.build === false;
 
     // Phone signing needs a paired session. Headless has no TUI to fall back
     // into, so reject an explicit `--signer phone` with no session up front
@@ -479,9 +482,15 @@ function runInteractive(ctx: {
                         publishToPlayground:
                             ctx.opts.playground !== undefined ? Boolean(ctx.opts.playground) : null,
                         playgroundPrivate: Boolean(ctx.opts.private),
-                        // Only pre-fill when the user explicitly asked to skip via `--no-build`;
-                        // otherwise show the prompt so they can hit Enter on the default "yes".
-                        skipBuild: ctx.opts.build === false ? true : null,
+                        // Contract deploy/install changes cdm.json, so it always rebuilds the
+                        // frontend. Otherwise only pre-fill when the user explicitly asked to
+                        // skip via `--no-build`; default deploys still ask.
+                        skipBuild:
+                            ctx.opts.contracts === true
+                                ? false
+                                : ctx.opts.build === false
+                                  ? true
+                                  : null,
                         deployContracts:
                             ctx.opts.contracts !== undefined ? Boolean(ctx.opts.contracts) : null,
                         moddable:
