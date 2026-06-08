@@ -73,8 +73,14 @@ async function hasRustSrc(): Promise<boolean> {
     }
 }
 
-async function hasCargoPvmContract(): Promise<boolean> {
-    return commandExists("cargo-pvm-contract");
+export async function hasCargoPvmContract(): Promise<boolean> {
+    if (!(await commandExists("cargo-pvm-contract"))) return false;
+    try {
+        await run("cargo pvm-contract build --help");
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 function isIpfsInitialized(): boolean {
@@ -137,7 +143,7 @@ export const TOOL_STEPS: ToolStep[] = [
     },
     {
         name: "cargo-pvm-contract",
-        check: () => hasCargoPvmContract(),
+        check: hasCargoPvmContract,
         install: (onData) => runPiped(CARGO_PVM_CONTRACT_INSTALL, onData),
         manualHint: `Install cargo-pvm-contract from https://github.com/paritytech/cargo-pvm-contract at commit ${CARGO_PVM_CONTRACT_REV}`,
     },

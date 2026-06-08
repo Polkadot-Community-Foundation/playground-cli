@@ -977,7 +977,7 @@ function RunningStage({
                             return {
                                 ...s,
                                 deployStatus: installFailed ? s.deployStatus : "error",
-                                installStatus: installFailed ? "error" : s.installStatus,
+                                installStatus: installFailed ? "error" : "skipped",
                                 error: message,
                                 latestLog: message,
                             };
@@ -1023,8 +1023,22 @@ function RunningStage({
             } else if (event.type === "publish-done") {
                 queueContractLog(`published metadata for ${Object.keys(event.cids).join(", ")}`);
             } else if (event.type === "pipeline-done") {
-                setContractState((s) => ({ ...s, deployStatus: "complete" }));
-                queueContractLog("contract deploy complete");
+                const failed = event.summary.contracts.find(
+                    (contract) => contract.status === "error",
+                );
+                if (failed) {
+                    const message = `${failed.cdmPackage ?? failed.crate}: ${failed.error ?? "error"}`;
+                    setContractState((s) => ({
+                        ...s,
+                        deployStatus: "error",
+                        installStatus: "skipped",
+                        error: message,
+                        latestLog: message,
+                    }));
+                } else {
+                    setContractState((s) => ({ ...s, deployStatus: "complete" }));
+                    queueContractLog("contract deploy complete");
+                }
             } else if (
                 event.type === "build-error" ||
                 event.type === "deploy-register-error" ||
@@ -1034,6 +1048,7 @@ function RunningStage({
                 setContractState((s) => ({
                     ...s,
                     deployStatus: "error",
+                    installStatus: "skipped",
                     error: message,
                     latestLog: message,
                 }));
