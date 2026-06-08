@@ -540,8 +540,8 @@ function ValidateDomainStage({
                 if (result.status === "available") {
                     setStatus("done");
                     setMessage(formatAvailability(result));
-                    // Short hold so users can read any note (e.g. "PoP will
-                    // be set up automatically") before the next prompt mounts.
+                    // Short hold so users can read any note (e.g. the PoP
+                    // verification advisory) before the next prompt mounts.
                     setTimeout(
                         () => {
                             if (!cancelled) onAvailable(result);
