@@ -29,7 +29,10 @@
  * Rules (operate on a BARE label — no `.dot` suffix):
  *   - charset `[a-z0-9-]`, length 3..63, no leading/trailing hyphen
  *   - trailing digits MUST be exactly 0 or 2 (1 or >2 revert on-chain)
- *   - a 2-digit suffix may not be preceded by a hyphen (strips to a trailing-hyphen base)
+ *   - a 2-digit suffix may not be preceded by a hyphen: this matches bulletin-deploy's
+ *     own deploy-time gate (`/-\d+$/`, "drop the hyphen"), which strips trailing digits
+ *     to a trailing-hyphen base. We reject it up front so the user gets the error before
+ *     the deploy rather than mid-flight.
  *   - base length = total length − trailing digits:
  *       <= 5            → Reserved (governance)
  *       6..8, 2 digits  → PoP Lite

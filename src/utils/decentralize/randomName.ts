@@ -18,7 +18,7 @@ import { checkDomainAvailability, type AvailabilityResult } from "../deploy/avai
 import type { Env } from "../../config.js";
 
 /**
- * Label-generation rules (see `availability.ts::classifyLabel`):
+ * Label-generation rules (see `dotnsRules.ts::classifyLabel`):
  *
  *   - `baseLength >= 9` (with 0 or 2 trailing digits) → NoStatus
  *     (any signer, no personhood credential)

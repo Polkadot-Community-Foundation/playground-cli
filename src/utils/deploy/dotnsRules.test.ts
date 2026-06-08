@@ -108,6 +108,15 @@ describe("classifyLabel", () => {
         expect(r.message).toMatch(/governance/i);
     });
 
+    it("a short base with a valid 2-digit suffix passes validation but classifies Reserved", () => {
+        // The validate/classify split: "ab12" is syntactically valid (length 4,
+        // exactly 2 trailing digits, no dash before them) yet its base is 2 chars
+        // → governance-Reserved. Front-line validators accept it; the availability
+        // classifier is what blocks it.
+        expect(validateDomainLabel("ab12")).toEqual({ ok: true });
+        expect(classifyLabel("ab12").status).toBe(POP_STATUS.Reserved); // base 2
+    });
+
     it("an invalid digit suffix (1 or >2) is Reserved", () => {
         // Regression: the old mirror silently allowed a 1-digit suffix.
         expect(classifyLabel("myapp1").status).toBe(POP_STATUS.Reserved);
