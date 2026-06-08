@@ -18,6 +18,7 @@ import { dirname, resolve } from "node:path";
 import { generateContractTypes, generateContractsAugmentation } from "@parity/cdm-codegen";
 import {
     CONTRACTS_REGISTRY_ABI,
+    detectBuildOrder,
     deployContracts,
     generateSolidityImport,
     hasBuildableSolidityProject,
@@ -68,6 +69,7 @@ import { runContractDeployWithUI } from "./contractDeployUi.js";
 import { runContractInstallWithUI } from "./contractInstallUi.js";
 
 const CDM_INCLUDE = ".cdm/**/*";
+const ZERO_H160 = "0x0000000000000000000000000000000000000000";
 
 export interface ContractDeployOpts {
     /** Project root. Internal callers set this; the standalone command defaults to cwd. */
@@ -132,6 +134,12 @@ interface ContractInstallTarget {
 }
 
 type ContractChainClient = PipelineChainClient & { destroy(): void };
+
+export interface CdmPackageOwnershipConflict {
+    packageName: string;
+    owner: HexString;
+    caller: HexString;
+}
 
 function assertHexAddress(value: string, label: string): HexString {
     if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
@@ -235,6 +243,111 @@ export function resolveContractInstallTarget(
     };
 }
 
+function normalizeH160(value: unknown): HexString | null {
+    if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) return null;
+    return value.toLowerCase() as HexString;
+}
+
+export function findForeignOwnedCdmPackages(
+    packages: { packageName: string; versionCount: number; owner: HexString | null }[],
+    caller: HexString,
+): CdmPackageOwnershipConflict[] {
+    const callerLower = caller.toLowerCase();
+    return packages
+        .filter((pkg) => pkg.versionCount > 0)
+        .filter((pkg) => pkg.owner !== null && pkg.owner.toLowerCase() !== ZERO_H160)
+        .filter((pkg) => pkg.owner!.toLowerCase() !== callerLower)
+        .map((pkg) => ({
+            packageName: pkg.packageName,
+            owner: pkg.owner!,
+            caller,
+        }));
+}
+
+export function formatCdmPackageOwnershipConflicts(
+    conflicts: CdmPackageOwnershipConflict[],
+): string {
+    if (conflicts.length === 1) {
+        const conflict = conflicts[0];
+        return (
+            `CDM package "${conflict.packageName}" is already owned by ${conflict.owner}, ` +
+            `but the selected signer maps to ${conflict.caller}. Update the contract Cargo.toml ` +
+            `[package.metadata.cdm] package = "..." value to a package name you own, or ` +
+            `deploy with the owner account.`
+        );
+    }
+    return (
+        `Some CDM packages are already owned by another account, but the selected signer maps to ${conflicts[0]?.caller}: ` +
+        conflicts
+            .map((conflict) => `${conflict.packageName} owned by ${conflict.owner}`)
+            .join("; ") +
+        `. Update each contract Cargo.toml [package.metadata.cdm] package = "..." value to package names you own, ` +
+        `or deploy with the owner account.`
+    );
+}
+
+async function assertCdmPackageOwnership({
+    rootDir,
+    client,
+    registryAddress,
+    origin,
+}: {
+    rootDir: string;
+    client: ContractChainClient;
+    registryAddress: HexString;
+    origin: SS58String;
+}): Promise<void> {
+    const detected = detectBuildOrder(rootDir);
+    const packageNames = [
+        ...new Set(
+            detected.contracts
+                .map((contract) => contract.cdmPackage)
+                .filter((pkg): pkg is string => Boolean(pkg)),
+        ),
+    ];
+    if (packageNames.length === 0) return;
+
+    const caller = normalizeH160(await client.assetHub.apis.ReviveApi.address(origin));
+    if (!caller) {
+        throw new Error(`Could not resolve Revive H160 address for ${origin}`);
+    }
+
+    const registry = suppressReviveTraceNoise(
+        await createContractFromClient(
+            client.raw.assetHub,
+            client.descriptors.assetHub,
+            registryAddress,
+            CONTRACTS_REGISTRY_ABI,
+            { defaultOrigin: origin },
+        ),
+    );
+
+    const ownership = await Promise.all(
+        packageNames.map(async (packageName) => {
+            const [versionResult, ownerResult] = await Promise.all([
+                registry.getVersionCount.query(packageName),
+                registry.getOwner.query(packageName),
+            ]);
+            if (!versionResult.success || typeof versionResult.value !== "number") {
+                throw new Error(`Failed to query registry version count for "${packageName}"`);
+            }
+            if (!ownerResult.success) {
+                throw new Error(`Failed to query registry owner for "${packageName}"`);
+            }
+            return {
+                packageName,
+                versionCount: versionResult.value,
+                owner: normalizeH160(ownerResult.value),
+            };
+        }),
+    );
+
+    const conflicts = findForeignOwnedCdmPackages(ownership, caller);
+    if (conflicts.length > 0) {
+        throw new Error(formatCdmPackageOwnershipConflicts(conflicts));
+    }
+}
+
 async function createContractChainClient(
     target: ContractDeployTarget,
 ): Promise<ContractChainClient> {
@@ -307,10 +420,16 @@ export async function runContractDeploy(
 
     try {
         signer ??= await resolveSigner(resolveContractSignerOptions(opts));
+        client = await createContractChainClient(target);
+        await assertCdmPackageOwnership({
+            rootDir,
+            client,
+            registryAddress: target.registryAddress,
+            origin: signer.address as SS58String,
+        });
         await ensureSmartContractAllowance({
             deploySigner: signer,
         });
-        client = await createContractChainClient(target);
         const metadataSigner = await getBulletinAllowanceSigner({
             publishSigner: signer,
             // client.bulletin is the same runtime bulletin API but nominally a
