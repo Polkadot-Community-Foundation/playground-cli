@@ -25,9 +25,9 @@
         "test:e2e:nightly": "tools/e2e-local.sh nightly"
     },
     "dependencies": {
-        "@parity/cdm-builder": "3.1.4",
-        "@parity/cdm-codegen": "0.6.17",
-        "@parity/cdm-env": "^2.0.4",
+        "@parity/cdm-builder": "3.1.5",
+        "@parity/cdm-codegen": "0.6.18",
+        "@parity/cdm-env": "^2.0.5",
         "@parity/dotns-cli": "0.6.1",
         "@parity/product-sdk-address": "^0.1.1",
         "@parity/product-sdk-cloud-storage": "^0.5.5",

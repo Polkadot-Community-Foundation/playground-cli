@@ -18,14 +18,14 @@ importers:
   .:
     dependencies:
       '@parity/cdm-builder':
-        specifier: 3.1.4
-        version: 3.1.4(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+        specifier: 3.1.5
+        version: 3.1.5(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       '@parity/cdm-codegen':
-        specifier: 0.6.17
-        version: 0.6.17(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot-api/ink-contracts@0.6.3)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+        specifier: 0.6.18
+        version: 0.6.18(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot-api/ink-contracts@0.6.3)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       '@parity/cdm-env':
-        specifier: ^2.0.4
-        version: 2.0.4(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)
+        specifier: ^2.0.5
+        version: 2.0.5(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)
       '@parity/dotns-cli':
         specifier: 0.6.1
         version: 0.6.1(@polkadot/util@14.0.3)(jiti@2.7.0)(postcss@8.5.10)(react-native@0.85.2(@babel/core@7.29.7)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.9.0)
@@ -1149,14 +1149,14 @@ packages:
       multiformats: ^13.4.1
       polkadot-api: ^2.1.2
 
-  '@parity/cdm-builder@3.1.4':
-    resolution: {integrity: sha512-MS1aTAUThB0wr/NEc9V0VVKE9uRpWJtjpbSQHz0k0dy6glTIjt8ewz1gmer3RRb5N99CE+ein4NDUWzv99m+WQ==}
+  '@parity/cdm-builder@3.1.5':
+    resolution: {integrity: sha512-73EXF3KXJn+InLANhXSuz1ZXhiu3H5F9qn65FkSSzVSbu9hRY9fge0z79lSIU/f+PCmaLQPrYFpQZYm9jIGIgw==}
 
-  '@parity/cdm-codegen@0.6.17':
-    resolution: {integrity: sha512-EyQLj+ctgnEenrEkyLwhVgHWasq2SpHV8oXwDG6E+vnDPHUmfeUL4ECaaqucwZAvJi7JukBXmk0euQA0IO5SLA==}
+  '@parity/cdm-codegen@0.6.18':
+    resolution: {integrity: sha512-9UvgVVP4cOtPDZ88bGLDvtfBSu22e9xFWhLvcub2XzJQpLEvADpGSzcPd99qSQ3xip4tQTwOmGkXphtLrBT5pg==}
 
-  '@parity/cdm-env@2.0.4':
-    resolution: {integrity: sha512-sOg3zsQ4BquP/Qwu5y8h452xW21ggGUgP2BkrzZuu91DLaQjJY3bc/zJDooFCteQr+VtafpcT7wEhix9FszcWQ==}
+  '@parity/cdm-env@2.0.5':
+    resolution: {integrity: sha512-twNHpTsuRSyFnZXPmBu8sNXljr+w8Gt28KFUCxRJG2oBKH1GzIQymAjvoMhKtKr8te4Z+PerweTzj1OOc+XfWg==}
 
   '@parity/cdm-utils@0.4.1':
     resolution: {integrity: sha512-Da2hXGhGIvLpQoHtwjfFQ4hIG3ignf0Nf4vn4oML+JBUJ5I4KpjfLM4mt/wNwURGWa2CNCz7u7mzae1s0QuqMQ==}
@@ -6563,10 +6563,10 @@ snapshots:
       multiformats: 13.4.2
       polkadot-api: 2.1.6(esbuild@0.27.7)(rxjs@7.8.2)
 
-  '@parity/cdm-builder@3.1.4(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
+  '@parity/cdm-builder@3.1.5(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
     dependencies:
       '@noble/hashes': 2.2.0
-      '@parity/cdm-env': 2.0.4(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/cdm-env': 2.0.5(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)
       '@parity/cdm-utils': 0.4.1
       '@parity/product-sdk-cloud-storage': 0.5.3(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)
       '@parity/product-sdk-contracts': 0.7.0(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
@@ -6587,10 +6587,10 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@parity/cdm-codegen@0.6.17(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot-api/ink-contracts@0.6.3)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
+  '@parity/cdm-codegen@0.6.18(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot-api/ink-contracts@0.6.3)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
     dependencies:
-      '@parity/cdm-builder': 3.1.4(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
-      '@parity/cdm-env': 2.0.4(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/cdm-builder': 3.1.5(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+      '@parity/cdm-env': 2.0.5(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)
       '@parity/cdm-utils': 0.4.1
       '@polkadot-api/sdk-ink': 0.7.0(@polkadot-api/ink-contracts@0.6.3)(polkadot-api@2.1.6(esbuild@0.27.7)(rxjs@7.8.2))(rxjs@7.8.2)(typescript@5.9.3)
       polkadot-api: 2.1.6(esbuild@0.27.7)(rxjs@7.8.2)
@@ -6608,7 +6608,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@parity/cdm-env@2.0.4(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)':
+  '@parity/cdm-env@2.0.5(@novasamatech/host-api-wrapper@0.8.6(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2))(@novasamatech/host-api@0.8.6)(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
       '@parity/cdm-utils': 0.4.1
       '@parity/product-sdk-descriptors': 0.5.2(esbuild@0.27.7)(rxjs@7.8.2)
