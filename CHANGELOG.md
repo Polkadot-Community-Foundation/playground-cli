@@ -1,5 +1,12 @@
 # playground-cli
 
+## 0.32.1
+
+### Patch Changes
+
+- 888eda5: `playground deploy`: the interactive prompts now show a plain-language info box above each conceptual choice explaining what the decision means and what each option does, and the labels/hints are reworded for non-technical users. For example "changed contracts?" is now "did you change your smart contracts?" with options "I only changed the website" / "I changed contract code too", and "make this app moddable?" explains what modding is and what gets shared. The prompt order and behavior are unchanged.
+- a79d84b: `playground mod`: when an app's published source repository is no longer publicly available (the publisher made it private, deleted, or renamed it), show a friendly "Source unavailable" notice instead of a raw GitHub 404. In the interactive picker the notice appears at the bottom and the picker stays open so you can choose another app; the direct `playground mod <domain>` path shows the same notice in place of the red "setup failed" error.
+
 ## 0.32.0
 
 ### Minor Changes
