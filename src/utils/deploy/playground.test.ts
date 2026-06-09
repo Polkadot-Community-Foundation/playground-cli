@@ -367,6 +367,7 @@ describe("buildMetadata", () => {
             branch: null,
             readme: null,
             moddedFrom: null,
+            tag: null,
         });
         expect(meta).toEqual({ repository: "https://github.com/x/y" });
     });
@@ -377,6 +378,7 @@ describe("buildMetadata", () => {
             branch: null,
             readme: null,
             moddedFrom: null,
+            tag: null,
         });
         expect(meta.repository).toBeUndefined();
     });
@@ -387,6 +389,7 @@ describe("buildMetadata", () => {
             branch: "develop",
             readme: null,
             moddedFrom: null,
+            tag: null,
         });
         expect(meta).toEqual({ repository: "https://github.com/x/y", branch: "develop" });
     });
@@ -397,6 +400,7 @@ describe("buildMetadata", () => {
             branch: "develop",
             readme: null,
             moddedFrom: null,
+            tag: null,
         });
         expect(meta.branch).toBeUndefined();
     });
@@ -407,6 +411,7 @@ describe("buildMetadata", () => {
             branch: null,
             readme: { kind: "ok", content: "hello", size: 5 },
             moddedFrom: null,
+            tag: null,
         });
         expect(meta).toEqual({ readme: "hello" });
     });
@@ -417,6 +422,7 @@ describe("buildMetadata", () => {
             branch: null,
             readme: null,
             moddedFrom: "original.dot",
+            tag: null,
         });
         expect(meta).toEqual({ moddedFrom: "original.dot" });
     });
@@ -427,8 +433,31 @@ describe("buildMetadata", () => {
             branch: null,
             readme: null,
             moddedFrom: null,
+            tag: null,
         });
         expect(meta.moddedFrom).toBeUndefined();
+    });
+
+    it("includes tag when present (independent of repositoryUrl)", () => {
+        const meta = buildMetadata({
+            repositoryUrl: null,
+            branch: null,
+            readme: null,
+            moddedFrom: null,
+            tag: "defi",
+        });
+        expect(meta).toEqual({ tag: "defi" });
+    });
+
+    it("omits tag when null", () => {
+        const meta = buildMetadata({
+            repositoryUrl: "https://github.com/x/y",
+            branch: null,
+            readme: null,
+            moddedFrom: null,
+            tag: null,
+        });
+        expect(meta.tag).toBeUndefined();
     });
 });
 
@@ -480,6 +509,17 @@ describe("publishToPlayground", () => {
             cwd: "/definitely/not/a/repo",
         });
         expect(result.metadata).toEqual({});
+    });
+
+    it("records the chosen tag in the uploaded metadata JSON", async () => {
+        const result = await publishToPlayground({
+            domain: "tagged-app",
+            publishSigner: fakeSigner,
+            repositoryUrl: null,
+            tag: "gaming",
+            cwd: "/definitely/not/a/repo",
+        });
+        expect(result.metadata).toEqual({ tag: "gaming" });
     });
 
     it("inlines README.md when it is present and within the cap", async () => {

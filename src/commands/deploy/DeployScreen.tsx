@@ -58,6 +58,7 @@ import type { ResolvedSigner } from "../../utils/signer.js";
 import { DEFAULT_BUILD_DIR, getChainConfig, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
+import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
 import { NO_SESSION_NOTICE_TITLE, NO_SESSION_NOTICE_BODY } from "./signerNotice.js";
 import { ContractPipelineStatusAdapter } from "../contractPipelineStatus.js";
@@ -79,6 +80,12 @@ export interface DeployScreenInputs {
     skipBuild: boolean | null;
     /** Pre-set moddable from `--moddable` / `--no-moddable`. null = ask. */
     moddable: boolean | null;
+    /**
+     * Pre-set tag from `--tag`. A string skips the picker; `undefined` means
+     * "ask in the TUI" once the user opts to publish. (The picker itself can
+     * also resolve to `null` = explicitly untagged.)
+     */
+    tag?: string;
     userSigner: ResolvedSigner | null;
     onDone: (outcome: DeployOutcome | null) => void;
 }
@@ -94,6 +101,7 @@ export type Stage =
     | { kind: "prompt-moddable" }
     | { kind: "moddable-preflight" }
     | { kind: "moddable-error"; message: string }
+    | { kind: "prompt-tags" }
     | { kind: "confirm" }
     | { kind: "running" }
     | { kind: "done"; outcome: DeployOutcome }
@@ -108,6 +116,8 @@ interface Resolved {
     skipBuild: boolean;
     moddable: boolean;
     repositoryUrl: string | null;
+    /** Resolved playground tag, or `null` for untagged. Only meaningful when `publishToPlayground`. */
+    tag: string | null;
 }
 
 export function DeployScreen({
@@ -121,6 +131,7 @@ export function DeployScreen({
     playgroundPrivate,
     skipBuild: initialSkipBuild,
     moddable: initialModdable,
+    tag: initialTag,
     userSigner,
     onDone,
 }: DeployScreenInputs) {
@@ -140,6 +151,9 @@ export function DeployScreen({
     const [skipBuild, setSkipBuild] = useState<boolean | null>(effectiveInitialSkipBuild);
     const [moddable, setModdable] = useState<boolean | null>(initialModdable);
     const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
+    // Tri-state: `undefined` = not chosen yet (ask when publishing), `null` =
+    // explicitly untagged, a string = chosen tag. A `--tag` flag pre-fills it.
+    const [tag, setTag] = useState<string | null | undefined>(initialTag);
     const [domainError, setDomainError] = useState<string | null>(null);
     // Captured from the availability check; feeds `resolveSignerSetup` so
     // the summary card shows the correct phone-approval count (a new register
@@ -155,6 +169,7 @@ export function DeployScreen({
             initialPublish,
             initialModdable,
             null,
+            initialTag,
         ),
     );
 
@@ -172,6 +187,7 @@ export function DeployScreen({
         nextPublish: boolean | null = publishToPlayground,
         nextModdable: boolean | null = moddable,
         nextRepoUrl: string | null = repositoryUrl,
+        nextTag: string | null | undefined = tag,
     ) => {
         const s = pickNextStage(
             nextSkipBuild,
@@ -182,6 +198,7 @@ export function DeployScreen({
             nextPublish,
             nextModdable,
             nextRepoUrl,
+            nextTag,
         );
         setStage(s);
     };
@@ -195,7 +212,10 @@ export function DeployScreen({
             domain === null ||
             publishToPlayground === null ||
             effectiveSkipBuild === null ||
-            moddable === null
+            moddable === null ||
+            // A tag is only required once the user has opted to publish; an
+            // `undefined` tag there means the picker hasn't run yet.
+            (publishToPlayground && tag === undefined)
         )
             return null;
         return {
@@ -207,6 +227,8 @@ export function DeployScreen({
             skipBuild: effectiveSkipBuild,
             moddable,
             repositoryUrl,
+            // Untagged when not publishing, or when the picker resolved to "skip".
+            tag: publishToPlayground ? (tag ?? null) : null,
         };
     }, [
         mode,
@@ -217,6 +239,7 @@ export function DeployScreen({
         skipBuild,
         moddable,
         repositoryUrl,
+        tag,
     ]);
 
     // Dynamic terminal tab title: subtitle becomes the domain once we know it.
@@ -437,6 +460,30 @@ export function DeployScreen({
                 <ModdableErrorStage message={stage.message} onExit={() => onDone(null)} />
             )}
 
+            {stage.kind === "prompt-tags" && (
+                <Select<string | null>
+                    label="tag this app? (helps people find it in the playground)"
+                    options={[
+                        ...PLAYGROUND_TAGS.map((t) => ({ value: t as string | null, label: t })),
+                        { value: null, label: "skip", hint: "publish without a tag" },
+                    ]}
+                    onSelect={(t) => {
+                        setTag(t);
+                        advance(
+                            skipBuild,
+                            mode,
+                            deployContracts,
+                            buildDir,
+                            domain,
+                            publishToPlayground,
+                            moddable,
+                            repositoryUrl,
+                            t,
+                        );
+                    }}
+                />
+            )}
+
             {stage.kind === "confirm" && resolved && (
                 <ConfirmStage
                     projectDir={projectDir}
@@ -499,6 +546,7 @@ function pickInitialStage(
     publish: boolean | null,
     moddable: boolean | null,
     repositoryUrl: string | null,
+    tag: string | null | undefined,
 ): Stage {
     return pickNextStage(
         skipBuild,
@@ -509,6 +557,7 @@ function pickInitialStage(
         publish,
         moddable,
         repositoryUrl,
+        tag,
     );
 }
 
@@ -521,6 +570,7 @@ export function pickNextStage(
     publish: boolean | null,
     moddable: boolean | null,
     repositoryUrl: string | null,
+    tag: string | null | undefined,
 ): Stage {
     if (deployContracts === null) return { kind: "prompt-contracts" };
     const effectiveSkipBuild = deployContracts ? false : skipBuild;
@@ -534,6 +584,9 @@ export function pickNextStage(
     if (publish && moddable === true && repositoryUrl === null) {
         return { kind: "moddable-preflight" };
     }
+    // Tag is the last publish-only choice — asked after the moddable decision
+    // is fully resolved, and only when no `--tag` flag pre-filled it.
+    if (publish && tag === undefined) return { kind: "prompt-tags" };
     return { kind: "confirm" };
 }
 
@@ -723,6 +776,7 @@ function ConfirmStage({
         publishToPlayground: inputs.publishToPlayground,
         moddable: inputs.moddable,
         repositoryUrl: inputs.repositoryUrl,
+        tag: inputs.tag,
         approvals: "approvals" in setup ? setup.approvals : [],
         // What we show in the "Signer" row reflects who actually submits
         // the on-chain txs, which is mostly setup.publishSigner — that's
@@ -937,6 +991,7 @@ function RunningStage({
                     playgroundPrivate,
                     moddable: inputs.moddable,
                     repositoryUrl: inputs.repositoryUrl,
+                    tag: inputs.tag,
                     userSigner,
                     plan: plan ?? undefined,
                     onEvent: (event) => handleEvent(event),

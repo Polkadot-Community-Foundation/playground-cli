@@ -255,6 +255,41 @@ describe("runDeploy", () => {
         expect(devCall?.isDevSigner).toBe(true);
     });
 
+    it("threads the chosen tag into publishToPlayground (and defaults to null)", async () => {
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "/tmp/proj/dist",
+            domain: "tagged",
+            mode: "phone",
+            publishToPlayground: true,
+            tag: "defi",
+            userSigner: fakeUserSigner,
+            onEvent: push,
+        });
+        const tagged = (publishToPlaygroundMock.mock.calls as unknown[][])[0]?.[0] as
+            | { tag?: string | null }
+            | undefined;
+        expect(tagged?.tag).toBe("defi");
+
+        publishToPlaygroundMock.mockClear();
+
+        // No tag supplied ⇒ publishToPlayground receives an explicit null.
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "/tmp/proj/dist",
+            domain: "untagged",
+            mode: "phone",
+            publishToPlayground: true,
+            userSigner: fakeUserSigner,
+            onEvent: push,
+        });
+        const untagged = (publishToPlaygroundMock.mock.calls as unknown[][])[0]?.[0] as
+            | { tag?: string | null }
+            | undefined;
+        expect(untagged?.tag).toBeNull();
+    });
+
     it("phone mode with playground: 4 planned approvals, DotNS uses phone signer", async () => {
         const { events, push } = collectEvents();
         const outcome = await runDeploy({

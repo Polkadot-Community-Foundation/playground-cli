@@ -45,6 +45,7 @@ import type { SigningEvent } from "../../utils/deploy/signingProxy.js";
 import { buildSummaryView } from "./summary.js";
 import { DEFAULT_BUILD_DIR, type Env, resolveLegacyEnv } from "../../config.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
+import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { NO_SESSION_HEADLESS_ERROR } from "./signerNotice.js";
 
 interface DeployOpts {
@@ -65,6 +66,8 @@ interface DeployOpts {
     contracts?: boolean;
     /** Publish the source repo so others can `dot mod` it. Commander auto-negates: `--no-moddable` ⇒ false. */
     moddable?: boolean;
+    /** Single playground tag to publish with (one of PLAYGROUND_TAGS). Validated by commander `.choices`. Requires --playground. */
+    tag?: string;
     env?: Env;
     /** Project root. Hidden — defaults to cwd. */
     dir?: string;
@@ -96,6 +99,12 @@ export const deployCommand = new Command("deploy")
         "Publish the source repo so others can `playground mod` it. Requires --playground and a public GitHub `origin`.",
     )
     .option("--no-moddable", "Explicitly skip publishing source (the default).")
+    .addOption(
+        new Option(
+            "--tag <tag>",
+            "Tag the published app so people can filter for it in the playground. Requires --playground.",
+        ).choices([...PLAYGROUND_TAGS]),
+    )
     .option("--suri <suri>", "Secret URI for the user signer (e.g. //Alice for dev)")
     .addOption(
         new Option("--env <env>", "Target environment")
@@ -304,6 +313,27 @@ export function isFullySpecified(opts: DeployOpts): boolean {
     );
 }
 
+/**
+ * `--moddable` and `--tag` both only affect the playground metadata JSON, which
+ * is uploaded ONLY when publishing. Supplying either without `--playground` is a
+ * no-op the user almost certainly didn't intend, so headless deploys reject it
+ * up front — before the availability network round-trip — with an actionable
+ * message. Pure + exported so the contract is unit-testable.
+ */
+export function assertPublishFlagsConsistent(opts: {
+    moddable: boolean;
+    tag: string | null;
+    publishToPlayground: boolean;
+}): void {
+    if (opts.publishToPlayground) return;
+    if (opts.moddable) {
+        throw new Error("--moddable requires --playground (no metadata is published without it).");
+    }
+    if (opts.tag) {
+        throw new Error("--tag requires --playground (no metadata is published without it).");
+    }
+}
+
 async function runHeadless(ctx: {
     projectDir: string;
     env: Env;
@@ -316,6 +346,12 @@ async function runHeadless(ctx: {
     const buildDir = ctx.opts.buildDir as string;
     const deployContractsBeforeFrontend = ctx.opts.contracts === true;
     const skipBuild = deployContractsBeforeFrontend ? false : ctx.opts.build === false;
+    const moddable = ctx.opts.moddable === true;
+    const tag = ctx.opts.tag ?? null;
+
+    // Reject metadata-only flags supplied without `--playground` before any
+    // network work — they'd otherwise be silently ignored.
+    assertPublishFlagsConsistent({ moddable, tag, publishToPlayground });
 
     // Phone signing needs a paired session. Headless has no TUI to fall back
     // into, so reject an explicit `--signer phone` with no session up front
@@ -356,15 +392,8 @@ async function runHeadless(ctx: {
     }
     process.stdout.write(`✔ ${formatAvailability(availability)}\n`);
 
-    const moddable = ctx.opts.moddable === true;
-
     let repositoryUrl: string | null = null;
     if (moddable) {
-        if (!publishToPlayground) {
-            throw new Error(
-                "--moddable requires --playground (no metadata is published without it).",
-            );
-        }
         repositoryUrl = await withSpan(
             "cli.deploy.moddable",
             "prepare moddable repository",
@@ -393,6 +422,7 @@ async function runHeadless(ctx: {
         publishToPlayground,
         moddable,
         repositoryUrl,
+        tag,
         approvals: setup.approvals,
         // Mirror the TUI logic in DeployScreen.tsx: prefer the resolved
         // publish signer's address — that's the on-chain identity that
@@ -451,6 +481,7 @@ async function runHeadless(ctx: {
                 playgroundPrivate: Boolean(ctx.opts.private),
                 moddable,
                 repositoryUrl,
+                tag,
                 userSigner: ctx.userSigner,
                 plan: availability.plan,
                 env: ctx.env,
@@ -500,6 +531,10 @@ function runInteractive(ctx: {
                                 : ctx.opts.moddable === false
                                   ? false
                                   : null,
+                        // A flag-provided `--tag` pre-fills the choice and skips
+                        // the picker; absent (`undefined`) means "ask in the TUI"
+                        // when the user opts to publish.
+                        tag: ctx.opts.tag,
                         userSigner: ctx.userSigner,
                         onDone: (outcome: DeployOutcome | null) => {
                             if (settled) return;

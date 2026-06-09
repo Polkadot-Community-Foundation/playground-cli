@@ -78,6 +78,14 @@ export interface PublishToPlaygroundOptions {
     claimedOwnerH160?: `0x${string}` | null;
     /** Repository URL to record in metadata. `null` = omit the field entirely. */
     repositoryUrl: string | null;
+    /**
+     * Single playground tag to record in metadata (one of `PLAYGROUND_TAGS`).
+     * Drives the playground-app tag filter. `null` or omitted ⇒ the app is
+     * published untagged (the field is left out of the JSON). Untagged is a
+     * safe default, so — unlike the `moddable` decision — this is not forced
+     * on callers.
+     */
+    tag?: string | null;
     /** Project root. Used to look for a `README.md` to inline into metadata. */
     cwd?: string;
     /** Progress sink for the metadata-upload sub-step. */
@@ -217,6 +225,12 @@ export function buildMetadata(input: {
     branch: string | null;
     readme: ReadmeStatus | null;
     moddedFrom: string | null;
+    /**
+     * Single playground tag (one of `PLAYGROUND_TAGS`) the user picked at
+     * deploy time, or `null` to omit. The playground-app filters apps by exact
+     * match on this `tag` field — see `./tags.ts`.
+     */
+    tag: string | null;
 }): Record<string, string> {
     const meta: Record<string, string> = {};
     if (input.repositoryUrl) meta.repository = input.repositoryUrl;
@@ -226,6 +240,7 @@ export function buildMetadata(input: {
     if (input.repositoryUrl && input.branch) meta.branch = input.branch;
     if (input.readme && input.readme.kind === "ok") meta.readme = input.readme.content;
     if (input.moddedFrom) meta.moddedFrom = input.moddedFrom;
+    if (input.tag) meta.tag = input.tag;
     return meta;
 }
 
@@ -278,6 +293,7 @@ export async function publishToPlayground(
         branch,
         readme,
         moddedFrom,
+        tag: options.tag ?? null,
     });
 
     const metadataBytes = new Uint8Array(Buffer.from(JSON.stringify(metadata), "utf8"));

@@ -31,6 +31,8 @@ export interface SummaryInputs {
     publishToPlayground: boolean;
     moddable?: boolean;
     repositoryUrl?: string | null;
+    /** Single playground tag the app will be published with, or `null`/undefined for untagged. */
+    tag?: string | null;
     approvals: DeployApproval[];
     /**
      * SS58 of the account that will sign this deploy. Surfaced in the summary
@@ -95,6 +97,7 @@ export function buildSummaryView(input: SummaryInputs): SummaryView {
             label: "Moddable",
             value: input.moddable ? `yes — ${input.repositoryUrl}` : "no",
         });
+        rows.push({ label: "Tag", value: input.tag ? input.tag : "none" });
         if (input.claimedOwnerH160) {
             // Dev mode + session: Alice signs the registry tx but the
             // user's H160 is recorded as owner. Surfacing it here is
