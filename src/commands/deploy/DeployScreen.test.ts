@@ -22,6 +22,7 @@ describe("pickNextStage", () => {
             pickNextStage(
                 false,
                 "phone",
+                true,
                 "dist",
                 "tw33d3r.dot",
                 true,
@@ -32,8 +33,20 @@ describe("pickNextStage", () => {
     });
 
     it("enters moddable preflight when moddable is true and no repository URL is resolved yet", () => {
-        expect(pickNextStage(false, "phone", "dist", "tw33d3r.dot", true, true, null)).toEqual({
-            kind: "moddable-preflight",
+        expect(
+            pickNextStage(false, "phone", true, "dist", "tw33d3r.dot", true, true, null),
+        ).toEqual({ kind: "moddable-preflight" });
+    });
+
+    it("asks whether contracts changed before the frontend build choice", () => {
+        expect(pickNextStage(null, null, null, null, null, null, null, null)).toEqual({
+            kind: "prompt-contracts",
+        });
+    });
+
+    it("skips the frontend build prompt when contracts will be deployed", () => {
+        expect(pickNextStage(null, null, true, null, null, null, null, null)).toEqual({
+            kind: "prompt-signer",
         });
     });
 });

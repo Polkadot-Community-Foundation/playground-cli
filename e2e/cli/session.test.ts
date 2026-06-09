@@ -58,7 +58,17 @@ describe("session management", () => {
 		writeFileSync(sessionFile, "CORRUPT_DATA_HERE");
 
 		const result = await dot(
-			["deploy", "--signer", "phone", "--domain", "test", "--playground", "--buildDir", "dist"],
+			[
+				"deploy",
+				"--no-contracts",
+				"--signer",
+				"phone",
+				"--domain",
+				"test",
+				"--playground",
+				"--buildDir",
+				"dist",
+			],
 			{ home: tempHome, timeout: 30_000 },
 		);
 		// Must fail with the deliberate no-session notice. `--signer phone`

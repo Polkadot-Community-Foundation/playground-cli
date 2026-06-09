@@ -20,6 +20,8 @@ import { describe, expect, it } from "vitest";
 import { getChainConfig } from "../config.js";
 import {
     assertSupportedCdmJson,
+    findForeignOwnedCdmPackages,
+    formatCdmPackageOwnershipConflicts,
     parseContractInstallLibraryArg,
     resolveContractDeployTarget,
     resolveContractInstallTarget,
@@ -215,6 +217,89 @@ describe("resolveContractSignerOptions", () => {
     it("rejects SURI with phone mode to avoid silently using a local signer", () => {
         expect(() => resolveContractSignerOptions({ signer: "phone", suri: "//Alice" })).toThrow(
             "--suri cannot be used with --signer phone",
+        );
+    });
+});
+
+describe("CDM package ownership conflicts", () => {
+    const caller = "0x1111111111111111111111111111111111111111" as const;
+
+    it("ignores unregistered packages and packages owned by the caller", () => {
+        expect(
+            findForeignOwnedCdmPackages(
+                [
+                    {
+                        packageName: "@example/new",
+                        versionCount: 0,
+                        owner: "0x0000000000000000000000000000000000000000",
+                    },
+                    {
+                        packageName: "@example/mine",
+                        versionCount: 1,
+                        owner: caller,
+                    },
+                ],
+                caller,
+            ),
+        ).toEqual([]);
+    });
+
+    it("returns packages owned by another account", () => {
+        expect(
+            findForeignOwnedCdmPackages(
+                [
+                    {
+                        packageName: "@example/theirs",
+                        versionCount: 2,
+                        owner: "0x2222222222222222222222222222222222222222",
+                    },
+                ],
+                caller,
+            ),
+        ).toEqual([
+            {
+                packageName: "@example/theirs",
+                owner: "0x2222222222222222222222222222222222222222",
+                caller,
+            },
+        ]);
+    });
+
+    it("formats the rename-or-owner-account guidance", () => {
+        expect(
+            formatCdmPackageOwnershipConflicts([
+                {
+                    packageName: "@example/theirs",
+                    owner: "0x2222222222222222222222222222222222222222",
+                    caller,
+                },
+            ]),
+        ).toContain('Update the contract Cargo.toml [package.metadata.cdm] package = "..."');
+    });
+
+    it("formats multiple ownership conflicts with one selected signer", () => {
+        const message = formatCdmPackageOwnershipConflicts([
+            {
+                packageName: "@example/one",
+                owner: "0x2222222222222222222222222222222222222222",
+                caller,
+            },
+            {
+                packageName: "@example/two",
+                owner: "0x3333333333333333333333333333333333333333",
+                caller,
+            },
+        ]);
+
+        expect(message).toContain(`selected signer maps to ${caller}`);
+        expect(message).toContain(
+            "@example/one owned by 0x2222222222222222222222222222222222222222",
+        );
+        expect(message).toContain(
+            "@example/two owned by 0x3333333333333333333333333333333333333333",
+        );
+        expect(message).toContain(
+            'Update each contract Cargo.toml [package.metadata.cdm] package = "..."',
         );
     });
 });

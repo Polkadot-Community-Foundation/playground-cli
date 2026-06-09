@@ -50,6 +50,7 @@ function chaosDeployArgs(domain: string, buildDir: string, dir: string): string[
 		"run",
 		CLI_ENTRY,
 		"deploy",
+		"--no-contracts",
 		"--signer",
 		"dev",
 		"--domain",

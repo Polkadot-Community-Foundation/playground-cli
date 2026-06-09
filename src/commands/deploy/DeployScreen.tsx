@@ -15,6 +15,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
+import type {
+    DeployEvent as ContractDeployEvent,
+    InstallEvent as ContractInstallEvent,
+} from "@parity/cdm-builder";
 import {
     Header,
     Row,
@@ -51,17 +55,24 @@ import {
     type StepStatus,
 } from "./runningState.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
-import { DEFAULT_BUILD_DIR, getNetworkLabel } from "../../config.js";
+import { DEFAULT_BUILD_DIR, getChainConfig, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
 import { NO_SESSION_NOTICE_TITLE, NO_SESSION_NOTICE_BODY } from "./signerNotice.js";
+import { ContractPipelineStatusAdapter } from "../contractPipelineStatus.js";
+import { ContractDeployStatusView, precomputeContractDeployDisplay } from "../contractDeployUi.js";
+import { ContractInstallStatusAdapter, ContractInstallStatusView } from "../contractInstallUi.js";
 
 export interface DeployScreenInputs {
     projectDir: string;
     domain: string | null;
     buildDir: string | null;
     mode: SignerMode | null;
+    /** Secret URI forwarded to the contract pre-step when deploy was invoked with --suri. */
+    suri?: string;
+    /** Pre-set from --contracts / --no-contracts. null = ask. */
+    deployContracts: boolean | null;
     publishToPlayground: boolean | null;
     /** Publish to the playground with private visibility. Not interactively prompted — set via `--private`. */
     playgroundPrivate: boolean;
@@ -75,6 +86,7 @@ export interface DeployScreenInputs {
 export type Stage =
     | { kind: "prompt-build" }
     | { kind: "prompt-signer" }
+    | { kind: "prompt-contracts" }
     | { kind: "prompt-buildDir" }
     | { kind: "prompt-domain" }
     | { kind: "validate-domain"; domain: string }
@@ -91,6 +103,7 @@ interface Resolved {
     mode: SignerMode;
     buildDir: string;
     domain: string;
+    deployContracts: boolean;
     publishToPlayground: boolean;
     skipBuild: boolean;
     moddable: boolean;
@@ -102,6 +115,8 @@ export function DeployScreen({
     domain: initialDomain,
     buildDir: initialBuildDir,
     mode: initialMode,
+    suri,
+    deployContracts: initialDeployContracts,
     publishToPlayground: initialPublish,
     playgroundPrivate,
     skipBuild: initialSkipBuild,
@@ -116,11 +131,13 @@ export function DeployScreen({
     const hasSession = userSigner?.source === "session";
     const effectiveInitialMode: SignerMode | null =
         !hasSession && initialMode === "phone" ? null : initialMode;
+    const effectiveInitialSkipBuild = initialDeployContracts === true ? false : initialSkipBuild;
     const [mode, setMode] = useState<SignerMode | null>(effectiveInitialMode);
+    const [deployContracts, setDeployContracts] = useState<boolean | null>(initialDeployContracts);
     const [buildDir, setBuildDir] = useState<string | null>(initialBuildDir);
     const [domain, setDomain] = useState<string | null>(initialDomain);
     const [publishToPlayground, setPublishToPlayground] = useState<boolean | null>(initialPublish);
-    const [skipBuild, setSkipBuild] = useState<boolean | null>(initialSkipBuild);
+    const [skipBuild, setSkipBuild] = useState<boolean | null>(effectiveInitialSkipBuild);
     const [moddable, setModdable] = useState<boolean | null>(initialModdable);
     const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
     const [domainError, setDomainError] = useState<string | null>(null);
@@ -130,8 +147,9 @@ export function DeployScreen({
     const [plan, setPlan] = useState<DeployPlan | null>(null);
     const [stage, setStage] = useState<Stage>(() =>
         pickInitialStage(
-            initialSkipBuild,
+            effectiveInitialSkipBuild,
             effectiveInitialMode,
+            initialDeployContracts,
             initialBuildDir,
             initialDomain,
             initialPublish,
@@ -148,6 +166,7 @@ export function DeployScreen({
     const advance = (
         nextSkipBuild: boolean | null = skipBuild,
         nextMode: SignerMode | null = mode,
+        nextDeployContracts: boolean | null = deployContracts,
         nextBuildDir: string | null = buildDir,
         nextDomain: string | null = domain,
         nextPublish: boolean | null = publishToPlayground,
@@ -157,6 +176,7 @@ export function DeployScreen({
         const s = pickNextStage(
             nextSkipBuild,
             nextMode,
+            nextDeployContracts,
             nextBuildDir,
             nextDomain,
             nextPublish,
@@ -167,25 +187,37 @@ export function DeployScreen({
     };
 
     const resolved = useMemo<Resolved | null>(() => {
+        const effectiveSkipBuild = deployContracts === true ? false : skipBuild;
         if (
             mode === null ||
+            deployContracts === null ||
             buildDir === null ||
             domain === null ||
             publishToPlayground === null ||
-            skipBuild === null ||
+            effectiveSkipBuild === null ||
             moddable === null
         )
             return null;
         return {
             mode,
+            deployContracts,
             buildDir,
             domain,
             publishToPlayground,
-            skipBuild,
+            skipBuild: effectiveSkipBuild,
             moddable,
             repositoryUrl,
         };
-    }, [mode, buildDir, domain, publishToPlayground, skipBuild, moddable, repositoryUrl]);
+    }, [
+        mode,
+        deployContracts,
+        buildDir,
+        domain,
+        publishToPlayground,
+        skipBuild,
+        moddable,
+        repositoryUrl,
+    ]);
 
     // Dynamic terminal tab title: subtitle becomes the domain once we know it.
     const headerSubtitle = resolved?.domain ?? domain ?? undefined;
@@ -250,13 +282,34 @@ export function DeployScreen({
                 </Box>
             )}
 
+            {stage.kind === "prompt-contracts" && (
+                <Select<boolean>
+                    label="changed contracts?"
+                    options={[
+                        { value: false, label: "no", hint: "frontend deploy only" },
+                        {
+                            value: true,
+                            label: "yes",
+                            hint: "deploy + install, then rebuild frontend",
+                        },
+                    ]}
+                    initialIndex={0}
+                    onSelect={(yes) => {
+                        setDeployContracts(yes);
+                        const nextSkipBuild = yes ? false : skipBuild;
+                        if (yes) setSkipBuild(false);
+                        advance(nextSkipBuild, mode, yes);
+                    }}
+                />
+            )}
+
             {stage.kind === "prompt-buildDir" && (
                 <Input
                     label="build directory"
                     initial={DEFAULT_BUILD_DIR}
                     onSubmit={(v) => {
                         setBuildDir(v);
-                        advance(skipBuild, mode, v);
+                        advance(skipBuild, mode, deployContracts, v);
                     }}
                 />
             )}
@@ -294,7 +347,7 @@ export function DeployScreen({
                     onAvailable={(result) => {
                         setDomain(result.fullDomain);
                         setPlan(result.plan);
-                        advance(skipBuild, mode, buildDir, result.fullDomain);
+                        advance(skipBuild, mode, deployContracts, buildDir, result.fullDomain);
                     }}
                     onUnavailable={(reason) => {
                         setDomainError(reason);
@@ -314,7 +367,15 @@ export function DeployScreen({
                     onSelect={(yes) => {
                         setPublishToPlayground(yes);
                         if (!yes) setModdable(false);
-                        advance(skipBuild, mode, buildDir, domain, yes, yes ? moddable : false);
+                        advance(
+                            skipBuild,
+                            mode,
+                            deployContracts,
+                            buildDir,
+                            domain,
+                            yes,
+                            yes ? moddable : false,
+                        );
                     }}
                 />
             )}
@@ -336,7 +397,15 @@ export function DeployScreen({
                         if (yes) {
                             setStage({ kind: "moddable-preflight" });
                         } else {
-                            advance(skipBuild, mode, buildDir, domain, publishToPlayground, false);
+                            advance(
+                                skipBuild,
+                                mode,
+                                deployContracts,
+                                buildDir,
+                                domain,
+                                publishToPlayground,
+                                false,
+                            );
                         }
                     }}
                 />
@@ -347,7 +416,16 @@ export function DeployScreen({
                     projectDir={projectDir}
                     onResolved={(url) => {
                         setRepositoryUrl(url);
-                        advance(skipBuild, mode, buildDir, domain, publishToPlayground, true, url);
+                        advance(
+                            skipBuild,
+                            mode,
+                            deployContracts,
+                            buildDir,
+                            domain,
+                            publishToPlayground,
+                            true,
+                            url,
+                        );
                     }}
                     onError={(msg) => {
                         setStage({ kind: "moddable-error", message: msg });
@@ -377,6 +455,7 @@ export function DeployScreen({
                     <RunningStage
                         projectDir={projectDir}
                         inputs={resolved}
+                        suri={suri}
                         playgroundPrivate={playgroundPrivate}
                         userSigner={userSigner}
                         plan={plan}
@@ -414,25 +493,38 @@ export function DeployScreen({
 function pickInitialStage(
     skipBuild: boolean | null,
     mode: SignerMode | null,
+    deployContracts: boolean | null,
     buildDir: string | null,
     domain: string | null,
     publish: boolean | null,
     moddable: boolean | null,
     repositoryUrl: string | null,
 ): Stage {
-    return pickNextStage(skipBuild, mode, buildDir, domain, publish, moddable, repositoryUrl);
+    return pickNextStage(
+        skipBuild,
+        mode,
+        deployContracts,
+        buildDir,
+        domain,
+        publish,
+        moddable,
+        repositoryUrl,
+    );
 }
 
 export function pickNextStage(
     skipBuild: boolean | null,
     mode: SignerMode | null,
+    deployContracts: boolean | null,
     buildDir: string | null,
     domain: string | null,
     publish: boolean | null,
     moddable: boolean | null,
     repositoryUrl: string | null,
 ): Stage {
-    if (skipBuild === null) return { kind: "prompt-build" };
+    if (deployContracts === null) return { kind: "prompt-contracts" };
+    const effectiveSkipBuild = deployContracts ? false : skipBuild;
+    if (effectiveSkipBuild === null) return { kind: "prompt-build" };
     if (mode === null) return { kind: "prompt-signer" };
     if (buildDir === null) return { kind: "prompt-buildDir" };
     if (domain === null) return { kind: "prompt-domain" };
@@ -627,6 +719,7 @@ function ConfirmStage({
         domain: inputs.domain.replace(/\.dot$/, "") + ".dot",
         buildDir: inputs.buildDir,
         skipBuild: inputs.skipBuild,
+        deployContracts: inputs.deployContracts,
         publishToPlayground: inputs.publishToPlayground,
         moddable: inputs.moddable,
         repositoryUrl: inputs.repositoryUrl,
@@ -722,6 +815,7 @@ function stepMark(status: StepStatus): MarkKind {
 function RunningStage({
     projectDir,
     inputs,
+    suri,
     playgroundPrivate,
     userSigner,
     plan,
@@ -730,6 +824,7 @@ function RunningStage({
 }: {
     projectDir: string;
     inputs: Resolved;
+    suri?: string;
     playgroundPrivate: boolean;
     userSigner: ResolvedSigner | null;
     plan: DeployPlan | null;
@@ -744,6 +839,27 @@ function RunningStage({
     );
     const frontendState = runningState.frontend;
     const playgroundState = runningState.playground;
+    const [activeView, setActiveView] = useState<"contracts" | "frontend">(
+        inputs.deployContracts ? "contracts" : "frontend",
+    );
+    const chainConfig = useMemo(() => getChainConfig(), []);
+    const contractDeployDisplay = useMemo(() => {
+        if (!inputs.deployContracts) return { crates: [], displayNames: new Map<string, string>() };
+        try {
+            return precomputeContractDeployDisplay(projectDir, undefined);
+        } catch {
+            return { crates: [], displayNames: new Map<string, string>() };
+        }
+    }, [inputs.deployContracts, projectDir]);
+    const [contractDeployAdapter] = useState(
+        () =>
+            new ContractPipelineStatusAdapter({
+                onCdmPackageDetected: (crate, pkg) =>
+                    contractDeployDisplay.displayNames.set(crate, pkg),
+            }),
+    );
+    const [contractInstallAdapter] = useState(() => new ContractInstallStatusAdapter());
+    const [contractInstallLibraries, setContractInstallLibraries] = useState<string[]>([]);
     const [signingPrompt, setSigningPrompt] = useState<SigningEvent | null>(null);
     // Heads-up rendered from the moment the run starts until the first real
     // sign-request arrives — once the PhoneApprovalCallout takes over, the
@@ -781,12 +897,35 @@ function RunningStage({
 
     useEffect(() => {
         // Announce the command + target in the terminal tab on mount.
-        setWindowTitle(`playground deploy · ${inputs.domain} · building`);
+        setWindowTitle(
+            `playground deploy · ${inputs.domain} · ${
+                inputs.deployContracts ? "contracts" : "building"
+            }`,
+        );
 
         let cancelled = false;
+        let runningContracts = false;
 
         (async () => {
             try {
+                if (inputs.deployContracts) {
+                    runningContracts = true;
+                    setActiveView("contracts");
+                    const { runContractsBeforeFrontend } = await import("./contracts.js");
+                    await runContractsBeforeFrontend({
+                        projectDir,
+                        mode: inputs.mode,
+                        suri,
+                        userSigner,
+                        onDeployEvent: handleContractDeployEvent,
+                        onInstallEvent: handleContractInstallEvent,
+                        onSigningEvent: handleSigningEvent,
+                    });
+                    runningContracts = false;
+                    if (cancelled) return;
+                    setActiveView("frontend");
+                }
+
                 const { runDeploy } = await import("../../utils/deploy/run.js");
                 const outcome = await runDeploy({
                     projectDir,
@@ -811,11 +950,41 @@ function RunningStage({
             } catch (err) {
                 if (!cancelled) {
                     const message = err instanceof Error ? err.message : String(err);
+                    if (runningContracts) contractDeployAdapter.signingError ??= message;
                     setShowPhoneNotice(false);
                     onError(message);
                 }
             }
         })();
+
+        function handleSigningEvent(event: SigningEvent) {
+            if (runningContracts) {
+                if (event.kind === "sign-request") setShowPhoneNotice(false);
+                contractDeployAdapter.handleSigningEvent(event);
+                return;
+            }
+            if (event.kind === "sign-request") {
+                setShowPhoneNotice(false);
+                setSigningPrompt(event);
+            } else if (event.kind === "sign-complete") {
+                setSigningPrompt(null);
+            } else if (event.kind === "sign-error") {
+                setSigningPrompt(null);
+            }
+        }
+
+        function handleContractDeployEvent(event: ContractDeployEvent) {
+            contractDeployAdapter.handleDeployEvent(event);
+        }
+
+        function handleContractInstallEvent(event: ContractInstallEvent) {
+            contractInstallAdapter.handleEvent(event);
+            if ("library" in event) {
+                setContractInstallLibraries((libraries) =>
+                    libraries.includes(event.library) ? libraries : [...libraries, event.library],
+                );
+            }
+        }
 
         function handleEvent(event: DeployEvent) {
             setRunningState((s) => runningReducer(s, event));
@@ -844,13 +1013,8 @@ function RunningStage({
                     queueFrontendLog(event.event.message);
                 }
             } else if (event.kind === "signing") {
-                if (event.event.kind === "sign-request") {
-                    setShowPhoneNotice(false);
-                    setSigningPrompt(event.event);
-                } else if (event.event.kind === "sign-complete") {
-                    setSigningPrompt(null);
-                } else if (event.event.kind === "sign-error") {
-                    setSigningPrompt(null);
+                handleSigningEvent(event.event);
+                if (event.event.kind === "sign-error") {
                     queueFrontendLog(`signing failed: ${event.event.message}`);
                 }
             }
@@ -866,6 +1030,8 @@ function RunningStage({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const showFrontendView = activeView === "frontend";
+
     return (
         <Box flexDirection="column">
             {showPhoneNotice && (
@@ -873,19 +1039,51 @@ function RunningStage({
                     <Text>This deploy may ask you to approve transactions in your mobile app.</Text>
                 </Callout>
             )}
-            <FrontendSectionView state={frontendState} />
-            {playgroundState.status !== "skipped" && (
-                <Box marginTop={1}>
-                    <Row
-                        mark={stepMark(playgroundState.status)}
-                        label="publish to playground"
-                        tone={playgroundState.status === "error" ? "danger" : "muted"}
-                    />
+            {inputs.deployContracts && (
+                <Box flexDirection="column">
+                    <Section
+                        title="contract deploy"
+                        gapBelow={contractInstallLibraries.length === 0}
+                    >
+                        <ContractDeployStatusView
+                            adapter={contractDeployAdapter}
+                            crates={contractDeployDisplay.crates}
+                            displayNames={contractDeployDisplay.displayNames}
+                            assethubUrl={chainConfig.assetHubRpc}
+                            ipfsGatewayUrl={chainConfig.bulletinGateway}
+                        />
+                    </Section>
+                    {contractInstallLibraries.length > 0 && (
+                        <Section title="contract install" gapBelow={showFrontendView}>
+                            <ContractInstallStatusView
+                                adapter={contractInstallAdapter}
+                                libraries={contractInstallLibraries}
+                                ipfsGatewayUrl={chainConfig.bulletinGateway}
+                            />
+                        </Section>
+                    )}
                 </Box>
             )}
+            {showFrontendView && (
+                <>
+                    <FrontendSectionView state={frontendState} />
+                    {playgroundState.status !== "skipped" && (
+                        <Box marginTop={1}>
+                            <Row
+                                mark={stepMark(playgroundState.status)}
+                                label="publish to playground"
+                                tone={playgroundState.status === "error" ? "danger" : "muted"}
+                            />
+                        </Box>
+                    )}
 
-            {signingPrompt && signingPrompt.kind === "sign-request" && (
-                <PhoneApprovalCallout step={signingPrompt.step} label={signingPrompt.label} />
+                    {signingPrompt && signingPrompt.kind === "sign-request" && (
+                        <PhoneApprovalCallout
+                            step={signingPrompt.step}
+                            label={signingPrompt.label}
+                        />
+                    )}
+                </>
             )}
         </Box>
     );

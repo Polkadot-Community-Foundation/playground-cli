@@ -18,13 +18,20 @@ import { dirname, resolve } from "node:path";
 import { generateContractTypes, generateContractsAugmentation } from "@parity/cdm-codegen";
 import {
     CONTRACTS_REGISTRY_ABI,
+    detectBuildOrder,
+    deployContracts,
     generateSolidityImport,
     hasBuildableSolidityProject,
+    installContracts,
     readCdmJson,
     resolveFeatures,
     type CdmJson,
+    type DeployEvent as ContractDeployEvent,
+    type DeploySummary,
     type InstallLibraryRequest,
+    type InstallEvent as ContractInstallEvent,
     type InstallResult,
+    type InstallSummary,
     type PipelineChainClient,
     type SolidityAbiEntry,
     writeCdmJson,
@@ -34,6 +41,7 @@ import {
     createCdmAssetHubClient,
     getChainPreset,
     getRegistryAddress,
+    resolveQueryOrigin,
 } from "@parity/cdm-env";
 import { createContractFromClient } from "@parity/product-sdk-contracts";
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
@@ -44,22 +52,26 @@ import { createClient, type HexString, type SS58String } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
 import { runCliCommand } from "../cli-runtime.js";
 import { getChainConfig } from "../config.js";
-import { asCloudStorageApi, getBulletinAllowanceSigner } from "../utils/allowances/bulletin.js";
-import { ensureSmartContractAllowance } from "../utils/allowances/smartContracts.js";
+import { getCachedBulletinAllowanceSigner } from "../utils/allowances/bulletin.js";
 import { BULLETIN_WS_HEARTBEAT_MS } from "../utils/bulletinWs.js";
 import { suppressReviveTraceNoise } from "../utils/contractManifest.js";
 import type { SignerMode } from "../utils/deploy/signerMode.js";
+import {
+    createSigningCounter,
+    wrapSignerWithEvents,
+    type SigningEvent,
+} from "../utils/deploy/signingProxy.js";
 import { onProcessShutdown } from "../utils/process-guard.js";
 import { resolveSigner, type ResolvedSigner, type SignerOptions } from "../utils/signer.js";
 import { runContractDeployWithUI } from "./contractDeployUi.js";
 import { runContractInstallWithUI } from "./contractInstallUi.js";
 
 const CDM_INCLUDE = ".cdm/**/*";
-// CDM registry getters are read-only, but Revive dry-run queries still require
-// an origin that encodes on the target chain. This value is not a signer.
-const REGISTRY_QUERY_ORIGIN_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+const ZERO_H160 = "0x0000000000000000000000000000000000000000";
 
-interface ContractDeployOpts {
+export interface ContractDeployOpts {
+    /** Project root. Internal callers set this; the standalone command defaults to cwd. */
+    rootDir?: string;
     assethubUrl?: string;
     bulletinUrl?: string;
     registryAddress?: string;
@@ -68,11 +80,41 @@ interface ContractDeployOpts {
     features?: string;
 }
 
-interface ContractInstallOpts {
+export interface ContractInstallOpts {
+    /** Project root. Internal callers set this; the standalone command defaults to cwd. */
+    rootDir?: string;
     assethubUrl?: string;
     name?: string;
     ipfsGatewayUrl?: string;
     registryAddress?: string;
+}
+
+export interface ContractDeployRunOptions {
+    /** Render the standalone contract deploy Ink UI. Defaults to true for the direct command. */
+    useUi?: boolean;
+    /**
+     * Reuse a signer already resolved by another command. The caller retains
+     * ownership and must destroy it; this runner only destroys signers it opens.
+     */
+    resolvedSigner?: ResolvedSigner;
+    onDeployEvent?: (event: ContractDeployEvent) => void;
+    onSigningEvent?: (event: SigningEvent) => void;
+}
+
+export interface ContractDeployRunResult {
+    summary: DeploySummary;
+    success: boolean;
+}
+
+export interface ContractInstallRunOptions {
+    /** Render the standalone contract install Ink UI. Defaults to true for the direct command. */
+    useUi?: boolean;
+    onInstallEvent?: (event: ContractInstallEvent) => void;
+}
+
+export interface ContractInstallRunResult {
+    summary: InstallSummary;
+    success: boolean;
 }
 
 interface ContractDeployTarget {
@@ -90,6 +132,12 @@ interface ContractInstallTarget {
 }
 
 type ContractChainClient = PipelineChainClient & { destroy(): void };
+
+export interface CdmPackageOwnershipConflict {
+    packageName: string;
+    owner: HexString;
+    caller: HexString;
+}
 
 function assertHexAddress(value: string, label: string): HexString {
     if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
@@ -193,6 +241,111 @@ export function resolveContractInstallTarget(
     };
 }
 
+function normalizeH160(value: unknown): HexString | null {
+    if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) return null;
+    return value.toLowerCase() as HexString;
+}
+
+export function findForeignOwnedCdmPackages(
+    packages: { packageName: string; versionCount: number; owner: HexString | null }[],
+    caller: HexString,
+): CdmPackageOwnershipConflict[] {
+    const callerLower = caller.toLowerCase();
+    return packages
+        .filter((pkg) => pkg.versionCount > 0)
+        .filter((pkg) => pkg.owner !== null && pkg.owner.toLowerCase() !== ZERO_H160)
+        .filter((pkg) => pkg.owner!.toLowerCase() !== callerLower)
+        .map((pkg) => ({
+            packageName: pkg.packageName,
+            owner: pkg.owner!,
+            caller,
+        }));
+}
+
+export function formatCdmPackageOwnershipConflicts(
+    conflicts: CdmPackageOwnershipConflict[],
+): string {
+    if (conflicts.length === 1) {
+        const conflict = conflicts[0];
+        return (
+            `CDM package "${conflict.packageName}" is already owned by ${conflict.owner}, ` +
+            `but the selected signer maps to ${conflict.caller}. Update the contract Cargo.toml ` +
+            `[package.metadata.cdm] package = "..." value to a package name you own, or ` +
+            `deploy with the owner account.`
+        );
+    }
+    return (
+        `Some CDM packages are already owned by another account, but the selected signer maps to ${conflicts[0]?.caller}: ` +
+        conflicts
+            .map((conflict) => `${conflict.packageName} owned by ${conflict.owner}`)
+            .join("; ") +
+        `. Update each contract Cargo.toml [package.metadata.cdm] package = "..." value to package names you own, ` +
+        `or deploy with the owner account.`
+    );
+}
+
+async function assertCdmPackageOwnership({
+    rootDir,
+    client,
+    registryAddress,
+    origin,
+}: {
+    rootDir: string;
+    client: ContractChainClient;
+    registryAddress: HexString;
+    origin: SS58String;
+}): Promise<void> {
+    const detected = detectBuildOrder(rootDir);
+    const packageNames = [
+        ...new Set(
+            detected.contracts
+                .map((contract) => contract.cdmPackage)
+                .filter((pkg): pkg is string => Boolean(pkg)),
+        ),
+    ];
+    if (packageNames.length === 0) return;
+
+    const caller = normalizeH160(await client.assetHub.apis.ReviveApi.address(origin));
+    if (!caller) {
+        throw new Error(`Could not resolve Revive H160 address for ${origin}`);
+    }
+
+    const registry = suppressReviveTraceNoise(
+        await createContractFromClient(
+            client.raw.assetHub,
+            client.descriptors.assetHub,
+            registryAddress,
+            CONTRACTS_REGISTRY_ABI,
+            { defaultOrigin: origin },
+        ),
+    );
+
+    const ownership = await Promise.all(
+        packageNames.map(async (packageName) => {
+            const [versionResult, ownerResult] = await Promise.all([
+                registry.getVersionCount.query(packageName),
+                registry.getOwner.query(packageName),
+            ]);
+            if (!versionResult.success || typeof versionResult.value !== "number") {
+                throw new Error(`Failed to query registry version count for "${packageName}"`);
+            }
+            if (!ownerResult.success) {
+                throw new Error(`Failed to query registry owner for "${packageName}"`);
+            }
+            return {
+                packageName,
+                versionCount: versionResult.value,
+                owner: normalizeH160(ownerResult.value),
+            };
+        }),
+    );
+
+    const conflicts = findForeignOwnedCdmPackages(ownership, caller);
+    if (conflicts.length > 0) {
+        throw new Error(formatCdmPackageOwnershipConflicts(conflicts));
+    }
+}
+
 async function createContractChainClient(
     target: ContractDeployTarget,
 ): Promise<ContractChainClient> {
@@ -229,22 +382,30 @@ async function createContractChainClient(
     };
 }
 
-async function runContractDeploy(opts: ContractDeployOpts): Promise<void> {
+export async function runContractDeploy(
+    opts: ContractDeployOpts,
+    runOptions: ContractDeployRunOptions = {},
+): Promise<ContractDeployRunResult> {
     const target = resolveContractDeployTarget(opts);
     const cfg = getChainConfig();
-    const rootDir = resolve(process.cwd());
+    const rootDir = resolve(opts.rootDir ?? process.cwd());
     const features = resolveFeatures(opts.features, rootDir);
+    const useUi = runOptions.useUi ?? true;
+    const signingCounter = createSigningCounter();
 
-    let signer: ResolvedSigner | null = null;
+    let signer: ResolvedSigner | null = runOptions.resolvedSigner ?? null;
+    const ownsSigner = !signer;
     let client: ContractChainClient | null = null;
     const cleanupOnce = (() => {
         let ran = false;
         return () => {
             if (ran) return;
             ran = true;
-            try {
-                signer?.destroy();
-            } catch {}
+            if (ownsSigner) {
+                try {
+                    signer?.destroy();
+                } catch {}
+            }
             try {
                 client?.destroy();
             } catch {}
@@ -253,33 +414,73 @@ async function runContractDeploy(opts: ContractDeployOpts): Promise<void> {
     onProcessShutdown(cleanupOnce);
 
     try {
-        signer = await resolveSigner(resolveContractSignerOptions(opts));
-        await ensureSmartContractAllowance({
-            deploySigner: signer,
+        signer ??= await resolveSigner(resolveContractSignerOptions(opts));
+        runOptions.onDeployEvent?.({
+            type: "log",
+            line: "connecting contract chains",
         });
         client = await createContractChainClient(target);
-        const metadataSigner = await getBulletinAllowanceSigner({
+        runOptions.onDeployEvent?.({
+            type: "log",
+            line: "checking cdm registry ownership",
+        });
+        await assertCdmPackageOwnership({
+            rootDir,
+            client,
+            registryAddress: target.registryAddress,
+            origin: signer.address as SS58String,
+        });
+        runOptions.onDeployEvent?.({
+            type: "log",
+            line: "cdm registry ownership ok",
+        });
+        runOptions.onDeployEvent?.({
+            type: "log",
+            line: "checking cached bulletin allowance",
+        });
+        const metadataSigner = await getCachedBulletinAllowanceSigner({
             publishSigner: signer,
-            // client.bulletin is the same runtime bulletin API but nominally a
-            // different descriptor instance; asCloudStorageApi bridges the skew.
-            bulletinApi: asCloudStorageApi(client.bulletin),
         });
 
-        const result = await runContractDeployWithUI({
+        if (useUi) {
+            return await runContractDeployWithUI({
+                rootDir,
+                features,
+                client,
+                signer: signer.signer,
+                origin: signer.address as SS58String,
+                registryAddress: target.registryAddress,
+                metadataSigner,
+                assethubUrl: target.assethubUrl,
+                bulletinUrl: target.bulletinUrl,
+                ipfsGatewayUrl: cfg.bulletinGateway,
+                signerAddress: signer.address,
+                signerRequiresApproval: signer.source === "session",
+            });
+        }
+
+        const deploySigner =
+            signer.source === "session" && runOptions.onSigningEvent
+                ? wrapSignerWithEvents(signer.signer, {
+                      label: "Deploy and register contracts",
+                      counter: signingCounter,
+                      onEvent: runOptions.onSigningEvent,
+                  })
+                : signer.signer;
+        const summary = await deployContracts({
             rootDir,
             features,
             client,
-            signer: signer.signer,
+            signer: deploySigner,
             origin: signer.address as SS58String,
             registryAddress: target.registryAddress,
             metadataSigner,
-            assethubUrl: target.assethubUrl,
-            bulletinUrl: target.bulletinUrl,
-            ipfsGatewayUrl: cfg.bulletinGateway,
-            signerAddress: signer.address,
-            signerRequiresApproval: signer.source === "session",
+            onEvent: runOptions.onDeployEvent,
         });
-        if (!result.success) process.exitCode = 1;
+        return {
+            summary,
+            success: summary.contracts.every((contract) => contract.status !== "error"),
+        };
     } finally {
         cleanupOnce();
     }
@@ -399,13 +600,18 @@ function runPostInstallHooks(rootDir: string, cdmJson: CdmJson): void {
     if (projectType.hasTypeScript) postInstallTypeScript(rootDir, cdmJson);
 }
 
-async function runContractInstall(libraries: string[], opts: ContractInstallOpts): Promise<void> {
-    const rootDir = resolve(process.cwd());
+export async function runContractInstall(
+    libraries: string[],
+    opts: ContractInstallOpts,
+    runOptions: ContractInstallRunOptions = {},
+): Promise<ContractInstallRunResult> {
+    const rootDir = resolve(opts.rootDir ?? process.cwd());
     const cdmResult = readCdmJson(rootDir);
     const cdmJson = cdmResult?.cdmJson ?? { dependencies: {}, contracts: {} };
     assertSupportedCdmJson(cdmJson, cdmResult?.cdmJsonPath);
     const target = resolveContractInstallTarget(opts, cdmJson);
     const requests = installRequestsFromArgs(libraries, cdmJson);
+    const useUi = runOptions.useUi ?? true;
 
     let client: Awaited<ReturnType<typeof createCdmAssetHubClient>> | null = null;
     const cleanupOnce = (() => {
@@ -431,26 +637,38 @@ async function runContractInstall(libraries: string[], opts: ContractInstallOpts
                 client.descriptors.assetHub,
                 target.registryAddress,
                 CONTRACTS_REGISTRY_ABI,
-                { defaultOrigin: REGISTRY_QUERY_ORIGIN_SS58 },
+                {
+                    defaultOrigin: resolveQueryOrigin({
+                        chainName: target.chainName,
+                        assethubUrl: target.assethubUrl,
+                    }),
+                },
             ),
         );
         const ipfs = connectIpfsGateway(target.ipfsGatewayUrl);
 
-        const result = await runContractInstallWithUI({
-            libraries: requests,
-            registry,
-            ipfs,
-            registryAddress: target.registryAddress,
-            assethubUrl: target.assethubUrl,
-            ipfsGatewayUrl: target.ipfsGatewayUrl,
-        });
+        const result: ContractInstallRunResult = useUi
+            ? await runContractInstallWithUI({
+                  libraries: requests,
+                  registry,
+                  ipfs,
+                  registryAddress: target.registryAddress,
+                  assethubUrl: target.assethubUrl,
+                  ipfsGatewayUrl: target.ipfsGatewayUrl,
+              })
+            : await installContracts({
+                  libraries: requests,
+                  registry,
+                  ipfs,
+                  onEvent: runOptions.onInstallEvent,
+              }).then((summary) => ({ summary, success: summary.success }));
 
         updateCdmJsonAfterInstall(cdmJson, target, requests, result.summary.results);
         writeCdmJson(cdmJson, rootDir);
         if (result.summary.results.length > 0) {
             runPostInstallHooks(rootDir, cdmJson);
         }
-        if (!result.success) process.exitCode = 1;
+        return result;
     } finally {
         cleanupOnce();
     }
@@ -470,7 +688,9 @@ function makeDeployCommand(): Command {
         .option("--features <features>", "Cargo feature flags to pass to the build")
         .action(async (opts: ContractDeployOpts) =>
             runCliCommand("contract", { watchdog: true, hardExit: true }, () =>
-                runContractDeploy(opts),
+                runContractDeploy(opts).then((result) => {
+                    if (!result.success) process.exitCode = 1;
+                }),
             ),
         );
 }
@@ -489,7 +709,9 @@ function makeInstallCommand(): Command {
         .option("--registry-address <address>", "Registry contract address")
         .action(async (libraries: string[], opts: ContractInstallOpts) =>
             runCliCommand("contract", { watchdog: true, hardExit: true }, () =>
-                runContractInstall(libraries, opts),
+                runContractInstall(libraries, opts).then((result) => {
+                    if (!result.success) process.exitCode = 1;
+                }),
             ),
         );
 }

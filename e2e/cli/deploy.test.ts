@@ -19,7 +19,7 @@
  * These tests verify the deploy pipeline behavior. Tests that require
  * full network connectivity (Paseo testnet + IPFS) are marked accordingly.
  *
- * All headless deploys require: --signer, --domain, --buildDir, --playground
+ * All headless deploys require: --signer, --domain, --buildDir, --playground, --contracts/--no-contracts
  * to trigger the non-interactive path (see isFullySpecified() in deploy/index.ts).
  *
  */
@@ -64,6 +64,7 @@ describe("dot deploy — preflight and validation", () => {
 	test("reports mainnet not yet supported", async () => {
 		const result = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", E2E_DOMAINS.preflight,
 			"--buildDir", absBuildDir(frontendOnly),
@@ -88,6 +89,7 @@ describe("dot deploy — preflight and validation", () => {
 		const domain = E2E_DOMAINS.preflight;
 		const result = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
@@ -141,6 +143,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		const wasAlreadyPublished = (await getApp(`${domain}.dot`)) !== null;
 		const result = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
@@ -226,6 +229,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		const domain = E2E_DOMAINS.redeploy;
 		const first = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
@@ -241,6 +245,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 
 		const second = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
@@ -276,6 +281,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		const domain = E2E_DOMAINS.collision;
 		const ownerDeploy = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
@@ -291,6 +297,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 
 		const bobDeploy = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", domain,
 			"--buildDir", absBuildDir(frontendOnly),
@@ -341,6 +348,7 @@ describe("dot deploy — moddable (requires Paseo + IPFS + GH)", () => {
 			const result = await dot(
 				[
 					"deploy",
+					"--no-contracts",
 					"--signer", "dev",
 					"--domain", domain,
 					"--buildDir", absBuildDir(workDir),

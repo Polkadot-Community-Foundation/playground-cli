@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { prependPath, TOOL_STEPS } from "./toolchain.js";
+import { hasCargoPvmContract, prependPath, TOOL_STEPS } from "./toolchain.js";
 
 describe("prependPath", () => {
     let originalPath: string | undefined;
@@ -62,5 +62,10 @@ describe("TOOL_STEPS", () => {
         const step = TOOL_STEPS.find((entry) => entry.name === "cargo-pvm-contract");
         expect(step?.manualHint).toContain("cargo-pvm-contract");
         expect(step?.manualHint).not.toContain("contract-dependency-manager");
+    });
+
+    it("validates cargo-pvm-contract by probing the build subcommand", () => {
+        const cargoStep = TOOL_STEPS.find((entry) => entry.name === "cargo-pvm-contract");
+        expect(cargoStep?.check).toBe(hasCargoPvmContract);
     });
 });
