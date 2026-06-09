@@ -1030,7 +1030,7 @@ function RunningStage({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const showContractView = inputs.deployContracts && activeView === "contracts";
+    const showFrontendView = activeView === "frontend";
 
     return (
         <Box flexDirection="column">
@@ -1039,7 +1039,7 @@ function RunningStage({
                     <Text>This deploy may ask you to approve transactions in your mobile app.</Text>
                 </Callout>
             )}
-            {showContractView ? (
+            {inputs.deployContracts && (
                 <Box flexDirection="column">
                     <Section
                         title="contract deploy"
@@ -1054,7 +1054,7 @@ function RunningStage({
                         />
                     </Section>
                     {contractInstallLibraries.length > 0 && (
-                        <Section title="contract install" gapBelow={false}>
+                        <Section title="contract install" gapBelow={showFrontendView}>
                             <ContractInstallStatusView
                                 adapter={contractInstallAdapter}
                                 libraries={contractInstallLibraries}
@@ -1063,7 +1063,8 @@ function RunningStage({
                         </Section>
                     )}
                 </Box>
-            ) : (
+            )}
+            {showFrontendView && (
                 <>
                     <FrontendSectionView state={frontendState} />
                     {playgroundState.status !== "skipped" && (
