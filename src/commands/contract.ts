@@ -346,6 +346,23 @@ async function assertCdmPackageOwnership({
     }
 }
 
+// ── cdm-builder descriptor skew bridge ─────────────────────────────────────
+// Our root `@parity/product-sdk-descriptors` paseo-asset-hub descriptor and
+// cdm-env's `CdmDeployAssetHubDescriptor` (which `cdm-builder` generates the
+// `PipelineChainClient` type from) come from different product-sdk descriptor
+// generations, so the `DotnsGateway` pallet shape differs nominally (e.g.
+// `PopControllerAddressSet` vs `DispatcherAddressSet`). They are structurally
+// identical for the Revive + registry calls the contract pipeline actually
+// makes — it never touches DotnsGateway — so cast through these single seams.
+// Delete once the two descriptor generations realign. Sibling of the
+// `asCloudStorageApi` seam (see CLAUDE.md "cdm-builder version skew").
+function asCdmAssetHubApi(api: unknown): PipelineChainClient["assetHub"] {
+    return api as PipelineChainClient["assetHub"];
+}
+function asCdmAssetHubDescriptor(d: unknown): PipelineChainClient["descriptors"]["assetHub"] {
+    return d as PipelineChainClient["descriptors"]["assetHub"];
+}
+
 async function createContractChainClient(
     target: ContractDeployTarget,
 ): Promise<ContractChainClient> {
@@ -371,11 +388,11 @@ async function createContractChainClient(
     }
 
     return {
-        assetHub: raw.assetHub.getTypedApi(paseo_asset_hub),
+        assetHub: asCdmAssetHubApi(raw.assetHub.getTypedApi(paseo_asset_hub)),
         bulletin: raw.bulletin.getTypedApi(paseo_bulletin),
         raw,
         descriptors: {
-            assetHub: paseo_asset_hub,
+            assetHub: asCdmAssetHubDescriptor(paseo_asset_hub),
             bulletin: paseo_bulletin,
         },
         destroy,
