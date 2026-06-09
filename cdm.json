@@ -5,8 +5,8 @@
   },
   "contracts": {
     "@w3s/playground-registry": {
-      "version": 3,
-      "address": "0x9938255f40485B25641C9bc263aa8E0bAE8c202d",
+      "version": 6,
+      "address": "0x82db2A7013ee5bDC69e12CC998dDb3A3eca1Ce4F",
       "abi": [
         {
           "type": "constructor",
@@ -1133,7 +1133,7 @@
           "stateMutability": "view"
         }
       ],
-      "metadataCid": "bafk2bzaceafacjrrftyijid6r3hvk54mhpdsoizrj6lxvmqfba5ufndlk2w6o"
+      "metadataCid": "bafk2bzacedzwo2736o7g4j5epc752vf7vw5dfhec3yhtxwatc53pj4xcpfemy"
     }
   }
 }
