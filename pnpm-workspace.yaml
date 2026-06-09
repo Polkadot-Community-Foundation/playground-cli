@@ -17,9 +17,13 @@ allowBuilds:
   esbuild: false
   node-datachannel: false
 
+minimumReleaseAgeExclude:
+  - bulletin-deploy@0.10.0
+
 overrides:
-  # dotns-cli 0.6.1 ships a broken publish manifest (file:.papi/descriptors
-  # missing from the tarball); redirect to a local empty stub. See CLAUDE.md.
+  # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
+  # from the tarball) through 0.6.6 and the local 0.7.0 source; the version-
+  # agnostic `>` prefix keeps this stub applied across bumps. See CLAUDE.md.
   "@parity/dotns-cli>@polkadot-api/descriptors": "file:./stubs/papi-descriptors-stub"
   # Load-bearing: collapses three transitive json-rpc-provider versions onto
   # one to avoid wire-shape divergence. See CLAUDE.md.
