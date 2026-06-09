@@ -40,6 +40,7 @@ describe("diagnostic mode", () => {
 			// to get there.
 			const result = await dot([
 				"deploy",
+				"--no-contracts",
 				"--signer", "dev",
 				"--domain", E2E_DOMAINS.preflight,
 				"--buildDir", resolve(frontendOnly, "dist"),
@@ -76,6 +77,7 @@ describe("diagnostic mode", () => {
 		// var is set (see src/utils/process-guard.ts startMemoryWatchdog).
 		const result = await dot([
 			"deploy",
+			"--no-contracts",
 			"--signer", "dev",
 			"--domain", E2E_DOMAINS.preflight,
 			"--buildDir", resolve(frontendOnly, "dist"),
