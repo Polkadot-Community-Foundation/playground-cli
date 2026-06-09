@@ -89,6 +89,44 @@ describe("buildSummaryView", () => {
         expect(ownerRow?.value).toContain("0xbeefbeef");
     });
 
+    it("shows the chosen tag in the Tag row when publishing to playground", () => {
+        const view = buildSummaryView({
+            mode: "dev",
+            domain: "my-app.dot",
+            buildDir: "dist",
+            skipBuild: false,
+            publishToPlayground: true,
+            tag: "gaming",
+            approvals: [],
+        });
+        expect(view.rows.find((r) => r.label === "Tag")?.value).toBe("gaming");
+    });
+
+    it("shows 'none' in the Tag row when publishing untagged", () => {
+        const view = buildSummaryView({
+            mode: "dev",
+            domain: "my-app.dot",
+            buildDir: "dist",
+            skipBuild: false,
+            publishToPlayground: true,
+            approvals: [],
+        });
+        expect(view.rows.find((r) => r.label === "Tag")?.value).toBe("none");
+    });
+
+    it("omits the Tag row entirely when not publishing to playground", () => {
+        const view = buildSummaryView({
+            mode: "dev",
+            domain: "my-app.dot",
+            buildDir: "dist",
+            skipBuild: false,
+            publishToPlayground: false,
+            tag: "gaming",
+            approvals: [],
+        });
+        expect(view.rows.find((r) => r.label === "Tag")).toBeUndefined();
+    });
+
     it("phone mode with playground has four approvals numbered 1-4", () => {
         const view = buildSummaryView({
             mode: "phone",

@@ -80,6 +80,8 @@ export interface RunDeployOptions {
     moddable?: boolean;
     /** Resolved public repository URL to record in metadata (moddable=true) or `null` (moddable=false). */
     repositoryUrl?: string | null;
+    /** Single playground tag to record in metadata, or `null`/omitted to publish untagged. Ignored when `publishToPlayground` is false. */
+    tag?: string | null;
     /** The logged-in phone signer. Required for `mode === "phone"` or `publishToPlayground`. */
     userSigner: ResolvedSigner | null;
     /** Event sink — consumed by the TUI / RevX. */
@@ -242,6 +244,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                     publishSigner: wrappedPublishSigner,
                     claimedOwnerH160: setup.claimedOwnerH160,
                     repositoryUrl: options.repositoryUrl ?? null,
+                    tag: options.tag ?? null,
                     cwd: options.projectDir,
                     onLogEvent: (event) => options.onEvent({ kind: "storage-event", event }),
                     onAllowancePrompt: allowancePrompt,

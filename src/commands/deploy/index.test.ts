@@ -15,7 +15,11 @@
 
 import { describe, it, expect } from "vitest";
 
-import { isFullySpecified, shouldResolveUserSigner } from "./index.js";
+import {
+    assertPublishFlagsConsistent,
+    isFullySpecified,
+    shouldResolveUserSigner,
+} from "./index.js";
 
 describe("shouldResolveUserSigner", () => {
     it("skips signer lookup for pure dev deploys", () => {
@@ -53,5 +57,53 @@ describe("isFullySpecified", () => {
 
     it("allows headless deploy when contracts are explicitly skipped", () => {
         expect(isFullySpecified({ ...fullySpecified, contracts: false })).toBe(true);
+    });
+});
+
+describe("assertPublishFlagsConsistent", () => {
+    it("rejects --tag without --playground", () => {
+        expect(() =>
+            assertPublishFlagsConsistent({
+                moddable: false,
+                tag: "defi",
+                publishToPlayground: false,
+            }),
+        ).toThrow(/--tag requires --playground/);
+    });
+
+    it("rejects --moddable without --playground", () => {
+        expect(() =>
+            assertPublishFlagsConsistent({ moddable: true, tag: null, publishToPlayground: false }),
+        ).toThrow(/--moddable requires --playground/);
+    });
+
+    it("reports the moddable conflict first when both flags are set without --playground", () => {
+        expect(() =>
+            assertPublishFlagsConsistent({
+                moddable: true,
+                tag: "defi",
+                publishToPlayground: false,
+            }),
+        ).toThrow(/--moddable requires --playground/);
+    });
+
+    it("allows a tag when publishing to the playground", () => {
+        expect(() =>
+            assertPublishFlagsConsistent({
+                moddable: true,
+                tag: "defi",
+                publishToPlayground: true,
+            }),
+        ).not.toThrow();
+    });
+
+    it("allows an untagged, non-moddable deploy with no --playground", () => {
+        expect(() =>
+            assertPublishFlagsConsistent({
+                moddable: false,
+                tag: null,
+                publishToPlayground: false,
+            }),
+        ).not.toThrow();
     });
 });
