@@ -14,9 +14,9 @@
 // limitations under the License.
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 
 export interface MirrorOptions {
     /** http(s) URL to mirror. Other schemes are rejected. */
@@ -89,6 +89,17 @@ export function validateUrl(input: string): string {
 }
 
 /**
+ * Classify a normalised URL as directory-shaped (bare host, `/`, or a
+ * trailing-slash path) vs. a specific page. wget only writes a literal
+ * `index.html` for directory-shaped URLs; page URLs are named after the last
+ * path segment, which drives the two mirror strategies in `mirrorSite`.
+ */
+export function isDirectoryStyleUrl(url: string): boolean {
+    const { pathname } = new URL(url);
+    return pathname === "" || pathname === "/" || pathname.endsWith("/");
+}
+
+/**
  * BFS for the directory containing the shallowest `index.html`. Used as
  * the upload root so Bulletin's renderer always sees `index.html` at the
  * top level regardless of URL path depth.
@@ -127,6 +138,103 @@ export function findIndexHtmlRoot(rootDir: string): string | null {
 }
 
 /**
+ * BFS for the shallowest `.html`/`.htm` file anywhere under `rootDir`. Used as
+ * the entry-document fallback in page mode when the URL-derived filename guess
+ * misses (e.g. wget mangled the name). Returns `null` when the tree has no
+ * HTML document at all (client-rendered SPA / redirect-only response).
+ */
+export function findShallowestHtml(rootDir: string): string | null {
+    const queue: string[] = [rootDir];
+    while (queue.length > 0) {
+        const dir = queue.shift()!;
+        let entries: string[];
+        try {
+            // Sort for deterministic results across filesystems when several
+            // HTML files share the shallowest depth.
+            entries = readdirSync(dir).sort();
+        } catch {
+            continue;
+        }
+        const subdirs: string[] = [];
+        for (const entry of entries) {
+            const full = join(dir, entry);
+            let isDir = false;
+            try {
+                const st = statSync(full);
+                if (st.isFile() && /\.html?$/i.test(entry)) return full;
+                isDir = st.isDirectory();
+            } catch {
+                continue; // dangling symlink / permission error — skip
+            }
+            if (isDir) subdirs.push(full);
+        }
+        queue.push(...subdirs);
+    }
+    return null;
+}
+
+/**
+ * Locate the HTML document wget saved for a page URL. Tries the filename wget
+ * would have written (`<last-path-segment>` with `.html` appended by
+ * `--adjust-extension`) first, then falls back to the shallowest HTML file in
+ * the tree. Returns `null` when no HTML document exists (SPA / redirect-only).
+ */
+export function resolveEntryDocument(directory: string, url: string): string | null {
+    const parsed = new URL(url);
+    const stripped = parsed.pathname.replace(/^\/+/, "");
+    let rel: string;
+    try {
+        rel = decodeURIComponent(stripped);
+    } catch {
+        rel = stripped;
+    }
+    const candidates: string[] = [];
+    if (rel && !rel.endsWith("/")) {
+        // Page mode keeps per-host directories (no `--no-host-directories`), so
+        // wget writes the document at `<host>/<path>`. Try that first, then the
+        // host-less form for robustness, before the shallowest-html fallback.
+        for (const base of [`${parsed.host}/${rel}`, rel]) {
+            if (/\.html?$/i.test(base)) candidates.push(base);
+            else candidates.push(`${base}.html`, base);
+        }
+    }
+    for (const candidate of candidates) {
+        const full = join(directory, candidate);
+        try {
+            if (statSync(full).isFile()) return full;
+        } catch {
+            // not this candidate — try the next
+        }
+    }
+    return findShallowestHtml(directory);
+}
+
+/**
+ * Materialise a root `index.html` for a page-mode mirror by copying the entry
+ * document there and injecting `<base href="<entry-dir>/">`. Page mode keeps
+ * per-host directories, so the document is nested (e.g.
+ * `en.wikipedia.org/wiki/Maungatapere.html`) and `--convert-links` rewrote its
+ * asset links relative to that directory. The `<base>` makes those links
+ * resolve from the root exactly as they did when nested — so the viewer
+ * renders the real page directly, with no redirect or iframe (Bulletin's
+ * viewer does NOT honour a `<meta http-equiv="refresh">` redirect — it renders
+ * the stub but never navigates).
+ */
+export function writeEntryIndex(directory: string, entryPath: string): void {
+    const relDir = relative(directory, dirname(entryPath)).split(sep).join("/");
+    const baseHref = relDir ? `${relDir.split("/").map(encodeURIComponent).join("/")}/` : "./";
+    const baseTag = `<base href="${baseHref}">`;
+    const source = readFileSync(entryPath, "utf8");
+    const head = source.match(/<head[^>]*>/i);
+    const html = head
+        ? source.slice(0, head.index! + head[0].length) +
+          baseTag +
+          source.slice(head.index! + head[0].length)
+        : baseTag + source;
+    writeFileSync(join(directory, "index.html"), html, "utf8");
+}
+
+/**
  * Recursive file count under `root`. Used after a wget run to detect the
  * empty-mirror case (success exit, zero files). Exported for tests.
  */
@@ -149,14 +257,40 @@ export function countFiles(root: string): number {
 }
 
 /**
+ * Decide whether a finished wget run failed, judging by what landed on disk
+ * rather than the exit code alone. wget exits non-zero (commonly 8, "server
+ * issued an error response") whenever ANY requisite 404s — routine with
+ * `--page-requisites --span-hosts`, where one missing CDN asset would
+ * otherwise abort an otherwise-perfect mirror. So a non-zero exit is only
+ * fatal when nothing was downloaded. Returns an error message, or `null` when
+ * the run is usable. Exported for tests.
+ */
+export function describeWgetFailure(
+    code: number | null,
+    fileCount: number,
+    url: string,
+): string | null {
+    if (fileCount > 0) return null;
+    if (code === 0) {
+        return `wget completed but no files were downloaded from ${url}. The site may be empty or block crawlers.`;
+    }
+    return `wget failed (exit ${code ?? "unknown"}) from ${url} and downloaded nothing — the site may be unreachable.`;
+}
+
+/**
  * Mirror a live HTTP(S) static site into a fresh temp directory using `wget`.
  *
- * Flags chosen for "useful default for static sites":
- *   --mirror              recursive download + timestamping + infinite depth
+ * Two strategies, chosen by `isDirectoryStyleUrl`:
+ *   - Directory / bare-host / trailing-slash URL → recursive whole-site mirror
+ *     (`--mirror --no-parent`), upload root resolved by `findIndexHtmlRoot`.
+ *   - Specific page URL → page + requisites with NO link recursion
+ *     (`--page-requisites --span-hosts -e robots=off`, per-host directories
+ *     kept), then a root `index.html` materialised from the entry document
+ *     with an injected `<base>` (see `writeEntryIndex`).
+ *
+ * Shared flags:
  *   --convert-links       rewrite absolute → relative so the local copy renders
  *   --adjust-extension    add .html so links resolve from a flat filesystem
- *   --page-requisites     pull CSS/JS/images that pages reference
- *   --no-parent           don't climb above the URL's directory
  *   --no-host-directories drop the hostname segment from the output path
  *   --no-verbose          one progress line per file; not silent so onLine works
  *
@@ -167,19 +301,43 @@ export async function mirrorSite(options: MirrorOptions): Promise<MirrorResult> 
     const url = validateUrl(options.url);
     const directory = mkdtempSync(join(tmpdir(), "dot-decentralize-"));
 
-    const args = [
-        "--mirror",
-        "--convert-links",
-        "--adjust-extension",
-        "--page-requisites",
-        "--no-parent",
-        "--no-host-directories",
-        "--no-verbose",
-        `--directory-prefix=${directory}`,
-        url,
-    ];
+    const directoryStyle = isDirectoryStyleUrl(url);
+    const args = directoryStyle
+        ? [
+              // Directory / whole-site mirror (unchanged behaviour).
+              "--mirror",
+              "--convert-links",
+              "--adjust-extension",
+              "--page-requisites",
+              "--no-parent",
+              "--no-host-directories",
+              "--no-verbose",
+              `--directory-prefix=${directory}`,
+              url,
+          ]
+        : [
+              // Single page: the page plus every requisite (CSS/JS/images,
+              // incl. cross-host CDN assets) with NO link recursion. `--mirror`
+              // + `-e robots=off` would crawl an entire link-heavy site (all of
+              // Wikipedia under /wiki/) — robots.txt was the only bound on the
+              // infinite recursion. `--page-requisites` with no `-r` keeps the
+              // download to exactly what this page needs. We KEEP per-host
+              // directories here (no `--no-host-directories`): `--span-hosts`
+              // pulls assets from multiple hosts, and flattening them by path
+              // would let two hosts collide on the same path (clobbered/`.1`
+              // files + broken converted links).
+              "--page-requisites",
+              "--convert-links",
+              "--adjust-extension",
+              "--span-hosts",
+              "--no-verbose",
+              "-e",
+              "robots=off",
+              `--directory-prefix=${directory}`,
+              url,
+          ];
 
-    await new Promise<void>((resolve, reject) => {
+    const exitCode = await new Promise<number | null>((resolve, reject) => {
         const proc = spawn(options.wgetBinary ?? "wget", args, {
             stdio: ["ignore", "pipe", "pipe"],
         });
@@ -198,25 +356,37 @@ export async function mirrorSite(options: MirrorOptions): Promise<MirrorResult> 
         proc.stdout?.on("data", forward);
         proc.stderr?.on("data", forward);
 
-        proc.on("close", (code) => {
-            if (code === 0) resolve();
-            else reject(new Error(`wget failed (exit ${code}) — site may be unreachable`));
-        });
+        // Resolve with the exit code (don't reject on non-zero): a missing
+        // requisite makes wget exit 8 even on an otherwise-complete mirror.
+        // `describeWgetFailure` judges success by what landed on disk instead.
+        proc.on("close", (code) => resolve(code));
     });
 
     const fileCount = countFiles(directory);
-    if (fileCount === 0) {
-        throw new Error(
-            `wget completed but no files were downloaded from ${url}. The site may be empty or block crawlers.`,
-        );
+    const failure = describeWgetFailure(exitCode, fileCount, url);
+    if (failure) throw new Error(failure);
+
+    const noIndexHtmlError = new Error(
+        `wget downloaded ${fileCount} files from ${url} but found no HTML document. ` +
+            "Bulletin's viewer needs an index.html at the root — the site may be " +
+            "fully client-side-rendered or served from a redirect.",
+    );
+
+    if (directoryStyle) {
+        const uploadRoot = findIndexHtmlRoot(directory);
+        if (!uploadRoot) throw noIndexHtmlError;
+        return { directory, uploadRoot, fileCount };
     }
-    const uploadRoot = findIndexHtmlRoot(directory);
-    if (!uploadRoot) {
-        throw new Error(
-            `wget downloaded ${fileCount} files from ${url} but none was index.html. ` +
-                "Bulletin's viewer needs an index.html at the root — the site may be " +
-                "fully client-side-rendered or served from a redirect.",
-        );
-    }
-    return { directory, uploadRoot, fileCount };
+
+    // Page mode: wget named the document after the URL's last path segment
+    // under a per-host dir (e.g. `en.wikipedia.org/wiki/Maungatapere.html`),
+    // never `index.html`. Upload the whole tree and materialise a root
+    // index.html from the entry doc with a `<base>` so the viewer renders the
+    // real page directly. Recount afterwards so the synthesized file is
+    // included. See `writeEntryIndex`.
+    const entry = resolveEntryDocument(directory, url);
+    if (!entry) throw noIndexHtmlError;
+    const relTarget = relative(directory, entry).split(sep).join("/");
+    if (relTarget !== "index.html") writeEntryIndex(directory, entry);
+    return { directory, uploadRoot: directory, fileCount: countFiles(directory) };
 }

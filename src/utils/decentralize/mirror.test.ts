@@ -14,16 +14,21 @@
 // limitations under the License.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     countFiles,
+    describeWgetFailure,
     findIndexHtmlRoot,
+    findShallowestHtml,
     InvalidSiteUrlError,
+    isDirectoryStyleUrl,
     mirrorSite,
+    resolveEntryDocument,
     validateUrl,
     WgetMissingError,
+    writeEntryIndex,
 } from "./mirror.js";
 
 describe("validateUrl", () => {
@@ -175,5 +180,173 @@ describe("mirrorSite (spawn-injected)", () => {
                 wgetBinary: "/usr/bin/true",
             }),
         ).rejects.toThrow(/no files were downloaded/);
+    });
+});
+
+describe("describeWgetFailure", () => {
+    it("tolerates a non-zero exit when files were downloaded (partial requisite 404s)", () => {
+        // wget exits 8 ("server issued an error response") whenever ANY
+        // requisite 404s — routine with --page-requisites --span-hosts. The
+        // page itself is fine, so we must not abort.
+        expect(describeWgetFailure(8, 25, "https://host/page")).toBeNull();
+    });
+
+    it("passes a clean run (exit 0, files present)", () => {
+        expect(describeWgetFailure(0, 3, "https://host/")).toBeNull();
+    });
+
+    it("reports the empty-mirror case (exit 0, no files)", () => {
+        expect(describeWgetFailure(0, 0, "https://host/")).toMatch(/no files were downloaded/);
+    });
+
+    it("reports an unreachable site (non-zero exit, no files)", () => {
+        const msg = describeWgetFailure(4, 0, "https://host/");
+        expect(msg).toMatch(/wget failed \(exit 4\)/);
+    });
+});
+
+describe("isDirectoryStyleUrl", () => {
+    it("treats a bare-host (normalised to /) URL as directory-style", () => {
+        expect(isDirectoryStyleUrl("https://example.com/")).toBe(true);
+    });
+    it("treats a trailing-slash path as directory-style", () => {
+        expect(isDirectoryStyleUrl("https://you.github.io/site/")).toBe(true);
+    });
+    it("treats a deep page path as NOT directory-style", () => {
+        expect(isDirectoryStyleUrl("https://en.wikipedia.org/wiki/Maungatapere")).toBe(false);
+    });
+    it("treats a file-ish path as NOT directory-style", () => {
+        expect(isDirectoryStyleUrl("https://host/blog/post.html")).toBe(false);
+    });
+});
+
+describe("findShallowestHtml", () => {
+    let dir: string;
+    beforeEach(() => {
+        dir = mkdtempSync(join(tmpdir(), "mirror-shallow-test-"));
+    });
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("returns a nested html when none sits at the root", () => {
+        mkdirSync(join(dir, "wiki"));
+        writeFileSync(join(dir, "wiki", "Maungatapere.html"), "<html/>");
+        writeFileSync(join(dir, "robots.txt"), "");
+        expect(findShallowestHtml(dir)).toBe(join(dir, "wiki", "Maungatapere.html"));
+    });
+
+    it("prefers a shallower html over a deeper one", () => {
+        writeFileSync(join(dir, "page.html"), "<html/>");
+        mkdirSync(join(dir, "deep"));
+        writeFileSync(join(dir, "deep", "other.html"), "<html/>");
+        expect(findShallowestHtml(dir)).toBe(join(dir, "page.html"));
+    });
+
+    it("returns null when no html exists anywhere", () => {
+        writeFileSync(join(dir, "style.css"), "body{}");
+        expect(findShallowestHtml(dir)).toBeNull();
+    });
+});
+
+describe("resolveEntryDocument", () => {
+    let dir: string;
+    beforeEach(() => {
+        dir = mkdtempSync(join(tmpdir(), "mirror-entry-test-"));
+    });
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("derives `<segment>.html` from a page URL (adjust-extension)", () => {
+        mkdirSync(join(dir, "wiki"));
+        writeFileSync(join(dir, "wiki", "Maungatapere.html"), "<html/>");
+        expect(resolveEntryDocument(dir, "https://en.wikipedia.org/wiki/Maungatapere")).toBe(
+            join(dir, "wiki", "Maungatapere.html"),
+        );
+    });
+
+    it("uses an already-.html URL segment verbatim", () => {
+        writeFileSync(join(dir, "post.html"), "<html/>");
+        expect(resolveEntryDocument(dir, "https://host/post.html")).toBe(join(dir, "post.html"));
+    });
+
+    it("resolves the host-prefixed path over a shallower decoy (per-host layout)", () => {
+        // Page mode keeps per-host directories, so wget writes the article at
+        // `<host>/wiki/...`. A shallower decoy html (e.g. an error stub) must
+        // NOT win over the URL-derived host path.
+        writeFileSync(join(dir, "decoy.html"), "<html/>");
+        mkdirSync(join(dir, "en.wikipedia.org"));
+        mkdirSync(join(dir, "en.wikipedia.org", "wiki"));
+        const article = join(dir, "en.wikipedia.org", "wiki", "Maungatapere.html");
+        writeFileSync(article, "<html/>");
+        expect(resolveEntryDocument(dir, "https://en.wikipedia.org/wiki/Maungatapere")).toBe(
+            article,
+        );
+    });
+
+    it("falls back to the shallowest html when the guess misses", () => {
+        // URL implies `weird.html` but wget wrote something else.
+        mkdirSync(join(dir, "sub"));
+        writeFileSync(join(dir, "sub", "actual.html"), "<html/>");
+        expect(resolveEntryDocument(dir, "https://host/weird")).toBe(
+            join(dir, "sub", "actual.html"),
+        );
+    });
+
+    it("returns null when nothing renderable was downloaded", () => {
+        writeFileSync(join(dir, "app.js"), "//spa");
+        expect(resolveEntryDocument(dir, "https://host/route")).toBeNull();
+    });
+});
+
+describe("writeEntryIndex", () => {
+    let dir: string;
+    beforeEach(() => {
+        dir = mkdtempSync(join(tmpdir(), "mirror-entry-index-test-"));
+    });
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("copies the entry doc to root index.html with a <base href> for its dir", () => {
+        // The viewer renders index.html directly (no redirect/iframe), so the
+        // page must carry a <base> pointing at its original directory; its
+        // `../w/…` links then resolve exactly as they did when nested.
+        mkdirSync(join(dir, "en.wikipedia.org"));
+        mkdirSync(join(dir, "en.wikipedia.org", "wiki"));
+        const entry = join(dir, "en.wikipedia.org", "wiki", "Maungatapere.html");
+        writeFileSync(entry, '<head><link href="../w/site.css"></head><body>hi</body>');
+        writeEntryIndex(dir, entry);
+        const html = readFileSync(join(dir, "index.html"), "utf8");
+        expect(html).toContain('<base href="en.wikipedia.org/wiki/">');
+        expect(html).toContain('<link href="../w/site.css">'); // original links untouched
+        expect(html).toContain("hi");
+    });
+
+    it("injects the <base> immediately after the opening <head>", () => {
+        mkdirSync(join(dir, "wiki"));
+        const entry = join(dir, "wiki", "page.html");
+        writeFileSync(entry, "<head><title>t</title></head>");
+        writeEntryIndex(dir, entry);
+        const html = readFileSync(join(dir, "index.html"), "utf8");
+        expect(html).toMatch(/<head>\s*<base href="wiki\/">/);
+    });
+
+    it("uses a `./` base when the entry doc already sits at the root", () => {
+        const entry = join(dir, "page.html");
+        writeFileSync(entry, "<head></head>");
+        writeEntryIndex(dir, entry);
+        const html = readFileSync(join(dir, "index.html"), "utf8");
+        expect(html).toContain('<base href="./">');
+    });
+
+    it("prepends the <base> when the document has no <head>", () => {
+        mkdirSync(join(dir, "wiki"));
+        const entry = join(dir, "wiki", "page.html");
+        writeFileSync(entry, "<body>no head</body>");
+        writeEntryIndex(dir, entry);
+        const html = readFileSync(join(dir, "index.html"), "utf8");
+        expect(html.startsWith('<base href="wiki/">')).toBe(true);
     });
 });
