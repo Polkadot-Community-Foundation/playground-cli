@@ -47,7 +47,13 @@ import {
     type ParallelDeployResult,
 } from "../../utils/deploy/parallel.js";
 import type { DeployEvent, RunDeployOptions } from "../../utils/deploy/run.js";
-import { DEFAULT_BUILD_DIR, type Env, resolveLegacyEnv } from "../../config.js";
+import {
+    DEFAULT_BUILD_DIR,
+    DEFAULT_ENV,
+    ENV_FLAG_CHOICES,
+    type Env,
+    resolveLegacyEnv,
+} from "../../config.js";
 import { NO_SESSION_HEADLESS_ERROR } from "../deploy/signerNotice.js";
 import { parseManifest, type ManifestApp } from "./manifest.js";
 
@@ -95,17 +101,10 @@ export const deployAllCommand = new Command("deploy-all")
     .option("--json", "Emit a machine-readable JSON summary to stdout on completion")
     .addOption(
         new Option("--env <env>", "Target environment")
-            .choices([
-                "preview",
-                "paseo-next",
-                "paseo-review",
-                "paseo-next-v2",
-                "polkadot",
-                "kusama",
-                "testnet",
-                "mainnet",
-            ])
-            .default("paseo-next-v2"),
+            // Single-sourced in config.ts (env IDs + legacy aliases) so it stays
+            // in lockstep with the active network and the Env type.
+            .choices([...ENV_FLAG_CHOICES])
+            .default(DEFAULT_ENV),
     )
     .action(async (opts: DeployAllOpts) =>
         runCliCommand("deploy-all", { watchdog: true, hardExit: true }, async () => {
@@ -114,7 +113,7 @@ export const deployAllCommand = new Command("deploy-all")
     );
 
 async function runDeployAll(opts: DeployAllOpts): Promise<void> {
-    const env: Env = resolveLegacyEnv(opts.env ?? "paseo-next-v2");
+    const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
     const mode = opts.signer;
     if (mode !== "dev" && mode !== "phone") {
         throw new Error("deploy-all requires --signer dev or --signer phone.");

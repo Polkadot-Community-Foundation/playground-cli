@@ -49,7 +49,6 @@ vi.mock("./funder.js", () => ({
         { name: "dedicated", address: DEDICATED_ADDRESS, signer: DEDICATED_SIGNER },
     ],
     DEDICATED_FUNDER_ADDRESS: DEDICATED_ADDRESS,
-    FAUCET_URL: "https://faucet.polkadot.io/?network=pah",
     faucetUrlFor: (addr: string) => `https://faucet.polkadot.io/?network=pah&address=${addr}`,
 }));
 

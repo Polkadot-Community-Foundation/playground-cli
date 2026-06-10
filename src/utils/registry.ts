@@ -20,7 +20,9 @@
 import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
+import { getRegistryAddress } from "@parity/cdm-env";
 import type { PolkadotClient } from "polkadot-api";
+import { getChainConfig } from "../config.js";
 import type { ResolvedSigner } from "./signer.js";
 import {
     PLAYGROUND_REGISTRY_CONTRACT,
@@ -56,10 +58,16 @@ const READ_ONLY_QUERY_ORIGIN = ss58Encode(REVIVE_PALLET_PUBLIC_KEY);
 
 /**
  * Build a ContractManager whose contract ADDRESSES are resolved live from the
- * CDM meta-registry (`cdmJson.registry`) — never from the snapshot. ABIs still
- * come from the snapshot. This is the same registry address and `"latest"`
- * dependency the playground-app resolves, so both ends always talk to the same
- * playground-registry contract even when either repo's snapshot is stale.
+ * CDM meta-registry — never from the snapshot. ABIs still come from the snapshot.
+ * This is the same registry address and `"latest"` dependency the playground-app
+ * resolves, so both ends always talk to the same playground-registry contract
+ * even when either repo's snapshot is stale.
+ *
+ * The meta-registry address is env-specific and owned by `@parity/cdm-env`
+ * (`getRegistryAddress`), NOT by `cdm.json` (whose `registry` is just whatever
+ * `cdm i` baked for one env). We resolve it for the default env — the same env
+ * `getConnection()` (the only client this is used with) is bound to — and inject
+ * it over the snapshot's value.
  *
  * `fromLiveClient`'s internal `getAddress` dry-runs hit the same Revive path
  * that emits the known `ReviveApi_trace_call` incompatibility noise on Paseo
@@ -70,9 +78,19 @@ async function liveManager(
     origin: string,
     signer?: ResolvedSigner,
 ): Promise<ContractManager> {
+    const { env, cdmEnvName } = getChainConfig();
+    const metaRegistry = getRegistryAddress(cdmEnvName);
+    if (!metaRegistry) {
+        throw new Error(
+            `Playground registry not available on ${env}: @parity/cdm-env has no registry ` +
+                `address for "${cdmEnvName}" yet. Bump @parity/cdm-env to a version that ` +
+                `includes it (see CLAUDE.md → "Adding a network / Summit").`,
+        );
+    }
+    const manifest: CdmJson = { ...cdmJson, registry: metaRegistry };
     try {
         return await withoutReviveTraceNoise(() =>
-            ContractManager.fromLiveClient(cdmJson, rawClient, paseo_asset_hub, {
+            ContractManager.fromLiveClient(manifest, rawClient, paseo_asset_hub, {
                 libraries: [PLAYGROUND_REGISTRY_CONTRACT],
                 defaultOrigin: origin,
                 ...(signer ? { defaultSigner: signer.signer } : {}),

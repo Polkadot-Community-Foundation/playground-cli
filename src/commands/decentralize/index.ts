@@ -29,12 +29,12 @@
  * playground step delegates to deploy's `publishToPlayground` helper.
  */
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import React from "react";
 import { render } from "ink";
 import { runCliCommand } from "../../cli-runtime.js";
 import { errorMessage, withSpan } from "../../telemetry.js";
-import { DEFAULT_ENV, type Env, resolveLegacyEnv } from "../../config.js";
+import { DEFAULT_ENV, ENV_FLAG_CHOICES, type Env, resolveLegacyEnv } from "../../config.js";
 import { resolveSigner, type ResolvedSigner, SignerNotAvailableError } from "../../utils/signer.js";
 import { resolveDomain } from "../../utils/decentralize/domain.js";
 import {
@@ -71,7 +71,13 @@ export const decentralizeCommand = new Command("decentralize")
         "--dot <name>",
         "DotNS domain (with or without `.dot`). Omit to auto-generate a free random name.",
     )
-    .option("--env <env>", "Target environment (default: paseo-next-v2)", DEFAULT_ENV)
+    .addOption(
+        // Same single-sourced choices + DEFAULT_ENV as deploy/deploy-all so all
+        // three commands validate --env identically and move together on a switch.
+        new Option("--env <env>", "Target environment")
+            .choices([...ENV_FLAG_CHOICES])
+            .default(DEFAULT_ENV),
+    )
     .option(
         "--suri <suri>",
         "Sign with this SURI (dev name like //Bob, or a BIP-39 mnemonic). " +

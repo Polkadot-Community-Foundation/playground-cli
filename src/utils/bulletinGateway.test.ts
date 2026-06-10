@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { DEFAULT_ENV, getChainConfig } from "./../config.js";
 import {
     bulletinGatewayUrl,
     fetchBulletinBytes,
@@ -38,9 +39,10 @@ describe("bulletinGatewayUrl", () => {
 });
 
 describe("getBulletinGateway", () => {
-    it("returns the paseo-next-v2 gateway by default", () => {
-        // Defaults to DEFAULT_ENV (paseo-next-v2); no env arg required.
-        expect(getBulletinGateway()).toBe("https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/");
+    it("defaults to the active env's gateway when no env arg is given", () => {
+        // No arg ⇒ DEFAULT_ENV. Derived (not pinned to paseo) so this stays
+        // correct if ACTIVE_TESTNET_ENV is flipped to another network.
+        expect(getBulletinGateway()).toBe(getChainConfig(DEFAULT_ENV).bulletinGateway);
     });
 
     it("returns the same URL when explicitly asked for paseo-next-v2", () => {

@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { getNetworkLabel } from "../config.js";
 
 const mockCreateClient = vi.fn();
 const mockGetWsProvider = vi.fn();
@@ -87,7 +88,9 @@ describe("getConnection", () => {
             throw new Error("WebSocket failed");
         });
 
-        await expect(getConnection()).rejects.toThrow("Could not connect to Paseo network");
+        await expect(getConnection()).rejects.toThrow(
+            `Could not connect to ${getNetworkLabel()} network`,
+        );
     });
 
     it("preserves the underlying error detail in the message", async () => {

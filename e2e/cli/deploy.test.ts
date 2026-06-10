@@ -79,10 +79,13 @@ describe("dot deploy — preflight and validation", () => {
 			result.exitCode,
 			`expected non-zero exit for --env mainnet, got 0\n${output}`,
 		).not.toBe(0);
-		// Exact wording from src/config.ts::getChainConfig():
-		//   "--env polkadot is not yet supported. Use --env paseo-next-v2 (default)."
+		// Wording from src/config.ts::getChainConfig():
+		//   "--env polkadot is not yet supported. Use --env <DEFAULT_ENV> (default)."
+		// Assert the shape, not the specific default env, so this survives a
+		// network switch (ACTIVE_TESTNET_ENV flip).
 		expect(output).toContain("not yet supported");
-		expect(output).toContain("--env paseo-next-v2");
+		expect(output).toContain("Use --env");
+		expect(output).toContain("(default)");
 	});
 
 	test("domain availability check runs before build/upload", { timeout: 300_000 }, async () => {

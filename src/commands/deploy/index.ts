@@ -43,7 +43,13 @@ import {
 import type { DeployOutcome, DeployEvent } from "../../utils/deploy/run.js";
 import type { SigningEvent } from "../../utils/deploy/signingProxy.js";
 import { buildSummaryView } from "./summary.js";
-import { DEFAULT_BUILD_DIR, type Env, resolveLegacyEnv } from "../../config.js";
+import {
+    DEFAULT_BUILD_DIR,
+    DEFAULT_ENV,
+    ENV_FLAG_CHOICES,
+    type Env,
+    resolveLegacyEnv,
+} from "../../config.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { NO_SESSION_HEADLESS_ERROR } from "./signerNotice.js";
@@ -108,25 +114,17 @@ export const deployCommand = new Command("deploy")
     .option("--suri <suri>", "Secret URI for the user signer (e.g. //Alice for dev)")
     .addOption(
         new Option("--env <env>", "Target environment")
-            // Accept the new env IDs (mirroring polkadot-app-deploy) plus the legacy
-            // `testnet|mainnet` aliases so existing scripts keep working.
-            .choices([
-                "preview",
-                "paseo-next",
-                "paseo-review",
-                "paseo-next-v2",
-                "polkadot",
-                "kusama",
-                "testnet",
-                "mainnet",
-            ])
-            .default("paseo-next-v2"),
+            // Env IDs (mirroring polkadot-app-deploy) plus the legacy
+            // `testnet|mainnet` aliases — single-sourced in config.ts so this
+            // stays in lockstep with the active network and the Env type.
+            .choices([...ENV_FLAG_CHOICES])
+            .default(DEFAULT_ENV),
     )
     .option("--dir <path>", "Project directory", process.cwd())
     .action(async (opts: DeployOpts) =>
         runCliCommand("deploy", { watchdog: true, hardExit: true }, async () => {
             const projectDir = resolve(opts.dir ?? process.cwd());
-            const env: Env = resolveLegacyEnv(opts.env ?? "paseo-next-v2");
+            const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
 
             let userSigner: ResolvedSigner | null = null;
 

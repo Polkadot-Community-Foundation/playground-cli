@@ -177,7 +177,7 @@ export function resolveContractDeployTarget(opts: ContractDeployOpts): ContractD
             ? [opts.bulletinUrl]
             : [bulletinUrl, ...cfg.bulletinRpcFallbacks],
         registryAddress: assertHexAddress(
-            opts.registryAddress ?? getRegistryAddress(cfg.env),
+            opts.registryAddress ?? getRegistryAddress(cfg.cdmEnvName),
             "Registry address",
         ),
     };
@@ -231,7 +231,7 @@ export function resolveContractInstallTarget(
     registryAddress ??= cdmJson?.registry;
     assethubUrl ??= cfg.assetHubRpc;
     ipfsGatewayUrl ??= cfg.bulletinGateway;
-    registryAddress ??= getRegistryAddress(cfg.env);
+    registryAddress ??= getRegistryAddress(cfg.cdmEnvName);
 
     return {
         assethubUrl,

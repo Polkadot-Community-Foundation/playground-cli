@@ -42,6 +42,7 @@
 import { Enum } from "polkadot-api";
 import { submitAndWatch } from "@parity/product-sdk-tx";
 import { seedToAccount } from "@parity/product-sdk-keys";
+import { getNetworkLabel } from "../../config.js";
 import type { PaseoClient } from "../connection.js";
 
 /**
@@ -102,7 +103,7 @@ export class DevFunderExhaustedError extends Error {
     readonly required: bigint;
     constructor(address: string, free: bigint, required: bigint) {
         super(
-            `Dev funder ${address} is too low to top up the product account: free=${free} planck, need ≥${required} planck. Refill on paseo-next-v2 Asset Hub before re-running.`,
+            `Dev funder ${address} is too low to top up the product account: free=${free} planck, need ≥${required} planck. Refill on ${getNetworkLabel()} Asset Hub before re-running.`,
         );
         this.name = "DevFunderExhaustedError";
         this.address = address;
