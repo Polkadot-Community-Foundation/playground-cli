@@ -39,7 +39,7 @@ import type { PaseoClient } from "../connection.js";
 /**
  * Returns true iff `address` (SS58) is mapped in Revive.
  *
- * Mirrors `bulletin-deploy/src/dotns.ts::checkIfAccountMapped`: derive the
+ * Mirrors `polkadot-app-deploy/src/dotns.ts::checkIfAccountMapped`: derive the
  * H160 via the `ReviveApi.address` runtime call (canonical
  * `AddressMapper::to_address(account_id)` on the chain side), then query
  * `Revive.OriginalAccount[H160]` — non-null iff the H160 has an associated

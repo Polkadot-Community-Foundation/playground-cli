@@ -14,11 +14,11 @@
 // limitations under the License.
 
 /**
- * Line-level parser that turns bulletin-deploy's banner/prose output into a
+ * Line-level parser that turns polkadot-app-deploy's banner/prose output into a
  * typed event stream the TUI can render. Best-effort — we use it only for
  * the phases that aren't signature-gated (chunk upload progress, etc.).
  *
- * Remove once bulletin-deploy exposes a first-class `onProgress` callback.
+ * Remove once polkadot-app-deploy exposes a first-class `onProgress` callback.
  */
 
 export type DeployPhase =
@@ -34,7 +34,7 @@ export type DeployLogEvent =
     | { kind: "chunk-progress"; current: number; total: number }
     | { kind: "info"; message: string };
 
-/** Map the human-readable banner titles bulletin-deploy prints to our phase keys. */
+/** Map the human-readable banner titles polkadot-app-deploy prints to our phase keys. */
 const PHASE_BANNERS: Array<{ pattern: RegExp; phase: DeployPhase }> = [
     { pattern: /^preflight$/i, phase: "preflight" },
     { pattern: /^storage$/i, phase: "storage" },
@@ -48,7 +48,7 @@ const BANNER_DIVIDER = /^=+$/;
 const CHUNK_RE = /^\s*\[(\d+)\/(\d+)\]/;
 
 /**
- * Stateful parser: bulletin-deploy's banner is three lines
+ * Stateful parser: polkadot-app-deploy's banner is three lines
  *
  *     ============================================================
  *     Storage
@@ -83,7 +83,7 @@ export class DeployLogParser {
             // a forward-compat hook; that violated the "no event per log line"
             // invariant documented in CLAUDE.md and left a loophole where a
             // single banner with a typo could open the info firehose. New
-            // phases bulletin-deploy adds can be matched by extending
+            // phases polkadot-app-deploy adds can be matched by extending
             // `PHASE_BANNERS`.
             return null;
         }
@@ -97,7 +97,7 @@ export class DeployLogParser {
             };
         }
 
-        // Everything else is quiet prose from bulletin-deploy (CID echoes,
+        // Everything else is quiet prose from polkadot-app-deploy (CID echoes,
         // nonce traces, per-chunk success lines, etc). We intentionally DROP
         // it rather than emit `info` events: the upload path produces
         // hundreds of such lines and every one of them allocated an event

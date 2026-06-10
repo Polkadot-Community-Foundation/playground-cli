@@ -210,7 +210,7 @@ function toParallelApp(
     return {
         name: m.name,
         projectDir,
-        // bulletin-deploy + the build step take buildDir relative to the project
+        // polkadot-app-deploy + the build step take buildDir relative to the project
         // dir; resolve it here so each app's output is isolated to its own dir.
         buildDir: resolve(projectDir, m.buildDir ?? ctx.defaultBuildDir),
         domain: m.domain,

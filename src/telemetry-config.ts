@@ -122,14 +122,14 @@ export function configureBulletinTelemetryEnv(
     env: EnvLike = process.env,
     signals?: InternalContextSignals,
 ): void {
-    if (env.BULLETIN_DEPLOY_USE_AMBIENT_SENTRY === undefined) {
-        env.BULLETIN_DEPLOY_USE_AMBIENT_SENTRY = "1";
+    if (env.PAD_USE_AMBIENT_SENTRY === undefined) {
+        env.PAD_USE_AMBIENT_SENTRY = "1";
     }
-    if (env.BULLETIN_DEPLOY_HOST_APP === undefined) {
-        env.BULLETIN_DEPLOY_HOST_APP = HOST_APP;
+    if (env.PAD_HOST_APP === undefined) {
+        env.PAD_HOST_APP = HOST_APP;
     }
-    if (env.BULLETIN_DEPLOY_TELEMETRY === undefined) {
-        env.BULLETIN_DEPLOY_TELEMETRY = resolveTelemetryEnabled(env, signals) ? "1" : "0";
+    if (env.PAD_TELEMETRY === undefined) {
+        env.PAD_TELEMETRY = resolveTelemetryEnabled(env, signals) ? "1" : "0";
     }
 }
 

@@ -62,7 +62,7 @@ describe("DeployLogParser", () => {
     it("drops unknown banner titles — extend PHASE_BANNERS to handle new ones", () => {
         // Regression guard: previously an unknown banner emitted an info
         // event, which could leak high-volume prose through the same code
-        // path. Unknown banners must be SILENT here — if bulletin-deploy
+        // path. Unknown banners must be SILENT here — if polkadot-app-deploy
         // adds a new phase, extend PHASE_BANNERS to match it.
         const events = feedAll([
             "============================================================",
@@ -74,7 +74,7 @@ describe("DeployLogParser", () => {
 
     it("drops plain prose lines so we don't flood the TUI", () => {
         // Regression guard: previously we emitted `info` events for every
-        // random log line. Bulletin-deploy produces hundreds per deploy
+        // random log line. polkadot-app-deploy produces hundreds per deploy
         // and the per-event allocation was a measurable contributor to
         // the multi-GB memory pressure we hit during chunk uploads.
         const events = feedAll(["   Domain: my-app.dot", "   Build dir: /tmp/dist"]);

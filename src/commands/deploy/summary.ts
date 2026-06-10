@@ -57,7 +57,7 @@ export interface SummaryView {
     approvalLines: string[];
     /**
      * Expected tap count from the pre-deploy plan. An estimate, not a
-     * promise: the DotNS plan can drift from what bulletin-deploy actually
+     * promise: the DotNS plan can drift from what polkadot-app-deploy actually
      * submits, and RFC-0010 allowance taps are demand-driven. The runtime
      * counter therefore shows bare sequential steps with no total.
      */

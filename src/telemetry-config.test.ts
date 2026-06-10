@@ -72,31 +72,31 @@ describe("bulletin env mapping", () => {
     it("sets ambient host vars and disables bulletin telemetry for external unset context", () => {
         const env: Record<string, string | undefined> = {};
         configureBulletinTelemetryEnv(env, { gitRemote: "some-user/private-app" });
-        expect(env.BULLETIN_DEPLOY_USE_AMBIENT_SENTRY).toBe("1");
-        expect(env.BULLETIN_DEPLOY_HOST_APP).toBe("playground-cli");
-        expect(env.BULLETIN_DEPLOY_TELEMETRY).toBe("0");
-        expect(env.BULLETIN_DEPLOY_MEM_REPORT).toBeUndefined();
+        expect(env.PAD_USE_AMBIENT_SENTRY).toBe("1");
+        expect(env.PAD_HOST_APP).toBe("playground-cli");
+        expect(env.PAD_TELEMETRY).toBe("0");
+        expect(env.PAD_MEM_REPORT).toBeUndefined();
     });
 
     it("enables bulletin telemetry when DOT_TELEMETRY=1", () => {
         const env: Record<string, string | undefined> = { DOT_TELEMETRY: "1" };
         configureBulletinTelemetryEnv(env, {});
-        expect(env.BULLETIN_DEPLOY_TELEMETRY).toBe("1");
+        expect(env.PAD_TELEMETRY).toBe("1");
     });
 
     it("preserves explicit bulletin env values", () => {
         const env: Record<string, string | undefined> = {
             DOT_TELEMETRY: "1",
-            BULLETIN_DEPLOY_USE_AMBIENT_SENTRY: "0",
-            BULLETIN_DEPLOY_HOST_APP: "custom-host",
-            BULLETIN_DEPLOY_TELEMETRY: "0",
-            BULLETIN_DEPLOY_MEM_REPORT: "0",
+            PAD_USE_AMBIENT_SENTRY: "0",
+            PAD_HOST_APP: "custom-host",
+            PAD_TELEMETRY: "0",
+            PAD_MEM_REPORT: "0",
         };
         configureBulletinTelemetryEnv(env, {});
-        expect(env.BULLETIN_DEPLOY_USE_AMBIENT_SENTRY).toBe("0");
-        expect(env.BULLETIN_DEPLOY_HOST_APP).toBe("custom-host");
-        expect(env.BULLETIN_DEPLOY_TELEMETRY).toBe("0");
-        expect(env.BULLETIN_DEPLOY_MEM_REPORT).toBe("0");
+        expect(env.PAD_USE_AMBIENT_SENTRY).toBe("0");
+        expect(env.PAD_HOST_APP).toBe("custom-host");
+        expect(env.PAD_TELEMETRY).toBe("0");
+        expect(env.PAD_MEM_REPORT).toBe("0");
     });
 });
 

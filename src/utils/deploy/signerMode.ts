@@ -20,8 +20,8 @@
  * rewriting callers.
  *
  * Today (testnet):
- *   - Dev mode: storage + DotNS go through bulletin-deploy's built-in
- *     mnemonic (or `--suri`) — passed EXPLICITLY, never via bulletin-deploy's
+ *   - Dev mode: storage + DotNS go through polkadot-app-deploy's built-in
+ *     mnemonic (or `--suri`) — passed EXPLICITLY, never via polkadot-app-deploy's
  *     own fallback chain. Since 0.8.x, `deploy()` called with no mnemonic /
  *     signer / suri resolves the persisted SSO session on disk
  *     (`~/.polkadot-apps/dot-cli_SsoSessions.json`, the same namespace
@@ -39,7 +39,7 @@
  *     so the user still sees the app in MyApps without ever tapping the
  *     phone. With no session, `claimedOwnerH160 = null` and the contract
  *     falls back to caller (dev account owns the app).
- *   - Phone mode: bulletin-deploy uses the user's phone signer for DotNS
+ *   - Phone mode: polkadot-app-deploy uses the user's phone signer for DotNS
  *     (3 taps). Storage uses the BulletInAllowance slot key resolved by
  *     `resolveStorageSignerOptions` — NEVER the phone signer (see that
  *     function's doc for why). Playground publish uses the user's phone
@@ -47,7 +47,7 @@
  *     defaults to caller, which is the user's H160 anyway.
  */
 
-import { DEFAULT_MNEMONIC, type DeployOptions } from "bulletin-deploy";
+import { DEFAULT_MNEMONIC, type DeployOptions } from "@parity/polkadot-app-deploy";
 import { ss58Encode } from "@parity/product-sdk-address";
 import type { CloudStorageApi } from "@parity/product-sdk-cloud-storage";
 import { seedToAccount } from "@parity/product-sdk-keys";
@@ -56,8 +56,8 @@ import type { ResolvedSigner } from "../signer.js";
 import type { DeployPlan } from "./availability.js";
 
 /**
- * The dev account used for dev-mode publish: `bulletin-deploy`'s
- * `DEFAULT_MNEMONIC` bare-root (the same identity bulletin-deploy uses
+ * The dev account used for dev-mode publish: `polkadot-app-deploy`'s
+ * `DEFAULT_MNEMONIC` bare-root (the same identity polkadot-app-deploy uses
  * internally for storage + DotNS when no explicit signer is provided).
  * All three on-chain phases — storage, DotNS, registry publish — sign as
  * the same account, so `is_authorized_to_republish` accepts dev iteration
@@ -69,11 +69,11 @@ import type { DeployPlan } from "./availability.js";
  *
  * `DEV_PUBLISH_ADDRESS` is exported so callers (e.g. the availability
  * preflight) can pass it as the expected DotNS owner whenever dev mode
- * will fall back to bulletin-deploy's default mnemonic.
+ * will fall back to polkadot-app-deploy's default mnemonic.
  *
  * IMPORTANT: do NOT swap to `createDevSigner("Alice")` from
  * `@parity/product-sdk-tx`. That helper uses `//Alice` derivation
- * (`5Grwva...`), which is a DIFFERENT account from bulletin-deploy's
+ * (`5Grwva...`), which is a DIFFERENT account from polkadot-app-deploy's
  * bare-mnemonic root (`5DfhGyQd...`). The `signerModeAlice.test.ts`
  * snapshot test guards against this regression.
  */
@@ -81,13 +81,13 @@ const DEV_PUBLISH_ACCOUNT = seedToAccount(DEFAULT_MNEMONIC, "");
 export const DEV_PUBLISH_ADDRESS = ss58Encode(DEV_PUBLISH_ACCOUNT.publicKey);
 
 /**
- * Construct a `ResolvedSigner` for bulletin-deploy's `DEFAULT_MNEMONIC`
+ * Construct a `ResolvedSigner` for polkadot-app-deploy's `DEFAULT_MNEMONIC`
  * bare-root account. Used by deploy's dev-mode publish flow, and by
  * `dot decentralize`'s interactive dev signer option — both keep
  * storage / DotNS / registry signing coherent under one identity.
  *
  * Despite the historical "Alice" label in the test snapshot, this is NOT
- * Substrate's `//Alice` (`5Grwva...`). It is bulletin-deploy's bare-root
+ * Substrate's `//Alice` (`5Grwva...`). It is polkadot-app-deploy's bare-root
  * (`5DfhGyQd...`). See `signerModeAlice.test.ts` for the pin.
  */
 export function createDevPublishSigner(): ResolvedSigner {
@@ -105,7 +105,7 @@ export type SignerMode = "dev" | "phone";
  * The SS58 address that will own and sign a deploy's DotNS name, by mode:
  *   - phone: the user's session account (the caller IS the user)
  *   - dev with an explicit `--suri` signer: that local account
- *   - dev otherwise: bulletin-deploy's `DEFAULT_MNEMONIC` bare-root
+ *   - dev otherwise: polkadot-app-deploy's `DEFAULT_MNEMONIC` bare-root
  *     (`DEV_PUBLISH_ADDRESS`), the identity it falls back to internally.
  *
  * Centralised here so the dev/phone owner rules live in one place. Consumed by
@@ -124,9 +124,9 @@ export function resolveDotnsOwnerAddress(
 
 export interface DeploySignerSetup {
     /**
-     * Options to pass to bulletin-deploy's `deploy()`. For dev mode this is
+     * Options to pass to polkadot-app-deploy's `deploy()`. For dev mode this is
      * an EXPLICIT `{ mnemonic: DEFAULT_MNEMONIC }` (or the `--suri` signer) —
-     * never `{}`, because bulletin-deploy 0.8.x answers empty options by
+     * never `{}`, because polkadot-app-deploy 0.8.x answers empty options by
      * resolving the persisted phone session from `playground login`. For
      * phone mode we inject the user's signer so DotNS registration is paid
      * for by — and recorded against — their account.
@@ -175,7 +175,7 @@ export interface ResolveOptions {
     publishToPlayground: boolean;
     /**
      * Known DotNS plan from the availability check. Shapes the approvals list
-     * to match what bulletin-deploy will actually submit (3 DotNS taps for a
+     * to match what polkadot-app-deploy will actually submit (3 DotNS taps for a
      * new register, 1 for an update). Absent = we haven't run the check yet, so
      * assume the most common path (new register). The list drives the pre-deploy summary and
      * the per-tap labels only — the runtime counter shows bare sequential
@@ -186,7 +186,7 @@ export interface ResolveOptions {
 }
 
 /**
- * DotNS approvals in the exact order bulletin-deploy will fire them. Order
+ * DotNS approvals in the exact order polkadot-app-deploy will fire them. Order
  * matters because `maybeWrapAuthForSigning` in run.ts labels each incoming
  * `signTx` call by its index in this list — the Nth `signTx` is labelled
  * with the Nth entry here, so a mismatch ends up showing "Finalize domain"
@@ -198,13 +198,13 @@ function dotnsApprovals(plan: DeployPlan | undefined): DeployApproval[] {
     const effective: DeployPlan = plan ?? { action: "register" };
 
     if (effective.action === "update") {
-        // Domain already owned by the signer — bulletin-deploy skips register()
+        // Domain already owned by the signer — polkadot-app-deploy skips register()
         // entirely and jumps straight to setContenthash. One tap.
         return [{ phase: "dotns", label: "Link content (DotNS setContenthash)" }];
     }
 
     // New register: commitment + finalize + setContenthash. There is NO PoP
-    // tap — bulletin-deploy reads the signer's tier and fails if insufficient;
+    // tap — polkadot-app-deploy reads the signer's tier and fails if insufficient;
     // it never submits a setUserPopStatus tx.
     return [
         { phase: "dotns", label: "Reserve domain (DotNS commitment)" },
@@ -238,7 +238,7 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
                 signerAddress: opts.userSigner.address,
             };
         } else {
-            // Pass the default mnemonic EXPLICITLY. bulletin-deploy 0.8.x
+            // Pass the default mnemonic EXPLICITLY. polkadot-app-deploy 0.8.x
             // treats "no mnemonic, no signer, no suri" as "resolve a signer
             // yourself", and its resolution finds the persisted phone session
             // from `playground login` before any dev fallback — turning a dev
@@ -276,7 +276,7 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
         } else {
             // Dev mode with either a session (extract H160 for owner claim)
             // or nothing (Alice owns). Construct Alice fresh either way —
-            // bulletin-deploy uses the same default mnemonic so all three
+            // polkadot-app-deploy uses the same default mnemonic so all three
             // tx phases sign as the same on-chain identity.
             publishSigner = createDevPublishSigner();
             if (opts.userSigner?.source === "session") {
@@ -290,22 +290,22 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
 
 /**
  * Resolve the signer for Bulletin STORAGE txs (the CAR chunk uploads),
- * threaded to bulletin-deploy as `storageSigner` / `storageSignerAddress`.
+ * threaded to polkadot-app-deploy as `storageSigner` / `storageSignerAddress`.
  * Every mode pins one explicitly: phone+session uses the local
  * BulletInAllowance slot key, `--suri` uses the caller's key, and dev mode
- * uses the dev bare-root — leaving it absent lets bulletin-deploy 0.8.x
+ * uses the dev bare-root — leaving it absent lets polkadot-app-deploy 0.8.x
  * auto-read the user's cached slot key and burn their quota (see below).
  *
- * Why this exists: since bulletin-deploy 0.8.x, passing `signer` routes
+ * Why this exists: since polkadot-app-deploy 0.8.x, passing `signer` routes
  * Bulletin storage through that signer too — not just DotNS. Chunk txs carry
  * up to 2 MiB of callData, and the phone session signer forwards the FULL
  * callData over the statement store (`session.createTransaction`), whose
  * request-size cap is 4 KiB on the pinned host-papp 0.7.9 (254 KiB upstream,
  * and the Android app itself caps statements at 256 KiB). A phone-signed
  * chunk therefore fails client-side with "message too big" before the phone
- * is ever contacted. bulletin-deploy's `storageSigner` takes precedence over
+ * is ever contacted. polkadot-app-deploy's `storageSigner` takes precedence over
  * `signer` for storage routing only, so DotNS keeps the phone signer while
- * chunks sign locally. bulletin-deploy 0.8.3 can resolve the same slot key
+ * chunks sign locally. polkadot-app-deploy 0.8.3 can resolve the same slot key
  * itself from the shared `dot-cli` allowance cache, but only as a best-effort
  * side path — when it misses (fresh machine, declined grant) it silently
  * falls back to phone-signing the chunks, so we resolve and pass the key
@@ -328,18 +328,18 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
  * (upstream guidance is "the authorization is what counts", i.e. existence
  * and expiry). After the Increase attempt the resolution retries without
  * the quota check, surfaces `quota.onWarning`, and the deploy continues
- * with the slot signer — bulletin-deploy reports per-chunk truth if the
+ * with the slot signer — polkadot-app-deploy reports per-chunk truth if the
  * extent does turn out to be enforced. Only a total resolution failure
  * (no slot key at all, grant declined) aborts the deploy.
  *
  * Dev and `--suri` deploys pin `storageSigner` to their own local key
- * instead of returning `{}`. bulletin-deploy 0.8.x auto-reads the user's
+ * instead of returning `{}`. polkadot-app-deploy 0.8.x auto-reads the user's
  * cached BulletInAllowance slot key whenever `storageSigner` is absent and
  * signs chunk uploads with it — silently burning the user's small
  * phone-granted quota (~10 txs / 4 MiB per grant) on deploys that were
  * supposed to run entirely on dev accounts. The dev bare-root carries its
  * own Bulletin authorization on paseo-next-v2; if it ever lapses,
- * bulletin-deploy's committed-signer wrapper falls back to the shared pool
+ * polkadot-app-deploy's committed-signer wrapper falls back to the shared pool
  * (the pre-0.8 dev storage path) without aborting. A `--suri` key is the
  * caller's responsibility per the CI escape hatch contract — unauthorized
  * keys land on the pool fallback the same way.

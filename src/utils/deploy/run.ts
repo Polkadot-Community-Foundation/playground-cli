@@ -71,7 +71,7 @@ export interface RunDeployOptions {
     skipBuild?: boolean;
     /** DotNS label (with or without `.dot`). */
     domain: string;
-    /** Signer mode — `dev` uses bulletin-deploy defaults, `phone` uses the user's session. */
+    /** Signer mode — `dev` uses polkadot-app-deploy defaults, `phone` uses the user's session. */
     mode: SignerMode;
     /** Whether to publish to the playground registry after DotNS succeeds. */
     publishToPlayground: boolean;
@@ -114,7 +114,7 @@ export interface DeployOutcome {
     fullDomain: string;
     /** Bulletin storage CID of the app bundle. */
     appCid: string;
-    /** IPFS CID of the directory root, if bulletin-deploy computed one. */
+    /** IPFS CID of the directory root, if polkadot-app-deploy computed one. */
     ipfsCid?: string;
     /** Metadata CID when `publishToPlayground` was true. */
     metadataCid?: string;
@@ -302,14 +302,14 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * When bulletin-deploy is about to use the user's phone signer for DotNS, wrap
+ * When polkadot-app-deploy is about to use the user's phone signer for DotNS, wrap
  * it so each `signTx` call surfaces a lifecycle event with the right label.
  *
  * Labels are pulled from the DotNS-phase entries of `setup.approvals`, in
- * order. `resolveSignerSetup` built that list to match bulletin-deploy's
+ * order. `resolveSignerSetup` built that list to match polkadot-app-deploy's
  * actual on-chain call sequence (the DotNS commitment / register /
  * setContenthash steps), so `seen === N` → phone shows
- * the Nth entry. If bulletin-deploy ever fires *more* sigs than approvals
+ * the Nth entry. If polkadot-app-deploy ever fires *more* sigs than approvals
  * anticipated, we fall back to the last known label — better than emitting
  * a bogus index. The step counter itself is plan-independent (bare
  * sequential numbers, no predicted total), so extra or skipped sigs can't

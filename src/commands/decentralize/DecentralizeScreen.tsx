@@ -301,7 +301,7 @@ function signerOptions(sessionSigner: ResolvedSigner | null): SelectOption<Signe
         {
             value: "dev",
             label: "dev signer",
-            hint: "fast, signs locally with the bulletin-deploy default account",
+            hint: "fast, signs locally with the polkadot-app-deploy default account",
         },
         {
             value: "phone",
@@ -470,7 +470,7 @@ function RunningStage({
     // sign-complete / sign-error. Only ever populated in phone mode.
     const [signingPrompt, setSigningPrompt] = useState<SigningEvent | null>(null);
 
-    // Throttle the latest-log line to ≤10 Hz. bulletin-deploy emits per-chunk
+    // Throttle the latest-log line to ≤10 Hz. polkadot-app-deploy emits per-chunk
     // events in bursts; setState-per-event floods Ink's reconciler (see
     // CLAUDE.md "Throttle TUI info updates"). We keep only the most recent
     // line — it's a status indicator, not a scrollback.

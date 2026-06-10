@@ -15,27 +15,27 @@
 
 /**
  * Top up the user's product-derived account from the same dev signer
- * `bulletin-deploy` funds its `attemptTestnetTopUp` from.
+ * `polkadot-app-deploy` funds its `attemptTestnetTopUp` from.
  *
  * On paseo-next-v2 the asset-hub runtime wires `pallet_revive::AutoMapper`
  * into the consumer-ref bump, so the first state-changing tx the user submits
  * from the product-derived account creates its H160 mapping automatically.
- * No explicit `Revive.map_account` is needed. `bulletin-deploy`'s deploy
+ * No explicit `Revive.map_account` is needed. `polkadot-app-deploy`'s deploy
  * flow then submits a `Revive.call` to `DotNS_RegistrarController.minCommitmentAge`
  * as the auto-map trigger, but only after confirming the substrate signer
  * holds at least `FEE_FLOOR_REGISTER` (0.1 PAS); otherwise the trigger tx
  * runs out of fees and the deploy reverts.
  *
  * We replicate that top-up here during `dot login` so the next `dot deploy`
- * (run from the same product account) has the headroom bulletin-deploy
- * expects. Crucially we use the SAME source signer bulletin-deploy uses:
+ * (run from the same product account) has the headroom polkadot-app-deploy
+ * expects. Crucially we use the SAME source signer polkadot-app-deploy uses:
  * the bare master account from the standard substrate dev mnemonic, NOT the
  * canonical `//Alice` derived account. paseo-next-v2 pre-funds this specific
  * address; our own `funder.ts::FUNDER_CHAIN` uses `seedToAccount(DEV_PHRASE,
  * "//Alice")` which resolves to a different SS58 that is unfunded on the v2
  * chain.
  *
- * Replace this module with a re-export from `bulletin-deploy` once it
+ * Replace this module with a re-export from `polkadot-app-deploy` once it
  * surfaces `attemptTestnetTopUp` (or an equivalent) at the package root.
  */
 
@@ -46,7 +46,7 @@ import type { PaseoClient } from "../connection.js";
 
 /**
  * Substrate dev mnemonic. Mirrors `DEFAULT_MNEMONIC` in
- * `bulletin-deploy/src/dotns.ts`.
+ * `polkadot-app-deploy/src/dotns.ts`.
  */
 const BULLETIN_DEV_MNEMONIC =
     "bottom drive obey lake curtain smoke basket hold race lonely fit walk";
@@ -54,7 +54,7 @@ const BULLETIN_DEV_MNEMONIC =
 /**
  * Lazy-initialised dev master account. Empty derivation path resolves to the
  * bare master from the mnemonic, matching `keyring.addFromUri(DEFAULT_MNEMONIC)`
- * in bulletin-deploy (the `{ label: "Alice", uri: DEFAULT_MNEMONIC }` branch
+ * in polkadot-app-deploy (the `{ label: "Alice", uri: DEFAULT_MNEMONIC }` branch
  * of `attemptTestnetTopUp`). This is DIFFERENT from `seedToAccount(DEV_PHRASE,
  * "//Alice")`. paseo-next-v2's pre-funding sits on the bare-master address,
  * not on the `//Alice` derived one.
@@ -75,8 +75,8 @@ const ONE_PAS = 1_000_000_000_000n;
 
 /**
  * Skip the top-up if the product-derived account already holds at least this
- * much PAS. Matches bulletin-deploy's `FEE_FLOOR_REGISTER` (0.1 PAS), the
- * threshold above which bulletin-deploy's own `attemptTestnetTopUp` no-ops.
+ * much PAS. Matches polkadot-app-deploy's `FEE_FLOOR_REGISTER` (0.1 PAS), the
+ * threshold above which polkadot-app-deploy's own `attemptTestnetTopUp` no-ops.
  * Keeping the same floor means re-running `dot login` doesn't drain the shared
  * dev faucet on every invocation.
  */
@@ -86,7 +86,7 @@ const SKIP_TRANSFER_THRESHOLD = 100_000_000_000n;
  * Headroom on top of the 1 PAS transfer that the dev master must carry. Covers
  * the `Balances.transfer_allow_death` fee plus a safety margin so subsequent
  * `dot login` runs immediately after a depleting transfer don't see a
- * temporarily-low balance and abort. 1 PAS matches bulletin-deploy's
+ * temporarily-low balance and abort. 1 PAS matches polkadot-app-deploy's
  * `SOURCE_BUFFER`.
  */
 const SOURCE_BUFFER = 1_000_000_000_000n;
@@ -119,12 +119,12 @@ export interface TopUpResult {
 /**
  * Ensure `recipient` (the product-derived SS58) holds at least
  * `SKIP_TRANSFER_THRESHOLD` PAS on Asset Hub. Sends `ONE_PAS` from the
- * bulletin-deploy dev signer if the recipient is below the floor; no-ops
+ * polkadot-app-deploy dev signer if the recipient is below the floor; no-ops
  * otherwise. Waits for GRANDPA finalization before returning so subsequent
  * `dot deploy` runs don't race a re-org that would roll back the credit.
  *
  * Throws {@link DevFunderExhaustedError} if the dev master no longer carries
- * `ONE_PAS + SOURCE_BUFFER` (matches bulletin-deploy's preflight floor in
+ * `ONE_PAS + SOURCE_BUFFER` (matches polkadot-app-deploy's preflight floor in
  * `attemptTestnetTopUp`); preflight catch surfaces the funder address so the
  * operator knows where to refill. Self-transfer is a hypothetical (would need
  * the dev mnemonic to derive a session key) but the equality check is cheap.
@@ -142,7 +142,7 @@ export async function topUpFromBulletinDev(
 
     const dev = getDevAccount();
     if (dev.ss58Address === recipient) {
-        // Mirrors bulletin-deploy's `attemptTestnetTopUp` self-transfer guard
+        // Mirrors polkadot-app-deploy's `attemptTestnetTopUp` self-transfer guard
         // (account.address === recipientSs58 short-circuits there too).
         return { skipped: true };
     }

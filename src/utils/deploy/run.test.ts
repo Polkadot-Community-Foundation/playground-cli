@@ -98,7 +98,7 @@ vi.mock("./storageQuota.js", () => ({
 }));
 const quotaApi = { marker: "bulletin-api" } as any;
 
-import { DEFAULT_MNEMONIC } from "bulletin-deploy";
+import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { runDeploy, type DeployEvent } from "./run.js";
 import { DEV_PUBLISH_ADDRESS } from "./signerMode.js";
 import type { ResolvedSigner } from "../signer.js";
@@ -167,7 +167,7 @@ describe("runDeploy", () => {
         const plan = events.find((e) => e.kind === "plan");
         expect(plan).toEqual({ kind: "plan", approvals: [] });
 
-        // bulletin-deploy auth must pin the dev identity explicitly: an
+        // polkadot-app-deploy auth must pin the dev identity explicitly: an
         // empty object makes 0.8.x resolve the persisted phone session for
         // DotNS and the user's cached slot key for storage (see signerMode.ts).
         expect(runStorageDeploy).toHaveBeenCalledTimes(1);
@@ -304,7 +304,7 @@ describe("runDeploy", () => {
 
         expect(outcome.approvalsRequested).toHaveLength(4);
 
-        // bulletin-deploy auth must carry a wrapped signer + our address.
+        // polkadot-app-deploy auth must carry a wrapped signer + our address.
         const arg = runStorageDeploy.mock.calls[0][0];
         expect(arg.auth.signerAddress).toBe("5Fake");
         expect(arg.auth.signer).toBeDefined();
@@ -313,7 +313,7 @@ describe("runDeploy", () => {
         // signer: chunk txs carry up to 2 MiB of callData and the phone's
         // statement-store channel rejects them as "message too big" before
         // the phone is even contacted. storageSigner takes precedence over
-        // signer for storage routing inside bulletin-deploy 0.8.3+.
+        // signer for storage routing inside polkadot-app-deploy 0.8.3+.
         expect(arg.auth.storageSigner).toBe(slotSigner);
         expect(arg.auth.storageSignerAddress).toBeDefined();
         expect(arg.auth.storageSignerAddress).not.toBe("5Fake");
@@ -346,7 +346,7 @@ describe("runDeploy", () => {
     });
 
     it("phone mode + re-deploy (plan.action=update): only setContenthash + playground taps", async () => {
-        // When the domain is already owned by the signer, bulletin-deploy
+        // When the domain is already owned by the signer, polkadot-app-deploy
         // skips `register()` entirely (no commit, no reveal, no PoP grant)
         // and jumps straight to `setContenthash`. Summary should reflect that.
         const { events, push } = collectEvents();

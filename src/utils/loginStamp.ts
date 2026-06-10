@@ -18,7 +18,7 @@
  *
  * Why: the statement-store (SSS) allowance that carries every phone
  * interaction is a 1-day renewable resource with a ~2-day grace window, and
- * there is NO on-chain query for it (confirmed by the bulletin-deploy
+ * there is NO on-chain query for it (confirmed by the polkadot-app-deploy
  * investigation: the SSS account appears in zero storage keys even while
  * working). The only reliable signal we can have is "when did the user last
  * pair", so we stamp it ourselves at login and use it as a warn-only

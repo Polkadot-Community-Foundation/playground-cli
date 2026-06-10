@@ -40,24 +40,24 @@ import { getChainConfig, type Env } from "../../config.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-type DotNSInstance = InstanceType<typeof import("bulletin-deploy").DotNS>;
+type DotNSInstance = InstanceType<typeof import("@parity/polkadot-app-deploy").DotNS>;
 
-let bulletinDeployPromise: Promise<typeof import("bulletin-deploy")> | null = null;
+let bulletinDeployPromise: Promise<typeof import("@parity/polkadot-app-deploy")> | null = null;
 
 async function createDotNS(): Promise<DotNSInstance> {
-    bulletinDeployPromise ??= import("bulletin-deploy");
+    bulletinDeployPromise ??= import("@parity/polkadot-app-deploy");
     const { DotNS } = await bulletinDeployPromise;
     return new DotNS();
 }
 
 /**
- * What bulletin-deploy will submit on-chain, used to render a correct phone-tap
+ * What polkadot-app-deploy will submit on-chain, used to render a correct phone-tap
  * count BEFORE the user confirms.
  *
  * `register` = new domain (commit + reveal + setContenthash).
  * `update`   = already owned by us; only setContenthash fires.
  *
- * NOTE: there is no PoP-grant tap. bulletin-deploy reads the signer's PoP tier
+ * NOTE: there is no PoP-grant tap. polkadot-app-deploy reads the signer's PoP tier
  * and fails if it is insufficient — it never submits a setUserPopStatus tx — so
  * the prediction does not include one.
  */
@@ -87,12 +87,12 @@ export interface CheckAvailabilityOptions {
      * user. When provided we derive its H160 via `ss58ToH160` and treat
      * "owned by you" as an update path rather than a `taken` block.
      *
-     * Must match whoever bulletin-deploy will use as its DotNS signer:
+     * Must match whoever polkadot-app-deploy will use as its DotNS signer:
      *   - Phone mode → user's signer address.
-     *   - Dev mode   → omit entirely (bulletin-deploy falls back to its
+     *   - Dev mode   → omit entirely (polkadot-app-deploy falls back to its
      *     built-in `DEFAULT_MNEMONIC`, and we have no easy way to derive
-     *     that H160 without replicating bulletin-deploy internals). When
-     *     omitted we skip the preflight ownership check; bulletin-deploy's
+     *     that H160 without replicating polkadot-app-deploy internals). When
+     *     omitted we skip the preflight ownership check; polkadot-app-deploy's
      *     own preflight during `deploy()` is run with the right signer and
      *     classifies the re-deploy correctly.
      *
@@ -114,7 +114,7 @@ export async function checkDomainAvailability(
     // account isn't mapped yet. On testnet the default account is already
     // mapped, so this is effectively a pure read path — no phone prompts.
     //
-    // We do not pass a signer here, so bulletin-deploy falls back to its
+    // We do not pass a signer here, so polkadot-app-deploy falls back to its
     // `DEFAULT_MNEMONIC` to build a keyring just for the read-only RPC
     // client. That fallback prints lines like
     //   `   SS58 Address: 5DfhG…`
@@ -122,7 +122,7 @@ export async function checkDomainAvailability(
     //   `   Account: mapped`
     // to stdout, which look — confusingly — like the deploying account. They
     // are not: nothing here signs anything. Silence them so the only address
-    // the user sees is the one bulletin-deploy logs from the *actual* deploy
+    // the user sees is the one polkadot-app-deploy logs from the *actual* deploy
     // (which uses the user's signer and we don't suppress).
     //
     // Silence is narrowed to the `connect()` call ONLY — `checkOwnership`
@@ -155,7 +155,7 @@ export async function checkDomainAvailability(
         // Ownership check — pass the user's H160 so "owned by you" is
         // correctly identified as an update path rather than a block.
         // When the caller doesn't know (dev mode with no session), we skip
-        // the ownership check and let bulletin-deploy's own preflight
+        // the ownership check and let polkadot-app-deploy's own preflight
         // (which always has the right signer) make the final call.
         const userH160 = options.ownerSs58Address ? ss58ToH160(options.ownerSs58Address) : null;
 
@@ -179,7 +179,7 @@ export async function checkDomainAvailability(
 
         // PoP-gated names (base length 6-8) require the SIGNING account to
         // already be a verified person on the target chain. Nothing in the
-        // deploy path can grant personhood — bulletin-deploy reads the tier and
+        // deploy path can grant personhood — polkadot-app-deploy reads the tier and
         // the register() tx fails on-chain if it is insufficient. So this is an
         // advisory note (the rule varies per environment and we don't read the
         // signer's tier here), not a hard block.
@@ -221,7 +221,7 @@ export async function checkDomainAvailability(
 /**
  * Replace `console.log` / `console.info` / `console.warn` with no-ops, returning
  * a restore() that puts the originals back. Used only in narrow windows where a
- * dependency prints state we don't want surfaced (bulletin-deploy's preflight
+ * dependency prints state we don't want surfaced (polkadot-app-deploy's preflight
  * fallback signer is the canonical example). Errors still go through —
  * `console.error` is intentionally not silenced so genuine failures surface.
  *

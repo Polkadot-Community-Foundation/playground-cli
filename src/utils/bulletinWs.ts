@@ -16,6 +16,6 @@
 /**
  * `polkadot-api`'s default is 40s, which is shorter than a single Bulletin
  * `TransactionStorage.store` submission can take. Keep metadata upload clients
- * on the same long heartbeat used by bulletin-deploy.
+ * on the same long heartbeat used by polkadot-app-deploy.
  */
 export const BULLETIN_WS_HEARTBEAT_MS = 300_000;

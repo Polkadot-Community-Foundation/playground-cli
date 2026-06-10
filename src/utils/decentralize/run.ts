@@ -64,7 +64,7 @@ export type DecentralizeLogEvent =
     | { kind: "signing"; event: SigningEvent };
 
 /**
- * Translate a bulletin-deploy `DeployLogEvent` into a single human-readable
+ * Translate a polkadot-app-deploy `DeployLogEvent` into a single human-readable
  * progress line. `chunk-progress` becomes "uploading chunk X/Y"; phase banners
  * are dropped (the TUI's step rows / the headless phase headers convey those).
  * Shared by the interactive RunningStage and the headless stdout path so both
@@ -88,7 +88,7 @@ export interface RunDecentralizeOptions {
     /**
      * Mirrors deploy's signer contract. "phone" requires a session in
      * `userSigner`; "dev" uses either the SURI-resolved signer (when
-     * `userSigner.source === "dev"`) or the bulletin-deploy default
+     * `userSigner.source === "dev"`) or the polkadot-app-deploy default
      * mnemonic, with the session's H160 claimed as owner when present.
      */
     mode: SignerMode;
@@ -136,7 +136,7 @@ export async function runDecentralize(
         publishToPlayground: wantPlayground,
     });
 
-    // Pick the signer used for the DotNS register tx. bulletin-deploy gets
+    // Pick the signer used for the DotNS register tx. polkadot-app-deploy gets
     // `{ signer, signerAddress }` (phone / `--suri`) or `{ mnemonic }` (dev —
     // always explicit, never `{}`: empty options make 0.8.x resolve the
     // persisted phone session). Either way we surface a single visible
@@ -150,9 +150,9 @@ export async function runDecentralize(
         // a signer for the publish phase even when one isn't strictly
         // needed; we keep the address visible to the user either way.
         userSigner?.address ??
-        "(bulletin-deploy default)";
+        "(polkadot-app-deploy default)";
     // Phone mode signs every on-chain phase with the session; dev mode always
-    // signs with a dev key (bulletin-deploy default mnemonic or `--suri`).
+    // signs with a dev key (polkadot-app-deploy default mnemonic or `--suri`).
     // This drives the "owned by a development account" callout — which speaks
     // to DotNS *domain* ownership (dev-signed in dev mode regardless of any
     // registry-level `claimedOwnerH160`).
@@ -285,7 +285,7 @@ export async function runDecentralize(
 }
 
 /**
- * Wrap the bulletin-deploy DotNS auth signer so each `signTx` call surfaces a
+ * Wrap the polkadot-app-deploy DotNS auth signer so each `signTx` call surfaces a
  * "check your phone" lifecycle event labelled by the matching DotNS approval.
  * Mirrors deploy's `maybeWrapAuthForSigning`. Returns `auth` unchanged when
  * there's no signer (dev mode → explicit dev mnemonic signed in-process,

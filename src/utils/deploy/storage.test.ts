@@ -24,12 +24,12 @@ const bulletinDeployMock = vi.hoisted(() =>
     })),
 );
 
-vi.mock("bulletin-deploy", () => ({
+vi.mock("@parity/polkadot-app-deploy", () => ({
     deploy: bulletinDeployMock,
 }));
 
 describe("runStorageDeploy", () => {
-    it("passes the selected env and endpoints to bulletin-deploy", async () => {
+    it("passes the selected env and endpoints to polkadot-app-deploy", async () => {
         await runStorageDeploy({
             content: "/tmp/project/dist",
             domainName: "my-app",

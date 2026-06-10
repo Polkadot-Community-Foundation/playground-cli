@@ -250,10 +250,10 @@ export function AccountSetup({
             // paseo-next-v2's pallet_revive::AutoMapper creates the H160
             // mapping on the first state-changing tx the product account
             // submits, so we don't run an explicit `Revive.map_account` here
-            // by default. We mirror bulletin-deploy's `attemptTestnetTopUp`
+            // by default. We mirror polkadot-app-deploy's `attemptTestnetTopUp`
             // and ensure the product-derived account has enough PAS to cover
-            // the auto-map trigger fee bulletin-deploy submits during
-            // `dot deploy`. Reuses the same dev source signer bulletin-deploy
+            // the auto-map trigger fee polkadot-app-deploy submits during
+            // `dot deploy`. Reuses the same dev source signer polkadot-app-deploy
             // uses so the funding lands on a chain that is actually
             // pre-funded (paseo-next-v2).
             //
