@@ -27,6 +27,7 @@ import type { PolkadotSigner } from "polkadot-api";
 import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import { ss58Encode } from "@parity/product-sdk-address";
+import { type Env, getChainConfig } from "../../config.js";
 
 /**
  * Dedicated testnet funder mnemonic. Obscure-by-convention (not in any
@@ -68,10 +69,12 @@ export const FUNDER_CHAIN: readonly Funder[] = [
 /** Convenience: public address of the dedicated funder. Used by the balance-check CI job. */
 export const DEDICATED_FUNDER_ADDRESS = FUNDER_CHAIN[1].address;
 
-/** Base Paseo Asset Hub faucet URL — shown when every funder is drained. */
-export const FAUCET_URL = "https://faucet.polkadot.io/?network=pah";
-
-/** Faucet URL pre-filled with the user's address — one click to self-fund. */
-export function faucetUrlFor(address: string): string {
-    return `${FAUCET_URL}&address=${address}`;
+/**
+ * Faucet URL for the env, pre-filled with the user's address — one click to
+ * self-fund — or null when the env (`getChainConfig().faucetUrl`) has no public
+ * faucet. The base URL is single-sourced in `src/config.ts`, not here.
+ */
+export function faucetUrlFor(address: string, env?: Env): string | null {
+    const base = getChainConfig(env).faucetUrl;
+    return base ? `${base}&address=${address}` : null;
 }

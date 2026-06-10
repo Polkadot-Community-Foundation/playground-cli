@@ -58,7 +58,7 @@ describe("resolveContractDeployTarget", () => {
             assethubUrl: cfg.assetHubRpc,
             bulletinUrl: cfg.bulletinRpc,
             bulletinUrls: [cfg.bulletinRpc, ...cfg.bulletinRpcFallbacks],
-            registryAddress: getRegistryAddress(cfg.env),
+            registryAddress: getRegistryAddress(cfg.cdmEnvName),
         });
     });
 
@@ -90,7 +90,7 @@ describe("resolveContractInstallTarget", () => {
         expect(resolveContractInstallTarget({})).toEqual({
             assethubUrl: cfg.assetHubRpc,
             ipfsGatewayUrl: cfg.bulletinGateway,
-            registryAddress: getRegistryAddress(cfg.env),
+            registryAddress: getRegistryAddress(cfg.cdmEnvName),
             chainName: undefined,
         });
     });

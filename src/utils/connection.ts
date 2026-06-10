@@ -23,7 +23,18 @@ import { getWsProvider } from "polkadot-api/ws";
 import { paseo_bulletin as bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
 import { paseo_individuality as individuality } from "@parity/product-sdk-descriptors/paseo-individuality";
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
-import { getChainConfig } from "../config.js";
+import { getChainConfig, getNetworkLabel } from "../config.js";
+
+// The chain DESCRIPTORS are intentionally the `paseo_*` ones for EVERY env,
+// including summit — only the RPC URLs are env-driven (via getChainConfig). This
+// mirrors `@parity/cdm-env`, whose `DEPLOY_CHAIN_DESCRIPTORS`/`ASSET_HUB_DESCRIPTORS`
+// also map `w3s` (summit) → `paseo_asset_hub`/`paseo_bulletin`; the deploy engine
+// `@parity/polkadot-app-deploy` is descriptor-free (live `getUnsafeApi()`). PAPI
+// typed calls decode by structural type IDs, so this holds as long as summit's
+// runtime shapes match paseo's (they do today — same testnet family). Dedicated
+// `summit-*` descriptors DO exist in `@parity/product-sdk-descriptors` as an escape
+// hatch if the runtimes ever diverge; switching to them before they're needed would
+// DIVERGE from the engine. See CLAUDE.md → "Adding a network / Summit".
 
 type PaseoChains = {
     assetHub: typeof paseo_asset_hub;
@@ -85,7 +96,11 @@ function timeoutAfter(ms: number): Promise<never> {
         // test harness has no such guard and was hanging ~30 s past junit write.
         const t = setTimeout(
             () =>
-                reject(new Error(`Timed out connecting to Paseo after ${Math.round(ms / 1000)}s`)),
+                reject(
+                    new Error(
+                        `Timed out connecting to ${getNetworkLabel()} after ${Math.round(ms / 1000)}s`,
+                    ),
+                ),
             ms,
         );
         t.unref();
@@ -105,7 +120,7 @@ export function getConnection(): Promise<PaseoClient> {
             connectionPromise = null;
             const detail = err instanceof Error ? err.message : String(err);
             throw new Error(
-                `Could not connect to Paseo network — check your internet connection (${detail})`,
+                `Could not connect to ${getNetworkLabel()} network — check your internet connection (${detail})`,
                 { cause: err instanceof Error ? err : undefined },
             );
         });
