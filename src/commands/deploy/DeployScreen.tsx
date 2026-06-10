@@ -99,10 +99,11 @@ export interface DeployScreenInputs {
      */
     tag?: string;
     userSigner: ResolvedSigner | null;
-    onDone: (outcome: DeployOutcome | null) => void;
+    onDone: (outcome: DeployOutcome | null, opts?: { graceful?: boolean }) => void;
 }
 
 export type Stage =
+    | { kind: "ack" }
     | { kind: "prompt-build" }
     | { kind: "prompt-signer" }
     | { kind: "prompt-contracts" }
@@ -193,19 +194,12 @@ export function DeployScreen({
     // the summary card shows the correct phone-approval count (a new register
     // is 3 DotNS taps, an update of a name we already own is 1).
     const [plan, setPlan] = useState<DeployPlan | null>(null);
-    const [stage, setStage] = useState<Stage>(() =>
-        pickInitialStage(
-            effectiveInitialSkipBuild,
-            effectiveInitialMode,
-            initialDeployContracts,
-            initialBuildDir,
-            initialDomain,
-            initialPublish,
-            initialModdable,
-            null,
-            initialTag,
-        ),
-    );
+    // Always open on the README acknowledgement so users learn — before
+    // investing any time in the flow — that their README becomes the app's
+    // playground detail page. Enter drops into the normal prompt sequence
+    // (computed from any pre-filled flags); Esc exits gracefully so they can
+    // go edit the README first.
+    const [stage, setStage] = useState<Stage>({ kind: "ack" });
 
     // Passed down to RunningStage; read back on completion for the sparkline.
     // Ref instead of state so the high-frequency chunk-progress stream doesn't
@@ -287,6 +281,13 @@ export function DeployScreen({
                 network={getNetworkLabel()}
                 right={VERSION_LABEL}
             />
+
+            {stage.kind === "ack" && (
+                <AckStage
+                    onContinue={() => advance()}
+                    onExit={() => onDone(null, { graceful: true })}
+                />
+            )}
 
             {stage.kind === "prompt-build" && (
                 <Box flexDirection="column">
@@ -387,7 +388,6 @@ export function DeployScreen({
                     <PromptHint text={DOMAIN_HINT} />
                     <Input
                         label="domain"
-                        placeholder="my-app"
                         prefill={domain ?? ""}
                         externalError={domainError}
                         validate={(v) => {
@@ -433,8 +433,8 @@ export function DeployScreen({
                     <Select<boolean>
                         label="publish to the playground?"
                         options={[
-                            { value: false, label: "no", hint: "deploy to my .dot address only" },
                             { value: true, label: "yes", hint: "list it in the public playground" },
+                            { value: false, label: "no", hint: "deploy to my .dot address only" },
                         ]}
                         initialIndex={0}
                         onSelect={(yes) => {
@@ -461,17 +461,17 @@ export function DeployScreen({
                         label="let others remix (mod) this app?"
                         options={[
                             {
-                                value: false,
-                                label: "no",
-                                hint: "keep my source private",
-                            },
-                            {
                                 value: true,
                                 label: "yes",
                                 hint: "share my source so others can remix",
                             },
+                            {
+                                value: false,
+                                label: "no",
+                                hint: "keep my source private",
+                            },
                         ]}
-                        initialIndex={1}
+                        initialIndex={0}
                         onSelect={(yes) => {
                             setModdable(yes);
                             if (yes) {
@@ -601,30 +601,6 @@ export function DeployScreen({
 
 // ── Stage pickers ────────────────────────────────────────────────────────────
 
-function pickInitialStage(
-    skipBuild: boolean | null,
-    mode: SignerMode | null,
-    deployContracts: boolean | null,
-    buildDir: string | null,
-    domain: string | null,
-    publish: boolean | null,
-    moddable: boolean | null,
-    repositoryUrl: string | null,
-    tag: string | null | undefined,
-): Stage {
-    return pickNextStage(
-        skipBuild,
-        mode,
-        deployContracts,
-        buildDir,
-        domain,
-        publish,
-        moddable,
-        repositoryUrl,
-        tag,
-    );
-}
-
 export function pickNextStage(
     skipBuild: boolean | null,
     mode: SignerMode | null,
@@ -652,6 +628,34 @@ export function pickNextStage(
     // is fully resolved, and only when no `--tag` flag pre-filled it.
     if (publish && tag === undefined) return { kind: "prompt-tags" };
     return { kind: "confirm" };
+}
+
+// ── README acknowledgement ─────────────────────────────────────────────────────
+
+/**
+ * First screen of every interactive deploy. Many users don't realise the
+ * project README is what renders as their app's detail page in the playground,
+ * so we surface it up front: Enter continues into the normal prompt flow, Esc
+ * exits cleanly (exit code 0) so they can update the README and re-run.
+ */
+function AckStage({ onContinue, onExit }: { onContinue: () => void; onExit: () => void }) {
+    useInput((_input, key) => {
+        if (key.return) onContinue();
+        else if (key.escape) onExit();
+    });
+    return (
+        <Box flexDirection="column">
+            <Callout tone="accent" title="Your app detail page">
+                <Text>
+                    Your README.md becomes your app's detail page on the playground. Make sure it's
+                    up to date before you publish.
+                </Text>
+            </Callout>
+            <Box marginTop={1}>
+                <Hint>{"enter to continue · esc to exit and edit"}</Hint>
+            </Box>
+        </Box>
+    );
 }
 
 // ── Moddable preflight ────────────────────────────────────────────────────────

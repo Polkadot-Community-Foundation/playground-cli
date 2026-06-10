@@ -17,9 +17,11 @@ import { describe, it, expect } from "vitest";
 
 import {
     assertPublishFlagsConsistent,
+    classifyDeployDone,
     isFullySpecified,
     shouldResolveUserSigner,
 } from "./index.js";
+import type { DeployOutcome } from "../../utils/deploy/run.js";
 
 describe("shouldResolveUserSigner", () => {
     it("skips signer lookup for pure dev deploys", () => {
@@ -57,6 +59,27 @@ describe("isFullySpecified", () => {
 
     it("allows headless deploy when contracts are explicitly skipped", () => {
         expect(isFullySpecified({ ...fullySpecified, contracts: false })).toBe(true);
+    });
+});
+
+describe("classifyDeployDone", () => {
+    // A realistic non-null outcome — only its non-null-ness matters here.
+    const outcome = { appUrl: "https://x.dot", fullDomain: "x.dot" } as DeployOutcome;
+
+    it("treats a non-null outcome as success", () => {
+        expect(classifyDeployDone(outcome)).toBe("success");
+        // `graceful` is irrelevant once an outcome exists.
+        expect(classifyDeployDone(outcome, { graceful: true })).toBe("success");
+    });
+
+    it("treats a graceful null cancel as graceful-cancel (exit 0)", () => {
+        expect(classifyDeployDone(null, { graceful: true })).toBe("graceful-cancel");
+    });
+
+    it("treats a plain null cancel as a failure (exit 1)", () => {
+        expect(classifyDeployDone(null)).toBe("failure");
+        expect(classifyDeployDone(null, {})).toBe("failure");
+        expect(classifyDeployDone(null, { graceful: false })).toBe("failure");
     });
 });
 
