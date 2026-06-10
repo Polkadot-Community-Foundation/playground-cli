@@ -48,7 +48,7 @@ import type { PaseoClient } from "../connection.js";
  * The storage query can throw `Incompatible runtime entry Storage(Revive.OriginalAccount)`
  * when our bundled `@parity/product-sdk-descriptors/paseo-asset-hub` type
  * info for `OriginalAccount` has drifted from the live runtime. We swallow it
- * to "not mapped" rather than crashing init — the fallback `ensureMapped`
+ * to "not mapped" rather than crashing login — the fallback `ensureMapped`
  * path will handle the no-op case correctly if the account turns out to be
  * already mapped (the chain rejects the redundant `map_account` extrinsic,
  * which our error surface displays clearly). Drop the swallow once
@@ -78,7 +78,7 @@ export async function checkMapping(client: PaseoClient, address: string): Promis
  * prior on-chain activity has touched the user's account.
  *
  * Catches known-benign rejections that effectively mean "the account is
- * already mapped" so the init flow doesn't surface a scary error on a
+ * already mapped" so the login flow doesn't surface a scary error on a
  * second run:
  *
  *   - `InvalidTransaction::Stale` — the chain saw a tx with this nonce

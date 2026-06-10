@@ -56,7 +56,7 @@ export const BULLETIN_RESOURCE: AllocatableResource = {
     value: undefined,
 };
 
-const INIT_HINT = 'Run "playground init" to grant allowances.';
+const LOGIN_HINT = 'Run "playground login" to grant allowances.';
 
 /**
  * Live handle for one in-flight phone approval. Close it exactly once: with
@@ -121,7 +121,7 @@ export async function getBulletinSlotAuthorization(
 /**
  * Authorization status of the CACHED Bulletin slot key, without going over
  * the wire to the phone. Returns null when no slot key is cached yet —
- * callers treat that as "needs a grant". Used by `playground init` to decide
+ * callers treat that as "needs a grant". Used by `playground login` to decide
  * whether to skip the approval dialog.
  */
 export async function cachedBulletinSlotAuthorization(
@@ -137,7 +137,7 @@ export async function cachedBulletinSlotAuthorization(
 function requireSession(publishSigner: ResolvedSigner) {
     const { userSession, adapter } = publishSigner;
     if (!userSession || !adapter) {
-        throw new Error(`No Bulletin allowance account available. ${INIT_HINT}`);
+        throw new Error(`No Bulletin allowance account available. ${LOGIN_HINT}`);
     }
     return { userSession, adapter };
 }
@@ -203,8 +203,8 @@ export async function getBulletinAllowanceSigner({
         const { address, status } = authorization;
         throw new Error(
             status.authorized
-                ? `Bulletin allowance for ${address} is live but does not have enough quota. Re-run \`playground init\` and approve on your phone.`
-                : `Bulletin allowance account ${address} is not authorized on-chain yet. Re-run \`playground init\` and approve on your phone.`,
+                ? `Bulletin allowance for ${address} is live but does not have enough quota. Re-run \`playground login\` and approve on your phone.`
+                : `Bulletin allowance account ${address} is not authorized on-chain yet. Re-run \`playground login\` and approve on your phone.`,
         );
     }
 
@@ -213,7 +213,7 @@ export async function getBulletinAllowanceSigner({
 
 /**
  * Resolve the cached Bulletin slot signer without issuing any mobile resource
- * allocation request. Contract deploy uses this path so `playground init`
+ * allocation request. Contract deploy uses this path so `playground login`
  * remains the single place that grants allowances.
  */
 export async function getCachedBulletinAllowanceSigner({
@@ -226,7 +226,7 @@ export async function getCachedBulletinAllowanceSigner({
     const { adapter } = requireSession(publishSigner);
     const slotSigner = await createSlotAccountSigner(adapter, BULLETIN_RESOURCE);
     if (!slotSigner) {
-        throw new Error(`No cached Bulletin allowance account available. ${INIT_HINT}`);
+        throw new Error(`No cached Bulletin allowance account available. ${LOGIN_HINT}`);
     }
     if (!bulletinApi) return slotSigner;
 
@@ -240,8 +240,8 @@ export async function getCachedBulletinAllowanceSigner({
     const { address, status } = authorization;
     throw new Error(
         status.authorized
-            ? `Bulletin allowance for ${address} is live but does not have enough quota. Re-run \`playground init\` and approve on your phone.`
-            : `Bulletin allowance account ${address} is not authorized on-chain yet. Re-run \`playground init\` and approve on your phone.`,
+            ? `Bulletin allowance for ${address} is live but does not have enough quota. Re-run \`playground login\` and approve on your phone.`
+            : `Bulletin allowance account ${address} is not authorized on-chain yet. Re-run \`playground login\` and approve on your phone.`,
     );
 }
 

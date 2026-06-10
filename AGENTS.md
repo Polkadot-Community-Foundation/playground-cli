@@ -110,7 +110,7 @@ the Parity Apache-2.0 block (SPDX line + Parity copyright line, both required) â
   immediately after upload.
 - `playground deploy` currently relies on the Kubo binary path and must not pass `jsMerkle: true`
   until bulletin-deploy's pure-JS merkleizer preserves DAG-PB directory/file blocks correctly.
-  `playground init` installs `ipfs` so deploys can rely on the Kubo CLI after setup.
+  `playground login` installs `ipfs` so deploys can rely on the Kubo CLI after setup.
 
 ## Runtime Safety
 

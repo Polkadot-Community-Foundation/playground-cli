@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * E2E tests for `dot init` — session detection and allowance checks.
+ * E2E tests for `dot login` — session detection and allowance checks.
  *
  * Note: the full QR flow cannot be automated (requires a physical phone).
  * These tests verify:
@@ -27,7 +27,7 @@
  * have those tools on PATH, often via wrapper scripts in /usr/bin that
  * delegate into $HOME/.cargo. PATH-stripping a wrapper without breaking
  * sibling binaries in the same dir isn't possible. The cold-start smoke
- * job (.github/workflows/e2e.yml :: init-cold-smoke) installs the dev/<branch>
+ * job (.github/workflows/e2e.yml :: login-cold-smoke) installs the dev/<branch>
  * SEA binary via install.sh inside a fresh ubuntu:22.04 container with no
  * toolchain pre-installed and is the authoritative test for detection +
  * install-then-use. It runs after Dev Release on each PR, plus daily on
@@ -41,12 +41,12 @@ import { tmpdir } from "node:os";
 import { dot } from "./helpers/dot.js";
 
 function makeTempHome(): string {
-	const dir = mkdtempSync(join(tmpdir(), "dot-e2e-init-"));
+	const dir = mkdtempSync(join(tmpdir(), "dot-e2e-login-"));
 	mkdirSync(join(dir, ".polkadot-apps"), { recursive: true });
 	return dir;
 }
 
-describe("dot init — session detection", () => {
+describe("dot login — session detection", () => {
 	let tempHome: string;
 
 	beforeEach(() => {
@@ -54,7 +54,7 @@ describe("dot init — session detection", () => {
 	});
 
 	afterEach(() => {
-		// dot init may install toolchains (rustup) into the temp HOME. Child
+		// dot login may install toolchains (rustup) into the temp HOME. Child
 		// processes can still be writing when cleanup runs, causing ENOTEMPTY.
 		// Best-effort cleanup — the OS cleans /tmp on its own.
 		try {
@@ -62,13 +62,13 @@ describe("dot init — session detection", () => {
 		} catch { /* best-effort */ }
 	});
 
-	test("init with no session prompts for QR scan", async () => {
-		// IMPORTANT: do NOT pass `-y` here. With `-y`, init skips the
+	test("login with no session prompts for QR scan", async () => {
+		// IMPORTANT: do NOT pass `-y` here. With `-y`, login skips the
 		// connect()/login block entirely — there's no session probe and no
 		// QR. The previous version of this test used `-y` and only asserted
 		// `exitCode !== 0`, which simply verified that toolchain installation
 		// in a fresh tempHome takes longer than 15s — nothing about sessions.
-		const result = await dot(["init"], {
+		const result = await dot(["login"], {
 			home: tempHome,
 			timeout: 25_000,
 		});
@@ -77,7 +77,7 @@ describe("dot init — session detection", () => {
 			result.exitCode,
 			`expected non-zero exit while waiting for QR\n${output}`,
 		).not.toBe(0);
-		// We expect the QR prompt. If init fell into the "Login skipped"
+		// We expect the QR prompt. If login fell into the "Login skipped"
 		// branch instead, the login service was unreachable from this runner
 		// — the test cannot validate the QR rendering and we should fail
 		// loudly rather than silently accept a degraded path. (Previously
@@ -94,12 +94,12 @@ describe("dot init — session detection", () => {
 		expect(output).toContain("Scan with the Polkadot mobile app to log in");
 	});
 
-	test("init with corrupted session file does not silently succeed", async () => {
+	test("login with corrupted session file does not silently succeed", async () => {
 		const sessionFile = join(tempHome, ".polkadot-apps", "dot-cli_SsoSessions.json");
 		const corrupt = "{{{{not valid json!!";
 		writeFileSync(sessionFile, corrupt);
 
-		const result = await dot(["init"], {
+		const result = await dot(["login"], {
 			home: tempHome,
 			timeout: 25_000,
 		});
@@ -118,7 +118,7 @@ describe("dot init — session detection", () => {
 		}
 		expect(output).toContain("Scan with the Polkadot mobile app to log in");
 
-		// Defence-in-depth: init must NOT have silently overwritten the
+		// Defence-in-depth: login must NOT have silently overwritten the
 		// corrupt file with a fresh empty session. A regression that
 		// "fixes" the parse failure by deleting the file would otherwise
 		// pass — and silently erase whatever the user had on disk.
@@ -126,7 +126,7 @@ describe("dot init — session detection", () => {
 	});
 });
 
-describe("dot init — dev signer bypass", () => {
+describe("dot login — dev signer bypass", () => {
 	test("deploy --help works with --suri and no session", async () => {
 		const tempHome = makeTempHome();
 		try {

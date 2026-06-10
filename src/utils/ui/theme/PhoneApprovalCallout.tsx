@@ -20,7 +20,7 @@ export interface PhoneApprovalCalloutProps {
     step: number;
     /**
      * Optional: only pass when the total is exactly known (e.g. a fixed
-     * single-tap flow like the init allowance grant). Deploy flows omit it —
+     * single-tap flow like the login allowance grant). Deploy flows omit it —
      * taps are demand-driven (allowance grants, DotNS plan drift), so a
      * predicted total regularly turned out wrong ("step 4 of 5" with no
      * fifth step).

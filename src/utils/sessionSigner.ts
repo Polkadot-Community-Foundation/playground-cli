@@ -45,7 +45,7 @@ import type { PolkadotSigner } from "polkadot-api";
 export type { ProductAccountRef };
 
 export const INCOMPLETE_SESSION_MESSAGE =
-    'Stored login session is missing the root account public key. Run "playground logout" and then "playground init" to pair again.';
+    'Stored login session is missing the root account public key. Run "playground logout" and then "playground login" to pair again.';
 
 export function sessionRootPublicKey(session: UserSession): Uint8Array {
     const rootAccountId = (session as { rootAccountId?: Uint8Array }).rootAccountId;
@@ -62,7 +62,7 @@ export function sessionRootPublicKey(session: UserSession): Uint8Array {
  * This is the single source of truth for product-account math in the CLI.
  * Both `createPlaygroundSessionSigner` (which feeds the key to the SDK
  * signer) and `auth.ts::deriveSessionAddresses` (which builds the display
- * triple for `playground init`) go through here so a future change to
+ * triple for `playground login`) go through here so a future change to
  * derivation params can't silently desync the signer from what we print.
  *
  * sr25519 soft derivation is composable on public keys alone, so deriving
@@ -90,7 +90,7 @@ export function createPlaygroundSessionSigner(
 export const SESSION_EXPIRED_MESSAGE =
     "Phone session expired: the statement-store allowance lapses ~2-3 days after login " +
     "and cannot be renewed remotely (renewal requests travel over the expired channel). " +
-    'Run "playground logout" and then "playground init" to pair again.';
+    'Run "playground logout" and then "playground login" to pair again.';
 
 /**
  * Fast-fail for expired statement-store (SSS) allowances.

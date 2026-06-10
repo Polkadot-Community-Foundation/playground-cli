@@ -85,6 +85,6 @@ export function staleSessionWarning(lastLoginAtMs: number | null, nowMs: number)
         `warning: your phone session was paired ${days} days ago. Phone signing stops ` +
         "working ~2 days after login (the statement-store allowance expires and cannot be " +
         'renewed remotely). If signing hangs or fails, run "playground logout" and then ' +
-        '"playground init" to pair again.'
+        '"playground login" to pair again.'
     );
 }

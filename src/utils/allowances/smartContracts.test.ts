@@ -58,7 +58,7 @@ describe("ensureSmartContractAllowance", () => {
         expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 
-    it("throws the init hint when there is no session/adapter", async () => {
+    it("throws the login hint when there is no session/adapter", async () => {
         await expect(
             ensureSmartContractAllowance({
                 deploySigner: {
@@ -68,7 +68,7 @@ describe("ensureSmartContractAllowance", () => {
                     destroy() {},
                 },
             }),
-        ).rejects.toThrow(/playground init/);
+        ).rejects.toThrow(/playground login/);
     });
 
     it("uses a cached allocation without going over the wire", async () => {

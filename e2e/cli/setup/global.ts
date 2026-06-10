@@ -37,7 +37,7 @@ export async function setup() {
 	// Fail the whole suite up front instead, with a clear message.
 	//
 	// To run only the offline-eligible tests (install, build, --help-style
-	// init checks) without chain connectivity, set E2E_ALLOW_OFFLINE_SETUP=1
+	// login checks) without chain connectivity, set E2E_ALLOW_OFFLINE_SETUP=1
 	// — this is for local development on a flaky network, never CI.
 	const allowOffline = process.env.E2E_ALLOW_OFFLINE_SETUP === "1";
 	try {

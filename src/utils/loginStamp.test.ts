@@ -36,10 +36,10 @@ describe("staleSessionWarning", () => {
         expect(staleSessionWarning(now - 2 * DAY_MS + 1000, now)).toBeNull();
     });
 
-    it("warns past 2 days with the logout/init remedy", () => {
+    it("warns past 2 days with the logout/login remedy", () => {
         const warning = staleSessionWarning(now - 2 * DAY_MS - 1000, now);
         expect(warning).toMatch(/playground logout/);
-        expect(warning).toMatch(/playground init/);
+        expect(warning).toMatch(/playground login/);
         expect(warning).toMatch(/2 days/);
     });
 

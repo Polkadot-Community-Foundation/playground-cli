@@ -72,7 +72,7 @@ describe("resolveSignerSetup — dev mode", () => {
     it("pins the DEFAULT_MNEMONIC explicitly so bulletin-deploy can never pick up a persisted phone session", () => {
         // Regression: bulletin-deploy 0.8.x resolves the persisted SSO session
         // (~/.polkadot-apps/dot-cli_SsoSessions.json — written by `playground
-        // init`, shared namespace) whenever it is called with NO mnemonic, NO
+        // login`, shared namespace) whenever it is called with NO mnemonic, NO
         // signer, and NO suri. Passing `{}` therefore turned dev mode into
         // phone mode (DotNS taps on the phone) for every logged-in user.
         // An explicit mnemonic short-circuits its chooseSignerInput before
@@ -150,7 +150,7 @@ describe("resolveSignerSetup — phone mode", () => {
                 userSigner: null,
                 publishToPlayground: false,
             }),
-        ).toThrow(/playground init|--signer dev/);
+        ).toThrow(/playground login|--signer dev/);
     });
 
     it("no plan + no publish → 3 DotNS approvals in exact order, auth options wired to user signer", () => {
@@ -295,7 +295,7 @@ describe("resolveStorageSignerOptions", () => {
         // retries. Fail fast with a fix-it hint instead.
         getBulletinAllowanceSignerMock.mockRejectedValue(new Error("user declined"));
         await expect(resolveStorageSignerOptions("phone", sessionSignerWithHost())).rejects.toThrow(
-            /playground init/,
+            /playground login/,
         );
     });
 
@@ -310,7 +310,7 @@ describe("resolveStorageSignerOptions", () => {
         getBulletinAllowanceSignerMock
             .mockRejectedValueOnce(
                 new Error(
-                    "Bulletin allowance for 5Slot is live but does not have enough quota. Re-run `playground init` and approve on your phone.",
+                    "Bulletin allowance for 5Slot is live but does not have enough quota. Re-run `playground login` and approve on your phone.",
                 ),
             )
             .mockResolvedValueOnce(fallbackSigner);
@@ -343,18 +343,20 @@ describe("resolveStorageSignerOptions", () => {
                 bulletinApi: {} as any,
                 requiredBytes: 1,
             }),
-        ).rejects.toThrow(/playground init/);
+        ).rejects.toThrow(/playground login/);
     });
 
-    it("session missing host wiring throws the init hint", async () => {
+    it("session missing host wiring throws the login hint", async () => {
         // requireSession inside getBulletinAllowanceSigner fires here; the
         // wrap keeps the message actionable either way.
         getBulletinAllowanceSignerMock.mockRejectedValue(
             new Error(
-                'No Bulletin allowance account available. Run "playground init" to grant allowances.',
+                'No Bulletin allowance account available. Run "playground login" to grant allowances.',
             ),
         );
         const user = fakeSigner("session"); // no userSession / adapter
-        await expect(resolveStorageSignerOptions("phone", user)).rejects.toThrow(/playground init/);
+        await expect(resolveStorageSignerOptions("phone", user)).rejects.toThrow(
+            /playground login/,
+        );
     });
 });

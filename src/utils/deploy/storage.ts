@@ -22,7 +22,7 @@
  * Note: we deliberately do NOT pass `jsMerkle: true` — bulletin-deploy's
  * pure-JS merkleizer drops DAG-PB structural blocks under the `rawLeaves`
  * + `wrapWithDirectory` path we use, leaving deployed sites unparseable.
- * We rely on the Kubo binary path (installed by `dot init`) until upstream
+ * We rely on the Kubo binary path (installed by `dot login`) until upstream
  * fixes `merkleizeJS`. See the call site below and CLAUDE.md for context.
  *
  * All retry, nonce recovery, pool authorization, and DAG-PB verification
@@ -93,7 +93,7 @@ export async function runStorageDeploy(options: StorageDeployOptions): Promise<D
             // parses zero files.
             //
             // Falling back to the Kubo binary path (default) produces a
-            // complete, parseable CAR. `dot init` installs `ipfs` so the
+            // complete, parseable CAR. `dot login` installs `ipfs` so the
             // binary is present on any machine that finished setup.
             //
             // Revisit when bulletin-deploy's `merkleizeJS` is fixed upstream

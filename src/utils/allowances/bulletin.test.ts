@@ -55,7 +55,7 @@ import {
 const PUBLIC_KEY = new Uint8Array(32).fill(1);
 const SLOT_SIGNER = { publicKey: PUBLIC_KEY } as any;
 
-const ENV_HINT = /playground init/;
+const ENV_HINT = /playground login/;
 
 function sessionSigner(): ResolvedSigner {
     return {
@@ -97,7 +97,7 @@ describe("getBulletinAllowanceSigner", () => {
         expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 
-    it("throws the init hint when there is no session/adapter", async () => {
+    it("throws the login hint when there is no session/adapter", async () => {
         await expect(
             getBulletinAllowanceSigner({
                 publishSigner: {
@@ -369,7 +369,7 @@ describe("getCachedBulletinAllowanceSigner", () => {
         expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 
-    it("fails with the init hint on a cache miss without requesting allocation", async () => {
+    it("fails with the login hint on a cache miss without requesting allocation", async () => {
         createSlotAccountSignerMock.mockResolvedValue(null);
 
         await expect(

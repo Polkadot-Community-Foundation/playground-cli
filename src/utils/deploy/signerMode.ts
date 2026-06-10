@@ -25,7 +25,7 @@
  *     own fallback chain. Since 0.8.x, `deploy()` called with no mnemonic /
  *     signer / suri resolves the persisted SSO session on disk
  *     (`~/.polkadot-apps/dot-cli_SsoSessions.json`, the same namespace
- *     `playground init` writes) and phone-signs DotNS — so an empty options
+ *     `playground login` writes) and phone-signs DotNS — so an empty options
  *     object silently turns dev mode into phone mode for any logged-in user.
  *     Likewise, an absent `storageSigner` makes it auto-read the user's
  *     cached BulletInAllowance slot key and burn their phone-granted quota
@@ -127,7 +127,7 @@ export interface DeploySignerSetup {
      * Options to pass to bulletin-deploy's `deploy()`. For dev mode this is
      * an EXPLICIT `{ mnemonic: DEFAULT_MNEMONIC }` (or the `--suri` signer) —
      * never `{}`, because bulletin-deploy 0.8.x answers empty options by
-     * resolving the persisted phone session from `playground init`. For
+     * resolving the persisted phone session from `playground login`. For
      * phone mode we inject the user's signer so DotNS registration is paid
      * for by — and recorded against — their account.
      */
@@ -221,7 +221,7 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
     if (opts.mode === "phone") {
         if (!opts.userSigner) {
             throw new Error(
-                'Phone signer requested but no session found. Run "playground init" to log in, or pass --signer dev.',
+                'Phone signer requested but no session found. Run "playground login" to log in, or pass --signer dev.',
             );
         }
         bulletinDeployAuthOptions = {
@@ -241,7 +241,7 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
             // Pass the default mnemonic EXPLICITLY. bulletin-deploy 0.8.x
             // treats "no mnemonic, no signer, no suri" as "resolve a signer
             // yourself", and its resolution finds the persisted phone session
-            // from `playground init` before any dev fallback — turning a dev
+            // from `playground login` before any dev fallback — turning a dev
             // deploy into 3-4 phone taps. An explicit mnemonic wins its
             // chooseSignerInput outright, so the session file is never read.
             // The derived identity is unchanged: DEFAULT_MNEMONIC's bare root
@@ -258,7 +258,7 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
     //
     // Dev mode: we ALWAYS sign with a dev key, never with the session.
     //   - With `--suri`: that SURI dev signer (its address becomes owner).
-    //   - With a session (user did `dot init`): construct Alice and pass
+    //   - With a session (user did `dot login`): construct Alice and pass
     //     the session's product H160 as `claimedOwnerH160` — the contract
     //     records the user as owner so MyApps resolves their app.
     //   - With neither: construct Alice and leave claimedOwnerH160 null
@@ -395,7 +395,7 @@ export async function resolveStorageSignerOptions(
             throw new Error(
                 `Could not resolve the Bulletin storage key for this session (${firstMessage}). ` +
                     "Storage uploads are too large to sign on the phone, so deploy cannot continue. " +
-                    'Re-run "playground init" and approve the Bulletin allowance on your phone.',
+                    'Re-run "playground login" and approve the Bulletin allowance on your phone.',
             );
         }
     }

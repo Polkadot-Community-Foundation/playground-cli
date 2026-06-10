@@ -18,7 +18,7 @@
  *
  * Lives in its own file (not `.tsx`) so the test runner can import it without
  * dragging React + Ink through vitest — same convention as `completion.ts`
- * next to `InitScreen.tsx`.
+ * next to `LoginScreen.tsx`.
  */
 
 import type { LogoutStatus } from "../../utils/auth.js";

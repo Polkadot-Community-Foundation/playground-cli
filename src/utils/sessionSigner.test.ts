@@ -46,11 +46,11 @@ describe("createPlaygroundSessionSigner", () => {
     const root = seedToAccount(DEV_PHRASE, "");
 
     // ────────────────────────────────────────────────────────────────────────
-    // Init / deploy / playground-app equivalence
+    // Login / deploy / playground-app equivalence
     //
     // Every flow that references "the user's account" must resolve to the same
     // SS58 — the product account derived at `mnemonic + "/product/{id}/0"`.
-    //   - `playground init` displays `ss58Encode(signer.publicKey)`.
+    //   - `playground login` displays `ss58Encode(signer.publicKey)`.
     //   - `playground deploy --signer phone` passes the same SS58 to
     //     bulletin-deploy as `signerAddress`.
     //   - The deployed playground-app's `HostProvider.getProductAccount`
@@ -58,7 +58,7 @@ describe("createPlaygroundSessionSigner", () => {
     // As long as all three pin the same `(rootPubKey, productId, 0)` triple they
     // yield byte-identical SS58 strings. This is the regression guard.
     // ────────────────────────────────────────────────────────────────────────
-    test("init signer address === deploy signer address === playground-app address", () => {
+    test("login signer address === deploy signer address === playground-app address", () => {
         const session = fakeSession({ rootAccountId: root.publicKey });
 
         const cliSigner = createPlaygroundSessionSigner(session, {
@@ -132,7 +132,7 @@ describe("wrapSignerWithSssFastFail", () => {
         } as PolkadotSigner;
     }
 
-    test("rejects fast with the logout/init message when NoAllowanceError is logged", async () => {
+    test("rejects fast with the logout/login message when NoAllowanceError is logged", async () => {
         const hanging = makeSigner({
             signTx: () => {
                 console.error(NO_ALLOWANCE_LINE);
@@ -148,7 +148,7 @@ describe("wrapSignerWithSssFastFail", () => {
         // Well under the SDK's 180s queue timeout / 90s watcher timeout.
         expect(Date.now() - started).toBeLessThan(5_000);
         expect(SESSION_EXPIRED_MESSAGE).toMatch(/playground logout/);
-        expect(SESSION_EXPIRED_MESSAGE).toMatch(/playground init/);
+        expect(SESSION_EXPIRED_MESSAGE).toMatch(/playground login/);
     });
 
     test("signBytes gets the same fast-fail (raw signing rides the same channel)", async () => {

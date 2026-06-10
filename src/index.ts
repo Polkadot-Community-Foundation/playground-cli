@@ -21,7 +21,7 @@
 import "./bootstrap.js";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
-import { initCommand } from "./commands/init/index.js";
+import { loginCommand } from "./commands/login/index.js";
 import { modCommand } from "./commands/mod/index.js";
 import { buildCommand } from "./commands/build.js";
 import { contractCommand } from "./commands/contract.js";
@@ -126,7 +126,7 @@ const program = new Command()
     .description("CLI for Polkadot Playground")
     .version(pkg.version);
 
-program.addCommand(initCommand);
+program.addCommand(loginCommand);
 program.addCommand(modCommand);
 program.addCommand(buildCommand);
 program.addCommand(contractCommand);

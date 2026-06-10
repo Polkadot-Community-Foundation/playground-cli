@@ -22,7 +22,7 @@
  *
  * RPC failures resolve to `false` (treated as "not mapped" so the caller can
  * fall back to `ensureMapped` rather than surfacing an opaque error to the
- * user during init).
+ * user during login).
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -92,7 +92,7 @@ describe("checkMapping", () => {
         expect(result).toBe(false);
     });
 
-    it("treats OriginalAccount RPC errors as 'not mapped' so init can fall through to map_account", async () => {
+    it("treats OriginalAccount RPC errors as 'not mapped' so login can fall through to map_account", async () => {
         const client = makeClient({
             address: FAKE_H160,
             original: async () => {

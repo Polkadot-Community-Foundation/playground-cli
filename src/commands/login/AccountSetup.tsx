@@ -135,7 +135,7 @@ export function AccountSetup({
                     prev.map((s) => ({
                         ...s,
                         status: "failed",
-                        error: "no session — run playground init to log in",
+                        error: "no session — run playground login to log in",
                     })),
                 );
                 finish(false);
@@ -223,7 +223,7 @@ export function AccountSetup({
                         accountSetupOk = false;
                         update(0, {
                             status: "failed",
-                            error: `denied: ${denied}. Re-run \`playground init\` and approve on your phone.`,
+                            error: `denied: ${denied}. Re-run \`playground login\` and approve on your phone.`,
                             valueTone: "danger",
                         });
                     } else {
@@ -262,7 +262,7 @@ export function AccountSetup({
             // not fire (e.g. the account pre-existed the AutoMapper runtime
             // upgrade and a fresh `OnNewAccount` was never triggered). This
             // covers the cold-start case the deploy preflight error message
-            // ("Account is not mapped in Revive. Run `dot init`...") would
+            // ("Account is not mapped in Revive. Run `dot login`...") would
             // otherwise leave the user stuck on.
             update(1, { status: "active", value: "checking balance…", valueTone: "muted" });
             try {
@@ -314,7 +314,7 @@ export function AccountSetup({
         return () => {
             cancelled = true;
             // Clear a pending grace timer so an unmount mid-wait doesn't keep
-            // the Node event loop alive — `init` runs `hardExit: false` and
+            // the Node event loop alive — `login` runs `hardExit: false` and
             // relies on the loop draining naturally after teardown.
             if (graceTimer) clearTimeout(graceTimer);
             session?.destroy();

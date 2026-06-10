@@ -93,7 +93,7 @@ function createAdapter(): TerminalAdapter {
 }
 
 export const STALE_SESSION_MESSAGE =
-    'Stored login session could not be read — it may have been written by a different app version. Run "playground logout" and then "playground init" to pair again.';
+    'Stored login session could not be read — it may have been written by a different app version. Run "playground logout" and then "playground login" to pair again.';
 
 /**
  * Classify a `waitForSessions` failure: decode/shape failures (a stored
@@ -263,7 +263,7 @@ export async function connect(): Promise<ConnectResult> {
     // DeviceIdentity), and a stale phone-sent `Disconnected` statement there —
     // 7-day TTL — is replayed by `createSession.init()` and silently tears the
     // freshly paired session back out of `SsoSessionsV2`, which is exactly the
-    // "init succeeds but `deploy` says No signer available" failure. See
+    // "login succeeds but `deploy` says No signer available" failure. See
     // `sessionReset.ts` for the full mechanism. We destroy the probe adapter
     // (it loaded the OLD identity) before deleting the identity, then build a
     // fresh adapter that loads/creates a brand-new one.

@@ -18,7 +18,7 @@
  * One-shot operator probe: dump the bulletin-deploy dev funder's free /
  * reserved / frozen balance on both stable Paseo Asset Hub (where an operator
  * faucets / teleports from) and paseo-next-v2 Asset Hub (where the CLI's
- * `dot init` consumes funds from). Run via:
+ * `dot login` consumes funds from). Run via:
  *   bun run tools/check-bulletin-funder.ts
  *
  * Address is derived inside `src/utils/account/bulletinTopUp.ts` — keep this

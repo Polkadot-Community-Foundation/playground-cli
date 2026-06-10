@@ -69,7 +69,7 @@ describe("isBenignUnsubscriptionError", () => {
         // The 0.8 statement-store stack surfaces the raw-client teardown
         // throw as a floating bare rejection instead of wrapping it in an
         // rxjs UnsubscriptionError. Same benign family, new shape — without
-        // this match a successful `pg init` exits 1. (Pre-0.8 this test
+        // this match a successful `pg login` exits 1. (Pre-0.8 this test
         // pinned the opposite: the bare form never occurred at teardown.)
         const err = new Error("Not connected");
         expect(isBenignUnsubscriptionError(err)).toBe(true);
@@ -98,7 +98,7 @@ describe("isBenignUnsubscriptionError", () => {
         // useEffect cleanup and other sync sites can call it), and we
         // `void adapter.destroy()` inside — fire-and-forget. The drain
         // therefore still races and surfaces this exact rejection shape on
-        // some `dot init` / `dot logout` paths. Underlying work has already
+        // some `dot login` / `dot logout` paths. Underlying work has already
         // succeeded; suppress.
         const err = new Error("Client destroyed");
         err.name = "DestroyedError";

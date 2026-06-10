@@ -31,7 +31,7 @@
  *   - Whether `Revive.OriginalAccount[H160]` is set (= account is mapped)
  *
  * If AutoMap=true AND OriginalAccount returns a value, the on-chain mapping is
- * in place and `dot init`'s storage check should skip the `map_account` tx.
+ * in place and `dot login`'s storage check should skip the `map_account` tx.
  */
 
 import { createClient } from "polkadot-api";
@@ -99,10 +99,10 @@ try {
         const original = await api.query.Revive.OriginalAccount.getValue(h160);
         if (original) {
             console.log(`Revive.OriginalAccount : ${original}`);
-            console.log(`\n→ Account IS mapped. \`dot init\` will skip map_account.`);
+            console.log(`\n→ Account IS mapped. \`dot login\` will skip map_account.`);
         } else {
             console.log(`Revive.OriginalAccount : <none>`);
-            console.log(`\n→ Account is NOT mapped yet. \`dot init\` will attempt map_account.`);
+            console.log(`\n→ Account is NOT mapped yet. \`dot login\` will attempt map_account.`);
         }
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -112,7 +112,7 @@ try {
                 `\n→ Mapping status is INDETERMINATE (bundled descriptor is stale vs. live runtime).`,
             );
             console.log(
-                `  \`dot init\` will fall through to map_account regardless. Once the descriptor`,
+                `  \`dot login\` will fall through to map_account regardless. Once the descriptor`,
             );
             console.log(`  ships a regenerated paseo-asset-hub, this query will work.`);
         } else {

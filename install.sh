@@ -83,10 +83,10 @@ export PATH="$INSTALL_DIR/bin:$HOME/.local/bin:$PATH"
 echo ""
 echo -e "$CMD is ready! Setting up dependencies…"
 echo ""
-if ! "$INSTALL_DIR/bin/$CMD" init --yes; then
-  INIT_EXIT=$?
-  echo -e "\n\033[33mDependency setup failed. Run \033[1m$CMD init\033[0;33m when ready.\033[0m" >&2
-  exit "$INIT_EXIT"
+if ! "$INSTALL_DIR/bin/$CMD" login --yes; then
+  LOGIN_EXIT=$?
+  echo -e "\n\033[33mDependency setup failed. Run \033[1m$CMD login\033[0;33m when ready.\033[0m" >&2
+  exit "$LOGIN_EXIT"
 fi
 
 # Final "what to run next" prompt, styled to match the yellow rounded-border
@@ -99,6 +99,6 @@ echo ""
 echo -e "${Y}╭─ ${B}Next step${R}${Y} ────────────────────────────╮${R}"
 echo -e "${Y}│${R} Log in with the Polkadot mobile app:   ${Y}│${R}"
 echo -e "${Y}│${R}                                        ${Y}│${R}"
-echo -e "${Y}│${R}   ${B}$CMD init${R}                      ${Y}│${R}"
+echo -e "${Y}│${R}   ${B}$CMD login${R}                     ${Y}│${R}"
 echo -e "${Y}╰────────────────────────────────────────╯${R}"
 echo -e "${D}  Tip: ${ALIAS} is a short alias for ${CMD}.${R}"

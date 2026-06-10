@@ -26,7 +26,7 @@ import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
 import type { LoginHandle, SessionAddresses } from "../../utils/auth.js";
 
-export function InitScreen({
+export function LoginScreen({
     login,
     existingAddresses,
     onDone,
@@ -70,7 +70,7 @@ export function InitScreen({
         // Account setup is a prerequisite for setUsername (the tx needs the
         // smart-contract allowance + a funded product account). When account
         // setup fails we skip the prompt entirely and treat the step as
-        // resolved-with-no-username so the init flow can land on
+        // resolved-with-no-username so the login flow can land on
         // "setup complete (with errors)" instead of hanging.
         if (!success) setUsername(null);
     };
@@ -86,7 +86,7 @@ export function InitScreen({
     return (
         <Box flexDirection="column">
             <Header
-                cmd="playground init"
+                cmd="playground login"
                 network={getNetworkLabel()}
                 username={username ?? undefined}
                 right={VERSION_LABEL}

@@ -41,7 +41,7 @@
  * the topic history and re-delivers that unresponded `Disconnected`; host-papp's
  * session manager reacts by removing the just-paired session from
  * `SsoSessionsV2` (the secret blobs are left behind). The net effect is an empty
- * session repository the instant `playground init` finishes — every later
+ * session repository the instant `playground login` finishes — every later
  * command then fails with "No signer available".
  *
  * Rotating the host `DeviceIdentity` changes `hostAccount`, which moves the new

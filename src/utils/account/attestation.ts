@@ -17,7 +17,7 @@
  * Bulletin attestation — read current authorization, format for the TUI.
  *
  * Bulletin authorizations (`TransactionStorage.Authorizations`) carry an
- * explicit `expiration` block number. `dot init` surfaces this on every run
+ * explicit `expiration` block number. `dot login` surfaces this on every run
  * so users can see — even when already signed in — how much longer their
  * upload quota is valid for.
  *

@@ -34,7 +34,7 @@ function run(cmd: string, opts?: { shell?: string }): Promise<string> {
 
 /**
  * Prepend `dir` to `process.env.PATH` if not already present. Lets a step that
- * just installed a binary expose it to the rest of `dot init` without waiting
+ * just installed a binary expose it to the rest of `dot login` without waiting
  * for a shell restart.
  */
 export function prependPath(dir: string): void {
@@ -148,7 +148,7 @@ export const TOOL_STEPS: ToolStep[] = [
             // rustup-init writes binaries to $CARGO_HOME/bin (default ~/.cargo/bin)
             // and updates shell rc files, but those edits don't reach the running
             // dot process. Prepend the bin dir so the very next step in this same
-            // `dot init` can resolve `rustup`.
+            // `dot login` can resolve `rustup`.
             prependPath(resolve(process.env.CARGO_HOME ?? `${homedir()}/.cargo`, "bin"));
         },
         manualHint: "https://rustup.rs",

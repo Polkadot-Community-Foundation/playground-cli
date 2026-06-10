@@ -16,7 +16,7 @@
 /**
  * Current Bulletin authorization extents expose used counters plus granted
  * allowance totals. The CLI only needs remaining quota for preflight decisions
- * and `dot init` display.
+ * and `dot login` display.
  */
 
 export interface AuthorizationExtent {

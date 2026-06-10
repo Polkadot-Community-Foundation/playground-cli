@@ -18,7 +18,7 @@
  *
  * Lives in a `.ts` (not `.tsx`) so tests can exercise the prompt ordering
  * without importing Ink / React. Mirrors the layout convention used by
- * `init/completion.ts`, `init/identityLine.ts`, etc.
+ * `login/completion.ts`, `login/identityLine.ts`, etc.
  */
 
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
