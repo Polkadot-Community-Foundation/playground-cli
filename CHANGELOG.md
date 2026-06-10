@@ -1,5 +1,12 @@
 # playground-cli
 
+## 0.34.3
+
+### Patch Changes
+
+- 13008c8: Polish the `playground deploy` interactive prompts: drop the confusing `my-app` placeholder on the domain input (people tried to backspace it), default the "publish to the playground?" question to "yes", and order every prompt so the default option sits on top.
+- 13008c8: `playground deploy` now opens with a short acknowledgement that your README.md becomes your app's detail page on the playground. Press enter to continue into the normal flow, or esc to exit cleanly and update the README first. The screen only appears in interactive mode, so scripted/headless deploys are unaffected.
+
 ## 0.34.2
 
 ### Patch Changes
