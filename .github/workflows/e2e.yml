@@ -8,7 +8,7 @@ on:
     schedule:
         - cron: "0 6 * * *"
     workflow_dispatch:
-    # Fires the init-cold-smoke job after Dev Release publishes the per-PR
+    # Fires the login-cold-smoke job after Dev Release publishes the per-PR
     # `dev/<branch>` tag, so the smoke can install via the same one-liner
     # the dev-release bot posts on the PR.
     workflow_run:
@@ -44,10 +44,10 @@ jobs:
                     - cell: pr-mod
                       # source: e2e/cli/mod.test.ts → describe("dot mod — clone")
                       pattern: "dot mod — clone"
-                    - cell: pr-init-session
-                      # sources: e2e/cli/init.test.ts → describe("dot init …")
+                    - cell: pr-login-session
+                      # sources: e2e/cli/login.test.ts → describe("dot login …")
                       #          e2e/cli/session.test.ts → describe("session management")
-                      pattern: "dot init|session management"
+                      pattern: "dot login|session management"
         outputs:
             tag: ${{ steps.setup.outputs.tag }}
         steps:
@@ -541,21 +541,21 @@ jobs:
                       "$API_URL/repos/$REPO/issues" \
                       -d "$(jq -n --arg title "$TITLE" --arg body "$BODY" '{title: $title, body: $body}')"
 
-    init-cold-smoke:
-        # Runs `dot init` inside a fresh ubuntu:22.04 container — no rustup,
+    login-cold-smoke:
+        # Runs `dot login` inside a fresh ubuntu:22.04 container — no rustup,
         # no IPFS, no foundry, no cdm pre-installed. The cell-based jobs
         # above run on a GitHub Actions runner that already has most of
         # those tools on PATH, so they can't catch regressions in the
         # install / post-install path-config logic (e.g. paritytech/
         # playground-app#118 — newly-installed rustup unreachable from the
-        # same init process). This job is the cold-start defence: every
+        # same login process). This job is the cold-start defence: every
         # dependency must be installed AND become reachable to subsequent
-        # init steps in the same process.
+        # login steps in the same process.
         #
         # Install path: the same `curl … install.sh | VERSION=… bash`
         # one-liner the dev-release bot posts on every PR — i.e. exactly
         # what an end user runs. install.sh downloads the SEA binary,
-        # adds it to PATH, then runs `dot init` as its final step (errors
+        # adds it to PATH, then runs `dot login` as its final step (errors
         # surface via exit code; see CLAUDE.md "Non-obvious invariants").
         # Going through the published binary catches Bun-compile-only
         # regressions that `bun run src/index.ts` masks.
@@ -565,7 +565,7 @@ jobs:
         #     for that PR; this is the per-PR cold-start gate.
         #   - schedule / workflow_dispatch on main → install latest
         #     stable release (no VERSION).
-        name: Init cold-start smoke test
+        name: Login cold-start smoke test
         runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 30
         if: |
@@ -573,7 +573,7 @@ jobs:
             github.event_name == 'workflow_dispatch' ||
             (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         steps:
-            - name: Run dot init via install.sh in fresh ubuntu container
+            - name: Run dot login via install.sh in fresh ubuntu container
               env:
                   # Empty for schedule/dispatch → install.sh resolves the
                   # latest stable tag. Set to dev/<head-branch> after a
@@ -594,7 +594,7 @@ jobs:
                     ' 2>&1 | tee /tmp/cold-start.log
 
                   grep -q "setup complete" /tmp/cold-start.log || {
-                    echo "::error::dot init did not reach 'setup complete'"
+                    echo "::error::dot login did not reach 'setup complete'"
                     exit 1
                   }
 
@@ -605,6 +605,6 @@ jobs:
                   # " error" would also match " errors" (e.g. apt's
                   # "0 errors") and apt warnings unrelated to the smoke.
                   if grep -E "✗ |✕ |\bFAILED\b|\bfailed dependency\b" /tmp/cold-start.log; then
-                    echo "::error::dot init reported a failed dependency"
+                    echo "::error::dot login reported a failed dependency"
                     exit 1
                   fi

@@ -68,15 +68,15 @@ describe("shouldSkip", () => {
     const baseEnv = {} as NodeJS.ProcessEnv;
 
     it("skips when stdout is not a TTY", () => {
-        expect(shouldSkip(["init"], baseEnv, false)).toBe(true);
+        expect(shouldSkip(["login"], baseEnv, false)).toBe(true);
     });
 
     it("skips when DOT_NO_UPDATE_CHECK=1", () => {
-        expect(shouldSkip(["init"], { DOT_NO_UPDATE_CHECK: "1" }, true)).toBe(true);
+        expect(shouldSkip(["login"], { DOT_NO_UPDATE_CHECK: "1" }, true)).toBe(true);
     });
 
     it("does NOT skip when DOT_NO_UPDATE_CHECK is set to anything other than 1", () => {
-        expect(shouldSkip(["init"], { DOT_NO_UPDATE_CHECK: "0" }, true)).toBe(false);
+        expect(shouldSkip(["login"], { DOT_NO_UPDATE_CHECK: "0" }, true)).toBe(false);
     });
 
     it("skips for `dot update` (which does its own check)", () => {
@@ -93,8 +93,8 @@ describe("shouldSkip", () => {
     });
 
     it("skips when CI=true / CI=1", () => {
-        expect(shouldSkip(["init"], { CI: "true" }, true)).toBe(true);
-        expect(shouldSkip(["init"], { CI: "1" }, true)).toBe(true);
+        expect(shouldSkip(["login"], { CI: "true" }, true)).toBe(true);
+        expect(shouldSkip(["login"], { CI: "1" }, true)).toBe(true);
     });
 
     it("skips for --version / -V", () => {
@@ -104,11 +104,11 @@ describe("shouldSkip", () => {
 
     it("skips for --help / -h", () => {
         expect(shouldSkip(["--help"], baseEnv, true)).toBe(true);
-        expect(shouldSkip(["init", "-h"], baseEnv, true)).toBe(true);
+        expect(shouldSkip(["login", "-h"], baseEnv, true)).toBe(true);
     });
 
     it("does not skip on a normal command", () => {
-        expect(shouldSkip(["init"], baseEnv, true)).toBe(false);
+        expect(shouldSkip(["login"], baseEnv, true)).toBe(false);
         expect(shouldSkip(["deploy", "--moddable"], baseEnv, true)).toBe(false);
     });
 });
@@ -144,7 +144,7 @@ describe("startVersionCheck", () => {
             new Response(JSON.stringify({ version: "0.16.14" }), { status: 200 });
         const handle = startVersionCheck("0.16.14", {
             fetch: mockFetch,
-            argv: ["init"],
+            argv: ["login"],
             env: {} as NodeJS.ProcessEnv,
             isTTY: true,
         });
@@ -156,7 +156,7 @@ describe("startVersionCheck", () => {
             new Response(JSON.stringify({ version: "0.17.0" }), { status: 200 });
         const handle = startVersionCheck("0.16.14", {
             fetch: mockFetch,
-            argv: ["init"],
+            argv: ["login"],
             env: {} as NodeJS.ProcessEnv,
             isTTY: true,
         });
@@ -173,7 +173,7 @@ describe("startVersionCheck", () => {
         };
         const handle = startVersionCheck("0.16.14", {
             fetch: mockFetch,
-            argv: ["init"],
+            argv: ["login"],
             env: {} as NodeJS.ProcessEnv,
             isTTY: true,
         });
@@ -184,7 +184,7 @@ describe("startVersionCheck", () => {
         const mockFetch: typeof fetch = async () => new Response("rate limited", { status: 429 });
         const handle = startVersionCheck("0.16.14", {
             fetch: mockFetch,
-            argv: ["init"],
+            argv: ["login"],
             env: {} as NodeJS.ProcessEnv,
             isTTY: true,
         });
@@ -196,7 +196,7 @@ describe("startVersionCheck", () => {
             new Response(JSON.stringify({ name: "playground-cli" }), { status: 200 });
         const handle = startVersionCheck("0.16.14", {
             fetch: mockFetch,
-            argv: ["init"],
+            argv: ["login"],
             env: {} as NodeJS.ProcessEnv,
             isTTY: true,
         });

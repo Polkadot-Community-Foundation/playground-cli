@@ -29,7 +29,7 @@ import {
 import type { SessionAddresses } from "../../utils/auth.js";
 
 /**
- * Init-flow step that surfaces (and, on first run, claims) the user's
+ * Login-flow step that surfaces (and, on first run, claims) the user's
  * playground-registry username.
  *
  * Lifecycle:
@@ -207,15 +207,15 @@ function SubmitUsername({
             // We own this handle (see file-level docstring — `getSessionSigner`
             // is not memoised). Capture it locally so the finally block can
             // tear down its WebSocket adapter on every exit path. Forgetting
-            // this leaks the adapter and `dot init` hangs after "setup
-            // complete" (init runs with `hardExit: false`, so the event loop
+            // this leaks the adapter and `dot login` hangs after "setup
+            // complete" (login runs with `hardExit: false`, so the event loop
             // must drain naturally).
             const session = await getSessionSigner();
             if (!session) {
                 if (!cancelled)
                     setPhase({
                         kind: "input",
-                        externalError: "Lost session — re-run playground init.",
+                        externalError: "Lost session — re-run playground login.",
                         checking: false,
                     });
                 return;

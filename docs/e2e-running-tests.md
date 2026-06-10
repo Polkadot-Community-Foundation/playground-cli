@@ -83,8 +83,8 @@ To run a single named cell, pass its vitest pattern:
 # Run just the foundry deploy cell
 tools/e2e-local.sh pr -t "deploy — foundry"
 
-# Run just init + session
-tools/e2e-local.sh pr -t "dot init|session management"
+# Run just login + session
+tools/e2e-local.sh pr -t "dot login|session management"
 ```
 
 ### 2d. Raw vitest passthrough
@@ -134,7 +134,7 @@ Two job matrices run in parallel:
 | `pr-install` | `dot install` | `e2e/cli/install.test.ts` |
 | `pr-preflight` | `dot build\|preflight and validation` | `build.test.ts` + `deploy.test.ts` |
 | `pr-mod` | `dot mod — clone` | `e2e/cli/mod.test.ts` |
-| `pr-init-session` | `dot init\|session management` | `init.test.ts` + `session.test.ts` |
+| `pr-login-session` | `dot login\|session management` | `login.test.ts` + `session.test.ts` |
 
 **test-publish** (max-parallel: 1 — SIGNER is shared, 55 min timeout each):
 

@@ -31,7 +31,7 @@ describe("PLAYGROUND_RESOURCES", () => {
     test("requests only the resources the CLI consumes: Bulletin, SmartContract(0)", () => {
         // StatementStoreAllowance is intentionally absent — the CLI never
         // consumes a product Statement Store slot key (see resources.ts), and
-        // requesting it blocked `playground init` for users whose on-chain SSS
+        // requesting it blocked `playground login` for users whose on-chain SSS
         // ring was full (phone returns NotAvailable).
         expect(PLAYGROUND_RESOURCES.map((r) => r.tag)).toEqual([
             "BulletInAllowance",

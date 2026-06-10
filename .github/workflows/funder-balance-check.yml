@@ -83,7 +83,7 @@ jobs:
                           --title "[URGENT] Dedicated funder balance low — top up required" \
                           --label funder-low-balance \
                           --body "$(cat <<EOF
-                  The dedicated Paseo Asset Hub funder account is below the low-balance threshold. Without a top-up, \`dot init\` will start failing for new users once Alice drains.
+                  The dedicated Paseo Asset Hub funder account is below the low-balance threshold. Without a top-up, \`dot login\` will start failing for new users once Alice drains.
 
                   | Field | Value |
                   | --- | --- |

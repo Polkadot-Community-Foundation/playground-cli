@@ -182,9 +182,9 @@ function logSuppressedBenign(reason: unknown): void {
  *      stack surfaces the same raw-client throw (`createClient.ts`'s
  *      `if (!connection) throw new Error("Not connected")`) from a floating
  *      teardown promise instead of wrapping it in rxjs UnsubscriptionError.
- *      Observed on `pg init` after a fresh pairing: setup completes, the
+ *      Observed on `pg login` after a fresh pairing: setup completes, the
  *      login adapter's destroy races an in-flight statement-store call, and
- *      the bare rejection escaped the filter — turning a successful init
+ *      the bare rejection escaped the filter — turning a successful login
  *      into exit code 1. The match requires the message to be EXACTLY
  *      "Not connected" so a real mid-work connection failure (which carries
  *      contextual messages) still escalates.
@@ -204,7 +204,7 @@ function logSuppressedBenign(reason: unknown): void {
  * pending unsubs in that path, so we re-suppress `DestroyedError` here as
  * an expected post-destroy artifact. Verified that the underlying work has
  * already succeeded before this rejects (the chainHead unfollow happens after
- * our deploy/init flow returns). Drop this when SessionHandle.destroy() is
+ * our deploy/login flow returns). Drop this when SessionHandle.destroy() is
  * awaitable end-to-end.
  */
 export function isBenignUnsubscriptionError(reason: unknown): boolean {

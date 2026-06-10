@@ -21,7 +21,7 @@ import { setWindowTitle } from "./window-title.js";
 import { Rule } from "./Rule.js";
 
 export interface HeaderProps {
-    /** "dot init", "dot deploy", etc. Lowercase. First token rendered bold. */
+    /** "dot login", "dot deploy", etc. Lowercase. First token rendered bold. */
     cmd: string;
     /** Second bread-crumb piece: "polkadot playground" or the domain being deployed. */
     subtitle?: string;

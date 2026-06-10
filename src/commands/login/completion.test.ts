@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * Tests for the init-completion predicate.
+ * Tests for the login-completion predicate.
  *
  * We import the real `computeAllDone` from `./completion.js` — exactly the
  * function the component consumes — so any drift in the predicate is caught

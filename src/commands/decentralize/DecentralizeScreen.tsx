@@ -64,7 +64,7 @@ export interface DecentralizeScreenProps {
     initialDot: string | null;
     /** `--suri` resolved up front. When set, the signer picker is skipped. */
     explicitSigner: ResolvedSigner | null;
-    /** Session signer from `dot init`, if any. Picked when "phone" is selected. */
+    /** Session signer from `dot login`, if any. Picked when "phone" is selected. */
     sessionSigner: ResolvedSigner | null;
     /**
      * Pre-set when `--playground` was passed on the CLI. `null` means the
@@ -179,7 +179,7 @@ export function DecentralizeScreen({
                             setStage({
                                 kind: "error",
                                 message:
-                                    'No session found — run "playground init" to log in, then re-run, or pick the dev signer.',
+                                    'No session found — run "playground login" to log in, then re-run, or pick the dev signer.',
                             });
                             return;
                         }
@@ -308,7 +308,7 @@ function signerOptions(sessionSigner: ResolvedSigner | null): SelectOption<Signe
             label: "your phone signer",
             hint: sessionSigner
                 ? "signed with your logged-in account"
-                : "requires `playground init` first",
+                : "requires `playground login` first",
         },
     ];
 }
@@ -623,7 +623,7 @@ function DoneStage({
             {outcome.signerSource === "dev" && (
                 <Callout tone="warning" title="Owned by a Development Account">
                     <Text>
-                        To deploy to a domain owned by you, run `playground init` and re-run
+                        To deploy to a domain owned by you, run `playground login` and re-run
                         `playground decentralize` with the mobile signer.
                     </Text>
                 </Callout>

@@ -26,7 +26,7 @@
  * holds at least `FEE_FLOOR_REGISTER` (0.1 PAS); otherwise the trigger tx
  * runs out of fees and the deploy reverts.
  *
- * We replicate that top-up here during `dot init` so the next `dot deploy`
+ * We replicate that top-up here during `dot login` so the next `dot deploy`
  * (run from the same product account) has the headroom bulletin-deploy
  * expects. Crucially we use the SAME source signer bulletin-deploy uses:
  * the bare master account from the standard substrate dev mnemonic, NOT the
@@ -77,7 +77,7 @@ const ONE_PAS = 1_000_000_000_000n;
  * Skip the top-up if the product-derived account already holds at least this
  * much PAS. Matches bulletin-deploy's `FEE_FLOOR_REGISTER` (0.1 PAS), the
  * threshold above which bulletin-deploy's own `attemptTestnetTopUp` no-ops.
- * Keeping the same floor means re-running `dot init` doesn't drain the shared
+ * Keeping the same floor means re-running `dot login` doesn't drain the shared
  * dev faucet on every invocation.
  */
 const SKIP_TRANSFER_THRESHOLD = 100_000_000_000n;
@@ -85,7 +85,7 @@ const SKIP_TRANSFER_THRESHOLD = 100_000_000_000n;
 /**
  * Headroom on top of the 1 PAS transfer that the dev master must carry. Covers
  * the `Balances.transfer_allow_death` fee plus a safety margin so subsequent
- * `dot init` runs immediately after a depleting transfer don't see a
+ * `dot login` runs immediately after a depleting transfer don't see a
  * temporarily-low balance and abort. 1 PAS matches bulletin-deploy's
  * `SOURCE_BUFFER`.
  */

@@ -293,7 +293,7 @@ async function preflightSigner(opts: {
             if (opts.mode === "dev" && opts.publishToPlayground) {
                 process.stderr.write(
                     "warning: --signer dev --playground with no session and no --suri — " +
-                        "publishing under the dev account. Run `playground init` first if you " +
+                        "publishing under the dev account. Run `playground login` first if you " +
                         "want the apps to appear in your MyApps view.\n",
                 );
                 captureWarning("dev mode playground publish with no user identity", {
@@ -311,7 +311,7 @@ async function preflightSigner(opts: {
     if (!mapped) {
         signer.destroy();
         throw new Error(
-            'Account is not mapped in Revive. Run "playground init" first to finish account setup.',
+            'Account is not mapped in Revive. Run "playground login" first to finish account setup.',
         );
     }
     // Release the idle client — runDeploy / publish reopen their own.

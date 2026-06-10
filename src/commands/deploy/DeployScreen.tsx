@@ -169,7 +169,7 @@ export function DeployScreen({
     userSigner,
     onDone,
 }: DeployScreenInputs) {
-    // Phone signing needs a paired session (from `playground init`). Without
+    // Phone signing needs a paired session (from `playground login`). Without
     // one the phone path is not offered — but a dev deploy still works. If the
     // user pre-selected `--signer phone` yet has no session, drop back to the
     // picker (mode = null) so they see the notice and can choose the dev signer.

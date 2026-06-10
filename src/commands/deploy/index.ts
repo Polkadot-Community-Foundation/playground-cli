@@ -227,13 +227,13 @@ async function preflight(opts: {
             // the dev path can always proceed (publish is signed by a dev
             // account), and the phone path is gated downstream with an
             // actionable message instead of this opaque error — the
-            // interactive TUI shows a yellow "run playground init" notice and
+            // interactive TUI shows a yellow "run playground login" notice and
             // offers the dev signer, while `runHeadless` rejects an explicit
             // `--signer phone` with a clear instruction (no TUI to fall into).
             // Returning null is the "no session, no SURI" signal;
             // resolveSignerSetup constructs the dev account for the publish.
             if (opts.mode === "dev" && opts.publishToPlayground) {
-                // Catch the "forgot dot init" footgun: a user who expected
+                // Catch the "forgot dot login" footgun: a user who expected
                 // their account to be the owner just had their app published
                 // under the dev account's name. Warn loudly so it isn't
                 // silently surprising; the deploy still proceeds because
@@ -241,7 +241,7 @@ async function preflight(opts: {
                 // CI without a session).
                 process.stderr.write(
                     "warning: --signer dev --playground with no session and no --suri — " +
-                        "publishing under the dev (Alice) account. Run `playground init` first " +
+                        "publishing under the dev (Alice) account. Run `playground login` first " +
                         "if you want the app to appear in your MyApps view.\n",
                 );
                 captureWarning("dev mode playground publish with no user identity", {
@@ -267,7 +267,7 @@ async function preflight(opts: {
     if (!mapped) {
         signer.destroy();
         throw new Error(
-            'Account is not mapped in Revive. Run "playground init" first to finish account setup.',
+            'Account is not mapped in Revive. Run "playground login" first to finish account setup.',
         );
     }
 
@@ -277,7 +277,7 @@ async function preflight(opts: {
     // `TransactionStorage.Authorizations` query by `signer.address` would
     // always return "not authorized" and produce a false block. bulletin-deploy
     // 0.7.19 surfaces a clear "Payment" error if the host's allowance is
-    // missing — the user runs `dot init` to re-request.
+    // missing — the user runs `dot login` to re-request.
 
     // Warn-only staleness heuristic for the statement-store allowance (the
     // channel every phone tap rides). It expires ~2 days after login and has

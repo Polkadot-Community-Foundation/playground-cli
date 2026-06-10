@@ -27,7 +27,7 @@ describe("dot install", () => {
 		const result = await dot(["--help"]);
 		expect(result.exitCode).toBe(0);
 		const output = result.stdout;
-		expect(output).toContain("init");
+		expect(output).toContain("login");
 		expect(output).toContain("mod");
 		expect(output).toContain("build");
 		expect(output).toContain("deploy");

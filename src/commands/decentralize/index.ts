@@ -75,7 +75,7 @@ export const decentralizeCommand = new Command("decentralize")
     .option(
         "--suri <suri>",
         "Sign with this SURI (dev name like //Bob, or a BIP-39 mnemonic). " +
-            "Default: the session signer paired by `playground init`.",
+            "Default: the session signer paired by `playground login`.",
     )
     .option(
         "--playground",
@@ -267,7 +267,7 @@ async function runInteractive({
 interface PreflightSigners {
     /** Signer explicitly chosen by `--suri`. Picker is skipped when set. */
     explicitSigner: ResolvedSigner | null;
-    /** Session signer from `dot init`, if any. Drives the "phone" picker option. */
+    /** Session signer from `dot login`, if any. Drives the "phone" picker option. */
     sessionSigner: ResolvedSigner | null;
 }
 
@@ -306,7 +306,7 @@ export function printHeadlessSuccess(outcome: DecentralizeOutcome): void {
     process.stdout.write(`${lines.join("\n")}\n`);
     if (outcome.signerSource === "dev") {
         process.stdout.write(
-            "\n  To deploy to a domain owned by you, run `playground init` and re-run\n" +
+            "\n  To deploy to a domain owned by you, run `playground login` and re-run\n" +
                 "  `playground decentralize` with the mobile signer.\n",
         );
     }

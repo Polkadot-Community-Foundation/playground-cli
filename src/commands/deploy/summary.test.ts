@@ -70,7 +70,7 @@ describe("buildSummaryView", () => {
     });
 
     it("dev mode with playground surfaces the claimed owner row when a session H160 is set", () => {
-        // Headline scenario: user did `dot init`, chose dev signer mode.
+        // Headline scenario: user did `dot login`, chose dev signer mode.
         // The summary must tell them which H160 will be recorded as the
         // app owner so they can trust that MyApps will resolve their app
         // — without this row, the user sees "0 phone taps" and a blank

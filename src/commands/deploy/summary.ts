@@ -36,7 +36,7 @@ export interface SummaryInputs {
     approvals: DeployApproval[];
     /**
      * SS58 of the account that will sign this deploy. Surfaced in the summary
-     * so the user can verify it matches what `dot init` set up (the product
+     * so the user can verify it matches what `dot login` set up (the product
      * account derived from their mnemonic at `/product/{PLAYGROUND_PRODUCT_ID}/0`)
      * before signing anything. `undefined` when no signer is resolved.
      */

@@ -27,7 +27,7 @@ import type { AllocatableResource, ApAllocationOutcome } from "@parity/product-s
  * Bulletin storage (metadata + chunk uploads) and PGAS sponsoring for Revive
  * contract calls (derivation index 0 = the default playground account). Both
  * are requested in ONE `requestResourceAllocation` call so the user sees a
- * single approval dialog during `playground init`.
+ * single approval dialog during `playground login`.
  *
  * `StatementStoreAllowance` is deliberately NOT requested. The CLI never
  * consumes a product Statement Store slot key: every phone interaction

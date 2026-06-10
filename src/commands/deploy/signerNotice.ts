@@ -16,7 +16,7 @@
 /**
  * Shown when a deploy starts without a logged-in mobile session.
  *
- * Mobile (phone) signing needs a paired session from `playground init`; without
+ * Mobile (phone) signing needs a paired session from `playground login`; without
  * it the phone path is unavailable, but a dev deploy still works out of the box.
  * The interactive picker renders this as a yellow Callout above the signer
  * options (mirroring the `playground mod` "Community Code" notice); the headless
@@ -27,7 +27,7 @@ export const NO_SESSION_NOTICE_TITLE = "Mobile signing unavailable";
 
 export const NO_SESSION_NOTICE_BODY =
     "You are not logged in, so signing with your phone is not available yet. " +
-    'Run "playground init" to pair your phone, then re-run the deploy. ' +
+    'Run "playground login" to pair your phone, then re-run the deploy. ' +
     "You can continue now with the dev signer.";
 
 /**
@@ -36,4 +36,4 @@ export const NO_SESSION_NOTICE_BODY =
  */
 export const NO_SESSION_HEADLESS_ERROR =
     "Mobile (phone) signing needs a logged-in session. " +
-    'Run "playground init" to pair your phone, or use "--signer dev" for a dev deploy.';
+    'Run "playground login" to pair your phone, or use "--signer dev" for a dev deploy.';

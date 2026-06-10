@@ -66,10 +66,10 @@ jobs:
                   TAG="${{ steps.tag.outputs.tag }}"
                   # Pin to the just-released version; install.sh resolves "latest"
                   # by default which can lag behind a just-published release.
-                  # install.sh runs `playground init` at the end; init requires
+                  # install.sh runs `playground login` at the end; login requires
                   # an interactive QR scan and will exit non-zero in headless CI —
-                  # that is expected. The binary is installed before init runs,
-                  # so we tolerate the init failure and verify the binary below.
+                  # that is expected. The binary is installed before login runs,
+                  # so we tolerate the login failure and verify the binary below.
                   curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/install.sh" \
                       | VERSION="$TAG" bash || true
                   # Hard-fail here if the binary was not installed — that IS a

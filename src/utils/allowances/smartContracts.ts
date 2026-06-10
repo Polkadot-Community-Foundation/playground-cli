@@ -42,7 +42,7 @@ export async function ensureSmartContractAllowance({
     const { userSession, adapter } = deploySigner;
     if (!userSession || !adapter) {
         throw new Error(
-            'No smart-contract gas allowance available. Run "playground init" to grant allowances.',
+            'No smart-contract gas allowance available. Run "playground login" to grant allowances.',
         );
     }
 
@@ -55,6 +55,6 @@ export async function ensureSmartContractAllowance({
     if (outcome?.tag === "Allocated") return;
 
     throw new Error(
-        `Smart-contract gas allowance allocation ${outcome?.tag ?? "returned no outcome"}. Re-run \`playground init\` and approve on your phone.`,
+        `Smart-contract gas allowance allocation ${outcome?.tag ?? "returned no outcome"}. Re-run \`playground login\` and approve on your phone.`,
     );
 }

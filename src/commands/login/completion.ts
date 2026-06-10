@@ -14,11 +14,11 @@
 // limitations under the License.
 
 /**
- * Pure predicate over the three parallel init streams (deps / auth / account
+ * Pure predicate over the three parallel login streams (deps / auth / account
  * setup). Lives in its own file so tests can import it without dragging React
  * + Ink into the test runner.
  */
-export interface InitCompletionState {
+export interface LoginCompletionState {
     needsQr: boolean;
     authResolved: boolean;
     loggedInAddress: string | null;
@@ -33,7 +33,7 @@ export interface InitCompletionState {
     usernameComplete: boolean;
 }
 
-export function computeAllDone(state: InitCompletionState): boolean {
+export function computeAllDone(state: LoginCompletionState): boolean {
     const needsAccountSetup = state.loggedInAddress !== null;
     return (
         state.depsComplete &&

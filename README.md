@@ -3,7 +3,7 @@
 > [!WARNING]
 > The following is a prototype, reference implementation, and proof-of-concept. This open source code is provided for research, experimentation, and developer education only. This code has not been audited, is actively experimental, and may contain bugs, vulnerabilities, or incomplete features. Use at your own risk.
 
-CLI tooling for Polkadot Playground. Installed as the `playground` command, with `pg` as a short alias — both invoke the same binary, so `playground init` and `pg init` are interchangeable.
+CLI tooling for Polkadot Playground. Installed as the `playground` command, with `pg` as a short alias — both invoke the same binary, so `playground login` and `pg login` are interchangeable.
 
 ## Quick Start
 
@@ -17,11 +17,11 @@ To install a specific version:
 curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=v0.2.0 bash
 ```
 
-The installer drops the binary into `~/.polkadot/bin/playground`, symlinks both `playground` and the short `pg` alias into `~/.local/bin/`, appends the path to your shell rc, and then runs `playground init` so you can finish setup without a second command.
+The installer drops the binary into `~/.polkadot/bin/playground`, symlinks both `playground` and the short `pg` alias into `~/.local/bin/`, appends the path to your shell rc, and then runs `playground login` so you can finish setup without a second command.
 
 ## Commands
 
-### `playground init`
+### `playground login`
 
 End-to-end first-run setup. Login and toolchain install run **concurrently**; account setup runs **once both have completed successfully**.
 
@@ -66,7 +66,7 @@ Flags:
 
 Passing all four of `--signer`, `--domain`, `--buildDir`, and `--playground` runs in fully non-interactive mode. Any absent flag is filled in by the TUI prompt. `--moddable` and `--private` are independently optional in both modes — their absence means a non-moddable, public deploy.
 
-**Requirement**: the `ipfs` CLI (Kubo) must be on `PATH`. `playground init` installs it; if you skipped init you can install it manually (`brew install ipfs` or follow [docs.ipfs.tech/install](https://docs.ipfs.tech/install/)). This is a temporary requirement while `bulletin-deploy`'s pure-JS merkleizer has a bug that makes the browser fallback unusable.
+**Requirement**: the `ipfs` CLI (Kubo) must be on `PATH`. `playground login` installs it; if you skipped login you can install it manually (`brew install ipfs` or follow [docs.ipfs.tech/install](https://docs.ipfs.tech/install/)). This is a temporary requirement while `bulletin-deploy`'s pure-JS merkleizer has a bug that makes the browser fallback unusable.
 
 The publish step is always signed by the user so the registry contract records their address as the app owner — this is what drives the Playground "my apps" view.
 
@@ -143,7 +143,7 @@ The local directory name is auto-generated as `<slug>-<6 hex chars>` so repeated
 
 ### `playground logout`
 
-Sign out of the account paired via `playground init`. Sends a `Disconnected` statement so the paired Polkadot mobile app drops its side of the connection, then clears the local session files under `~/.polkadot-apps/`. If the remote notification fails (statement store unreachable, …), the local files are still cleared and the command surfaces a `partial` status — the mobile app will show a stale pairing until it reconnects. No-op when no session is signed in.
+Sign out of the account paired via `playground login`. Sends a `Disconnected` statement so the paired Polkadot mobile app drops its side of the connection, then clears the local session files under `~/.polkadot-apps/`. If the remote notification fails (statement store unreachable, …), the local files are still cleared and the command surfaces a `partial` status — the mobile app will show a stale pairing until it reconnects. No-op when no session is signed in.
 
 ## Troubleshooting
 
@@ -195,7 +195,7 @@ pnpm test            # unit tests, one-shot
 pnpm test:watch      # rerun on change
 npx tsc --noEmit     # type check
 
-pnpm test:e2e        # E2E tests (slow; run `playground init` first)
+pnpm test:e2e        # E2E tests (slow; run `playground login` first)
 ```
 
 #### Unit tests
@@ -206,7 +206,7 @@ Live alongside the code as `*.test.ts`. They avoid mocking so deeply that they j
 
 Live under `e2e/cli/*.test.ts`, with a separate `e2e/vitest.config.ts`. Each test spawns the CLI via `bun run src/index.ts` (execa wrapper in `e2e/cli/helpers/dot.ts`) and asserts on stdout/stderr/exit code. Files run serially — they share a single deployer account on Paseo and would race otherwise.
 
-Prerequisite: run `playground init` once to install the required local deps (mainly Kubo IPFS for the deploy pipeline). Tests also reach Paseo Asset Hub and `codeload.github.com` over the internet, so they need network.
+Prerequisite: run `playground login` once to install the required local deps (mainly Kubo IPFS for the deploy pipeline). Tests also reach Paseo Asset Hub and `codeload.github.com` over the internet, so they need network.
 
 CI runs the suite on every PR, on push to `main`, and daily at 06:00 UTC (`.github/workflows/e2e.yml`).
 
@@ -280,7 +280,7 @@ The first two are also enforced in CI; running them locally catches the failure 
 - **Session lifecycle** (`src/utils/auth.ts`) — `getSessionSigner()` returns an explicit `destroy()` handle. Callers MUST call it (typically from a `useEffect` cleanup) — the host-papp adapter keeps the Node event loop alive.
 - **Deploy SDK / CLI split** (`src/utils/deploy/` + `src/commands/deploy/`) — the CLI command is a thin Commander + Ink wrapper around a pure `runDeploy()` orchestrator. The orchestrator avoids React/Ink so WebContainer consumers (e.g. RevX) can drive their own UI off the same event stream.
 - **Signer-mode isolation** (`src/utils/deploy/signerMode.ts`) — decides which signer each deploy phase uses (pool mnemonic vs user's phone) in one place so the mainnet rewrite can be a single-file swap.
-- **Bulletin delegation** — all storage-side hardening (pool management, chunk retry, nonce fallback, DAG-PB verification, DotNS commit-reveal) stays inside `bulletin-deploy`. `playground deploy` deliberately does NOT pass `jsMerkle: true` today: the pure-JS merkleizer drops DAG-PB blocks, so sites return 404. We rely on the Kubo binary path (`playground init` installs `ipfs`) until the upstream merkleizer is fixed, at which point `jsMerkle: true` flips back on for the WebContainer (RevX) story.
+- **Bulletin delegation** — all storage-side hardening (pool management, chunk retry, nonce fallback, DAG-PB verification, DotNS commit-reveal) stays inside `bulletin-deploy`. `playground deploy` deliberately does NOT pass `jsMerkle: true` today: the pure-JS merkleizer drops DAG-PB blocks, so sites return 404. We rely on the Kubo binary path (`playground login` installs `ipfs`) until the upstream merkleizer is fixed, at which point `jsMerkle: true` flips back on for the WebContainer (RevX) story.
 - **Signing proxy** (`src/utils/deploy/signingProxy.ts`) — wraps the user's `PolkadotSigner` to emit `sign-request`/`-complete`/`-error` lifecycle events. The TUI renders these as "📱 Check your phone" panels with live step counts.
 - **Playground publish is ours** (`src/utils/deploy/playground.ts`) — we deliberately do NOT use `bulletin-deploy`'s `--playground` flag. We call the registry contract from `src/utils/registry.ts` with the user's signer so the contract records their `env::caller()` as the owner — required for the Playground app's "my apps" view.
 

@@ -93,7 +93,7 @@ export interface RunDecentralizeOptions {
      */
     mode: SignerMode;
     /**
-     * The user's existing signer — either a session (from `dot init`) or
+     * The user's existing signer — either a session (from `dot login`) or
      * a SURI-resolved dev signer (when `--suri` was passed). `null` when
      * neither exists; only valid for `mode: "dev"`.
      */

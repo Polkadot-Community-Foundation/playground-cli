@@ -107,7 +107,7 @@ export function sanitizeSentryTransaction<T extends Record<string, unknown>>(eve
 }
 
 export function isExpectedCliError(message: string): boolean {
-    return /badregistrylookup|signer.*not available|run "playground init"|account is not mapped|storage allowance is exhausted|invalid domain|already owned|reserved|insufficient balance|no github origin configured|must use a public github repository|private or does not exist|github api returned|download failed/i.test(
+    return /badregistrylookup|signer.*not available|run "playground login"|account is not mapped|storage allowance is exhausted|invalid domain|already owned|reserved|insufficient balance|no github origin configured|must use a public github repository|private or does not exist|github api returned|download failed/i.test(
         message,
     );
 }

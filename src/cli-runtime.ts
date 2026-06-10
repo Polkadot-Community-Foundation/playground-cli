@@ -28,7 +28,7 @@ export interface RunCliCommandOptions {
      * final `process.exit()` in `src/index.ts` all stop firing — the
      * process looks finished but sits invisible, growing tens of GB until
      * the OS swaps itself to death. We shipped exactly that: `playground
-     * init` ran watchdog-less and three zombies reached 40+ GB each
+     * login` ran watchdog-less and three zombies reached 40+ GB each
      * (June 2026). Cost is one worker + a 1 Hz `memoryUsage()` sample —
      * don't opt commands out to save it.
      */

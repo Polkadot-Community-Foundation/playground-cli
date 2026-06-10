@@ -18,15 +18,15 @@ import { Command } from "commander";
 import { render } from "ink";
 import { captureWarning, withSpan, errorMessage } from "../../telemetry.js";
 import { runCliCommand } from "../../cli-runtime.js";
-import { InitScreen } from "./InitScreen.js";
+import { LoginScreen } from "./LoginScreen.js";
 import { connect, type LoginHandle, type SessionAddresses } from "../../utils/auth.js";
 import { destroyConnection } from "../../utils/connection.js";
 
-export const initCommand = new Command("init")
+export const loginCommand = new Command("login")
     .description("Install prerequisites and login via mobile QR")
     .option("-y, --yes", "Skip interactive prompts")
     .action(async (opts) =>
-        runCliCommand("init", { hardExit: false }, async () => {
+        runCliCommand("login", { hardExit: false }, async () => {
             console.log();
 
             let login: LoginHandle | null = null;
@@ -35,7 +35,7 @@ export const initCommand = new Command("init")
             if (!opts.yes) {
                 try {
                     const result = await withSpan(
-                        "cli.init.login",
+                        "cli.login.session",
                         "login via mobile session",
                         () => connect(),
                     );
@@ -48,7 +48,7 @@ export const initCommand = new Command("init")
                     }
                 } catch (err) {
                     const msg = errorMessage(err);
-                    captureWarning("Init login service unavailable, continuing setup", {
+                    captureWarning("Login service unavailable, continuing setup", {
                         error: msg,
                     });
                     console.log(`  Login skipped: ${msg}\n`);
@@ -56,22 +56,22 @@ export const initCommand = new Command("init")
             }
 
             const app = render(
-                React.createElement(InitScreen, {
+                React.createElement(LoginScreen, {
                     login,
                     existingAddresses,
                     onDone: () => app.unmount(),
                 }),
             );
             try {
-                await withSpan("cli.init.setup", "run init setup", () => app.waitUntilExit());
+                await withSpan("cli.login.setup", "run login setup", () => app.waitUntilExit());
             } finally {
-                // The init flow opens the shared Paseo client lazily via
+                // The login flow opens the shared Paseo client lazily via
                 // `getConnection()` for the registry username lookup
                 // (`lookupRegistryUsername` in `UsernamePrompt`) and any
                 // subsequent `setUsername` tx. AccountSetup uses the same
-                // singleton. Init runs with `hardExit: false`, so the event
+                // singleton. Login runs with `hardExit: false`, so the event
                 // loop has to drain naturally — leaving the WS open means
-                // `dot init` hangs after "setup complete".
+                // `dot login` hangs after "setup complete".
                 destroyConnection();
                 // QR-path login handle: `connect()` transferred adapter
                 // ownership to us (it's the transport `waitForLogin` signs
