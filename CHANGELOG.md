@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.34.4
+
+### Patch Changes
+
+- a58e9f3: Switch the deploy engine dependency from the closed-source `bulletin-deploy` to its open-source twin `@parity/polkadot-app-deploy` (code-identical at 0.10.0). No behavior change.
+
 ## 0.34.3
 
 ### Patch Changes
