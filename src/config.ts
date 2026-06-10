@@ -17,7 +17,7 @@
  * Single source of truth for environment-dependent values: RPC endpoints,
  * contract addresses, dapp identifiers, and feature defaults.
  *
- * Env IDs mirror bulletin-deploy's `assets/environments.json` (paseo-next,
+ * Env IDs mirror polkadot-app-deploy's `assets/environments.json` (paseo-next,
  * paseo-next-v2, paseo-review, preview, polkadot, kusama) so a single value
  * threads through both layers. paseo-next-v2 is the only env fully wired
  * today; others throw from `getChainConfig` until they're populated.
@@ -35,7 +35,7 @@ export const ACTIVE_TESTNET_ENV: Env = "paseo-next-v2";
 export const DEFAULT_ENV: Env = ACTIVE_TESTNET_ENV;
 
 export interface ChainConfig {
-    /** Env identifier — passes straight through to bulletin-deploy's `deploy({ env })`. */
+    /** Env identifier — passes straight through to polkadot-app-deploy's `deploy({ env })`. */
     env: Env;
     /** Underlying network (testnet/mainnet) for cosmetics + gates. */
     network: "testnet" | "mainnet";
@@ -69,7 +69,7 @@ export interface ChainConfig {
 }
 
 // Paseo Next v2 — the active env. DotNS contracts are owned by
-// bulletin-deploy's environment catalog and keyed by `env`.
+// polkadot-app-deploy's environment catalog and keyed by `env`.
 const PASEO_NEXT_V2: ChainConfig = {
     env: "paseo-next-v2",
     network: "testnet",
@@ -101,7 +101,7 @@ export function getChainConfig(env: Env = DEFAULT_ENV): ChainConfig {
     }
     // CHAOS-test hook: when DOT_BULLETIN_RPC is set, use it as the primary
     // Bulletin endpoint and retain the built-in URL as a fallback so failover
-    // works. bulletin-deploy's deploy() already applies this pattern internally
+    // works. polkadot-app-deploy's deploy() already applies this pattern internally
     // (it builds [userRpc, DEFAULT] from options.rpc), so storage.ts consumers
     // get failover for free. The dedicated WS client in playground.ts reads
     // bulletinRpcFallbacks explicitly and builds its own endpoint array.

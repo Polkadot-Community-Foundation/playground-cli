@@ -15,7 +15,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock bulletin-deploy's DotNS class. As of 0.7.6, label classification is
+// Mock polkadot-app-deploy's DotNS class. As of 0.7.6, label classification is
 // done by a top-level `classifyDotnsLabel` that the package doesn't re-export
 // from its root, so `availability.ts` mirrors the (small, stable) logic
 // locally as `classifyLabel`. Tests below rely on real label characteristics
@@ -33,7 +33,7 @@ const disconnect = vi.fn();
 // vitest 4 spies forward `new.target`, `new DotNS()` invokes the
 // implementation as a constructor, and arrow functions can't be constructed.
 // A function that returns an object has that object override `this`.
-vi.mock("bulletin-deploy", () => ({
+vi.mock("@parity/polkadot-app-deploy", () => ({
     DotNS: vi.fn(function () {
         return {
             connect,
@@ -139,7 +139,7 @@ describe("checkDomainAvailability", () => {
     it("skips the ownership check when no SS58 address is provided", async () => {
         // Dev mode without a session signer: we can't do a meaningful
         // comparison, so we don't call checkOwnership at all and let
-        // bulletin-deploy's own preflight handle it with the real signer.
+        // polkadot-app-deploy's own preflight handle it with the real signer.
         const result = await checkDomainAvailability(NO_STATUS_LABEL);
         expect(result.status).toBe("available");
         expect(checkOwnership).not.toHaveBeenCalled();

@@ -23,12 +23,12 @@ describe("DotNS CLI runtime dependency", () => {
         expect(pkg.dependencies).toHaveProperty("@parity/dotns-cli");
     });
 
-    it("is resolvable from the package root for bulletin-deploy subprocess calls", () => {
+    it("is resolvable from the package root for polkadot-app-deploy subprocess calls", () => {
         const requireFromRoot = createRequire(`${process.cwd()}/package.json`);
         expect(() => requireFromRoot.resolve("@parity/dotns-cli")).not.toThrow();
     });
 
-    it("has a compiled-binary dispatcher for bulletin-deploy's PATH fallback", () => {
+    it("has a compiled-binary dispatcher for polkadot-app-deploy's PATH fallback", () => {
         const indexSource = readFileSync("src/index.ts", "utf8");
         const dispatcherSource = readFileSync("src/dotns-cli-dispatch.ts", "utf8");
         expect(indexSource).toContain('process.argv[2] !== "dotns"');

@@ -26,7 +26,7 @@
  * • The sentinel `"▸ storage-and-dotns"` appears in headless-mode stdout
  *   exactly once, from `logHeadlessEvent` in src/commands/deploy/index.ts
  *   when the storage phase starts. It is specific to the headless code path
- *   and does not rely on bulletin-deploy banner text (which is intercepted by
+ *   and does not rely on polkadot-app-deploy banner text (which is intercepted by
  *   the log parser and never reaches stdout).
  * • If the sentinel never fires within 60 s (e.g. the deploy errors during
  *   preflight), the test still sends SIGINT and asserts clean exit semantics.
@@ -152,7 +152,7 @@ describe("dot deploy — chaos RPC failover", () => {
 	test("survives an unreachable primary bulletin RPC via failover", { timeout: 600_000 }, async () => {
 		// Set DOT_BULLETIN_RPC to an unroutable address. getChainConfig() will
 		// expose it as bulletinRpc and put the real endpoint in bulletinRpcFallbacks.
-		// bulletin-deploy's deploy() internally builds [override, DEFAULT] as its
+		// polkadot-app-deploy's deploy() internally builds [override, DEFAULT] as its
 		// BULLETIN_ENDPOINTS list and polkadot-api's WS provider fails over
 		// automatically when the primary is unreachable. The deploy MUST still
 		// succeed — we're testing failover, not rejection.

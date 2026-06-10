@@ -26,7 +26,7 @@ vi.mock("../allowances/bulletin.js", () => ({
     getBulletinAllowanceSigner: getBulletinAllowanceSignerMock,
 }));
 
-import { DEFAULT_MNEMONIC } from "bulletin-deploy";
+import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { ss58Encode } from "@parity/product-sdk-address";
 import {
     resolveSignerSetup,
@@ -69,8 +69,8 @@ describe("resolveSignerSetup — dev mode", () => {
         expect(result.publishSigner).toBeNull();
     });
 
-    it("pins the DEFAULT_MNEMONIC explicitly so bulletin-deploy can never pick up a persisted phone session", () => {
-        // Regression: bulletin-deploy 0.8.x resolves the persisted SSO session
+    it("pins the DEFAULT_MNEMONIC explicitly so polkadot-app-deploy can never pick up a persisted phone session", () => {
+        // Regression: polkadot-app-deploy 0.8.x resolves the persisted SSO session
         // (~/.polkadot-apps/dot-cli_SsoSessions.json — written by `playground
         // login`, shared namespace) whenever it is called with NO mnemonic, NO
         // signer, and NO suri. Passing `{}` therefore turned dev mode into
@@ -104,7 +104,7 @@ describe("resolveSignerSetup — dev mode", () => {
         // The user's H160 is claimed via the owner parameter so MyApps still
         // resolves their app even though Alice signed the tx.
         expect(result.claimedOwnerH160).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        // Dev mode keeps bulletin-deploy on its built-in default mnemonic —
+        // Dev mode keeps polkadot-app-deploy on its built-in default mnemonic —
         // passed EXPLICITLY so the persisted phone session is never resolved.
         expect(result.bulletinDeployAuthOptions).toEqual({ mnemonic: DEFAULT_MNEMONIC });
     });
@@ -137,7 +137,7 @@ describe("resolveSignerSetup — dev mode", () => {
         expect(result.claimedOwnerH160).toBeNull();
         expect(result.bulletinDeployAuthOptions.signer).toBe(user.signer);
         expect(result.bulletinDeployAuthOptions.signerAddress).toBe("5DevSuri");
-        // The injected signer wins inside bulletin-deploy; no mnemonic needed.
+        // The injected signer wins inside polkadot-app-deploy; no mnemonic needed.
         expect(result.bulletinDeployAuthOptions.mnemonic).toBeUndefined();
     });
 });
@@ -256,7 +256,7 @@ describe("resolveStorageSignerOptions", () => {
     });
 
     it("dev mode pins storage to the dev publish account — never the user's slot key, no phone prompt", async () => {
-        // Regression: bulletin-deploy 0.8.x auto-reads the user's cached
+        // Regression: polkadot-app-deploy 0.8.x auto-reads the user's cached
         // BulletInAllowance slot key whenever `storageSigner` is absent and
         // signs chunk uploads with it — silently burning the user's small
         // phone-granted quota on dev deploys. Pinning the dev bare-root
@@ -290,7 +290,7 @@ describe("resolveStorageSignerOptions", () => {
     });
 
     it("slot resolution failure surfaces an actionable error, not a cryptic chunk failure", async () => {
-        // Without the slot key, bulletin-deploy would route 2 MiB chunk txs to
+        // Without the slot key, polkadot-app-deploy would route 2 MiB chunk txs to
         // the phone and every one would die with "message too big" after
         // retries. Fail fast with a fix-it hint instead.
         getBulletinAllowanceSignerMock.mockRejectedValue(new Error("user declined"));
@@ -303,7 +303,7 @@ describe("resolveStorageSignerOptions", () => {
         // Whether the chain actually enforces the authorization extent at
         // store() time is unconfirmed (upstream guidance: "the authorization
         // is what counts"). Blocking a deploy on possibly-decorative numbers
-        // would be worse than letting bulletin-deploy report per-chunk truth,
+        // would be worse than letting polkadot-app-deploy report per-chunk truth,
         // so a quota failure retries WITHOUT the quota check and proceeds.
         const SLOT_PUBLIC_KEY2 = new Uint8Array(32).fill(8);
         const fallbackSigner = { publicKey: SLOT_PUBLIC_KEY2 } as any;

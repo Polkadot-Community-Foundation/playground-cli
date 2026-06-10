@@ -14,19 +14,19 @@
 // limitations under the License.
 
 /**
- * Wrapper around `bulletin-deploy`'s `deploy()` that:
- *   - intercepts bulletin-deploy's `console.log` stream and turns it into
+ * Wrapper around `polkadot-app-deploy`'s `deploy()` that:
+ *   - intercepts polkadot-app-deploy's `console.log` stream and turns it into
  *     typed progress events for the TUI,
- *   - surfaces bulletin-deploy's returned artifact IDs unchanged.
+ *   - surfaces polkadot-app-deploy's returned artifact IDs unchanged.
  *
- * Note: we deliberately do NOT pass `jsMerkle: true` — bulletin-deploy's
+ * Note: we deliberately do NOT pass `jsMerkle: true` — polkadot-app-deploy's
  * pure-JS merkleizer drops DAG-PB structural blocks under the `rawLeaves`
  * + `wrapWithDirectory` path we use, leaving deployed sites unparseable.
  * We rely on the Kubo binary path (installed by `dot login`) until upstream
  * fixes `merkleizeJS`. See the call site below and CLAUDE.md for context.
  *
  * All retry, nonce recovery, pool authorization, and DAG-PB verification
- * stays inside bulletin-deploy — we do not reimplement any of it here.
+ * stays inside polkadot-app-deploy — we do not reimplement any of it here.
  */
 
 import {
@@ -34,14 +34,14 @@ import {
     type DeployContent,
     type DeployOptions,
     type DeployResult,
-} from "bulletin-deploy";
+} from "@parity/polkadot-app-deploy";
 import { DeployLogParser, type DeployLogEvent } from "./progress.js";
 import { getChainConfig, type Env } from "../../config.js";
 
 export interface StorageDeployOptions {
     /**
      * What to upload — a filesystem path (file or directory) or raw bytes.
-     * Matches bulletin-deploy's `DeployContent` type.
+     * Matches polkadot-app-deploy's `DeployContent` type.
      */
     content: DeployContent;
     /**
@@ -50,24 +50,24 @@ export interface StorageDeployOptions {
      */
     domainName: string | null;
     /**
-     * Auth options forwarded to bulletin-deploy. Usually produced by
+     * Auth options forwarded to polkadot-app-deploy. Usually produced by
      * `resolveSignerSetup()` merged with `resolveStorageSignerOptions()`.
      * Never `{}`: dev mode pins an explicit `mnemonic` + dev `storageSigner`
-     * (empty options make bulletin-deploy 0.8.x resolve the persisted phone
+     * (empty options make polkadot-app-deploy 0.8.x resolve the persisted phone
      * session — see signerMode.ts). `storageSigner` (the BulletInAllowance
      * slot key in phone mode, the dev / `--suri` key otherwise) takes
      * precedence over `signer` for Bulletin storage routing inside
-     * bulletin-deploy — chunk txs are too large for phone signing.
+     * polkadot-app-deploy — chunk txs are too large for phone signing.
      */
     auth: Pick<
         DeployOptions,
         "signer" | "signerAddress" | "mnemonic" | "storageSigner" | "storageSignerAddress"
     >;
-    /** Emits progress events derived from bulletin-deploy's log output. */
+    /** Emits progress events derived from polkadot-app-deploy's log output. */
     onLogEvent?: (event: DeployLogEvent) => void;
     /** Target environment — currently only `testnet` is supported. */
     env?: Env;
-    /** Extra telemetry attributes merged into bulletin-deploy's deploy span. */
+    /** Extra telemetry attributes merged into polkadot-app-deploy's deploy span. */
     attributes?: Record<string, string>;
 }
 
@@ -83,7 +83,7 @@ export async function runStorageDeploy(options: StorageDeployOptions): Promise<D
 
     try {
         const deployOptions: EnvironmentAwareDeployOptions = {
-            // Intentionally NOT setting `jsMerkle: true` — bulletin-deploy's
+            // Intentionally NOT setting `jsMerkle: true` — polkadot-app-deploy's
             // pure-JS merkleizer (`merkleizeJS`) produces CARs that are
             // missing their DAG-PB structural blocks (directory + file nodes)
             // because `blockstore-core/memory`'s `getAll()` iterator drops
@@ -96,7 +96,7 @@ export async function runStorageDeploy(options: StorageDeployOptions): Promise<D
             // complete, parseable CAR. `dot login` installs `ipfs` so the
             // binary is present on any machine that finished setup.
             //
-            // Revisit when bulletin-deploy's `merkleizeJS` is fixed upstream
+            // Revisit when polkadot-app-deploy's `merkleizeJS` is fixed upstream
             // — then flip `jsMerkle: true` back on for the WebContainer (RevX)
             // story. See `src/utils/deploy/playground.ts` for an ongoing
             // WebContainer-safe path for metadata upload.
@@ -121,10 +121,10 @@ export async function runStorageDeploy(options: StorageDeployOptions): Promise<D
  * from the parsed events. If there is no `onLogEvent` sink we still parse
  * but emit nothing, so pool/DotNS log noise doesn't leak into the Ink render.
  *
- * `DOT_DEPLOY_VERBOSE=1`: in addition to parsing, write every bulletin-deploy
+ * `DOT_DEPLOY_VERBOSE=1`: in addition to parsing, write every polkadot-app-deploy
  * log line to stderr prefixed with a `[+<seconds>s]` timestamp. This is the
  * diagnostic path for OOM / freeze reports — you get the exact last line
- * bulletin-deploy managed to print before the process froze, plus timing for
+ * polkadot-app-deploy managed to print before the process froze, plus timing for
  * every chunk state transition (`broadcasting` → `included` → `finalized`).
  * Combine with `DOT_MEMORY_TRACE=1` to correlate log events with RSS growth.
  */
@@ -152,7 +152,7 @@ function interceptConsoleLog(
 
     console.log = (...args: unknown[]) => feed(args);
     console.warn = (...args: unknown[]) => feed(args);
-    // bulletin-deploy only prints errors on the sad path; keep them visible on
+    // polkadot-app-deploy only prints errors on the sad path; keep them visible on
     // stderr so diagnostics don't disappear if something unexpected happens.
     // In verbose mode `feed()` already wrote to stderr — skip the double-print.
     console.error = (...args: unknown[]) => {

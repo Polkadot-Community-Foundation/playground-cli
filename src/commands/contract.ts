@@ -46,7 +46,7 @@ import {
 import { createContractFromClient } from "@parity/product-sdk-contracts";
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import { paseo_bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
-import { DEFAULT_MNEMONIC as BULLETIN_DEPLOY_DEFAULT_MNEMONIC } from "bulletin-deploy";
+import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { Command, Option } from "commander";
 import { createClient, type HexString, type SS58String } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
@@ -153,7 +153,7 @@ export function resolveContractSignerOptions(opts: ContractDeployOpts): SignerOp
                 opts.suri ??
                 process.env.DOTNS_MNEMONIC ??
                 process.env.MNEMONIC ??
-                BULLETIN_DEPLOY_DEFAULT_MNEMONIC,
+                PAD_DEFAULT_MNEMONIC,
         };
     }
     if (opts.signer === "phone") {
@@ -700,7 +700,7 @@ function makeDeployCommand(): Command {
         .option("--registry-address <address>", "Registry contract address")
         .option(
             "--suri <suri>",
-            "Secret URI for local signing; defaults to bulletin-deploy's dev mnemonic when --signer dev",
+            "Secret URI for local signing; defaults to polkadot-app-deploy's dev mnemonic when --signer dev",
         )
         .option("--features <features>", "Cargo feature flags to pass to the build")
         .action(async (opts: ContractDeployOpts) =>

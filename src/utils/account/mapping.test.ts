@@ -16,7 +16,7 @@
 /**
  * Tests for the Revive-mapping wrapper.
  *
- * `checkMapping` mirrors bulletin-deploy's canonical pattern: derive the H160
+ * `checkMapping` mirrors polkadot-app-deploy's canonical pattern: derive the H160
  * via `ReviveApi.address`, then query `Revive.OriginalAccount[H160]` —
  * non-null iff the binding exists.
  *

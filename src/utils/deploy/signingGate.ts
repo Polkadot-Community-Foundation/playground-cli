@@ -18,11 +18,11 @@
  *
  * ── Why this exists (the nonce-safety contract) ───────────────────────────────
  *
- * Every on-chain extrinsic in a deploy — bulletin-deploy's DotNS
+ * Every on-chain extrinsic in a deploy — polkadot-app-deploy's DotNS
  * register/setContenthash and Bulletin chunk `store()` calls, plus our own
  * `registry.publish()` and metadata `store()` — derives its nonce by reading
  * the account's *current* on-chain next-index at submission time
- * (`system_accountNextIndex` inside bulletin-deploy; polkadot-api's
+ * (`system_accountNextIndex` inside polkadot-app-deploy; polkadot-api's
  * `signSubmitAndWatch` for the publish path). None of these accept a
  * caller-supplied incrementing nonce.
  *
@@ -32,7 +32,7 @@
  * two extrinsics with the same nonce. The pool accepts one and rejects the
  * other ("nonce too low" / replaced) — the classic shared-signer race.
  *
- * Rather than reimplement bulletin-deploy's per-tx nonce logic, we make the
+ * Rather than reimplement polkadot-app-deploy's per-tx nonce logic, we make the
  * race impossible by construction: a `SigningGate` is a FIFO mutex keyed by
  * signer address. Each concurrent deploy still builds and prepares in parallel,
  * but acquires the gate before entering its signing phase(s) and releases it

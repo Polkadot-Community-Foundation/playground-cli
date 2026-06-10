@@ -67,7 +67,7 @@ try {
     }
 
     // 2. Derive H160 from SS58 via the ReviveApi.address runtime call —
-    //    same path bulletin-deploy uses (dotns.ts:706).
+    //    same path polkadot-app-deploy uses (dotns.ts:706).
     let h160: Uint8Array;
     try {
         const raw = await api.apis.ReviveApi.address(address);

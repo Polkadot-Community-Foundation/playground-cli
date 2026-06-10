@@ -15,7 +15,7 @@
 
 import { getRegistryAddress } from "@parity/cdm-env";
 import type { CdmJson } from "@parity/cdm-builder";
-import { DEFAULT_MNEMONIC as BULLETIN_DEPLOY_DEFAULT_MNEMONIC } from "bulletin-deploy";
+import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { describe, expect, it } from "vitest";
 import { getChainConfig } from "../config.js";
 import {
@@ -180,13 +180,13 @@ describe("resolveContractSignerOptions", () => {
         expect(resolveContractSignerOptions({ suri: "//Bob" })).toEqual({ suri: "//Bob" });
     });
 
-    it("uses bulletin-deploy's default dev mnemonic by default", () => {
+    it("uses polkadot-app-deploy's default dev mnemonic by default", () => {
         expect(resolveContractSignerOptions({ signer: "dev" })).toEqual({
-            suri: BULLETIN_DEPLOY_DEFAULT_MNEMONIC,
+            suri: PAD_DEFAULT_MNEMONIC,
         });
     });
 
-    it("honors bulletin-deploy mnemonic environment overrides", () => {
+    it("honors polkadot-app-deploy mnemonic environment overrides", () => {
         const previousDotnsMnemonic = process.env.DOTNS_MNEMONIC;
         const previousMnemonic = process.env.MNEMONIC;
         try {

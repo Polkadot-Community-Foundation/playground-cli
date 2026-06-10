@@ -108,7 +108,7 @@ export const deployCommand = new Command("deploy")
     .option("--suri <suri>", "Secret URI for the user signer (e.g. //Alice for dev)")
     .addOption(
         new Option("--env <env>", "Target environment")
-            // Accept the new env IDs (mirroring bulletin-deploy) plus the legacy
+            // Accept the new env IDs (mirroring polkadot-app-deploy) plus the legacy
             // `testnet|mainnet` aliases so existing scripts keep working.
             .choices([
                 "preview",
@@ -170,7 +170,7 @@ export const deployCommand = new Command("deploy")
 
             // Release the Asset Hub client we opened for preflight mapping +
             // allowance checks. Nothing else in the deploy path (build, chunk
-            // upload, bulletin-deploy's own DotNS preflight + registration)
+            // upload, polkadot-app-deploy's own DotNS preflight + registration)
             // touches `getConnection()` — and holding an idle polkadot-api client
             // with a live best-block subscription for the entire deploy window
             // was a measurable contributor to background memory pressure. The
@@ -275,7 +275,7 @@ async function preflight(opts: {
     // allowance model, Bulletin authorizations are held by the host's slot
     // account keys (not the user's SS58 address), so a direct
     // `TransactionStorage.Authorizations` query by `signer.address` would
-    // always return "not authorized" and produce a false block. bulletin-deploy
+    // always return "not authorized" and produce a false block. polkadot-app-deploy
     // 0.7.19 surfaces a clear "Payment" error if the host's allowance is
     // missing — the user runs `dot login` to re-request.
 
@@ -386,7 +386,7 @@ async function runHeadless(ctx: {
     // `register()` extrinsic — otherwise the preflight reports "taken" on a
     // re-deploy. Phone mode signs with the session account; dev-with-SURI signs
     // with that local account; dev mode without `--suri` (with or without a
-    // session) falls back to bulletin-deploy's DEFAULT_MNEMONIC bare-root,
+    // session) falls back to polkadot-app-deploy's DEFAULT_MNEMONIC bare-root,
     // which is `DEV_PUBLISH_ADDRESS`.
     process.stdout.write(`\nChecking availability of ${domain.replace(/\.dot$/, "") + ".dot"}…\n`);
     const dotnsOwnerSs58Address = resolveDotnsOwnerAddress(mode, ctx.userSigner);

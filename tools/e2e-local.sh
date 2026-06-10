@@ -80,7 +80,7 @@ trap 'rm -rf "$ISOLATED_HOME"' EXIT
 export HOME="$ISOLATED_HOME"
 
 # Bootstrap a fresh IPFS repo in the isolated HOME. The deploy tests shell
-# out to `ipfs add` (via bulletin-deploy's Kubo path), and IPFS resolves the
+# out to `ipfs add` (via polkadot-app-deploy's Kubo path), and IPFS resolves the
 # repo location from `$HOME/.ipfs` by default. Without this, the deploy
 # tests fail with "no IPFS repo found in <isolated home>/.ipfs". CI does
 # the same thing in the workflow's `ipfs init --profile=test` step.

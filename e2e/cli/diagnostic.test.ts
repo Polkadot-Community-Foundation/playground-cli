@@ -34,7 +34,7 @@ describe("diagnostic mode", () => {
 		{ timeout: 300_000 },
 		async () => {
 			// Need a deploy that actually reaches the storage phase — that's
-			// where bulletin-deploy logs and verbose-mode wraps its output
+			// where polkadot-app-deploy logs and verbose-mode wraps its output
 			// with "[+<seconds>s] " timestamps (see src/utils/deploy/storage.ts).
 			// Re-deploying a domain SIGNER already owns is the cheapest way
 			// to get there.

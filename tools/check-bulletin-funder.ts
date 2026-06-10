@@ -15,7 +15,7 @@
 // limitations under the License.
 
 /**
- * One-shot operator probe: dump the bulletin-deploy dev funder's free /
+ * One-shot operator probe: dump the polkadot-app-deploy dev funder's free /
  * reserved / frozen balance on both stable Paseo Asset Hub (where an operator
  * faucets / teleports from) and paseo-next-v2 Asset Hub (where the CLI's
  * `dot login` consumes funds from). Run via:

@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * Tests for the bulletin-deploy-style dev top-up.
+ * Tests for the polkadot-app-deploy-style dev top-up.
  *
  * We mock `@parity/product-sdk-tx::submitAndWatch` to observe what got
  * submitted without touching the network. The real `polkadot-api` `Enum(...)`
@@ -124,7 +124,7 @@ describe("topUpFromBulletinDev", () => {
 
     it("short-circuits without submitting if the recipient IS the dev funder", async () => {
         // Hypothetical: a user's product-derived account collides with the
-        // bare-master dev address. Mirrors bulletin-deploy's
+        // bare-master dev address. Mirrors polkadot-app-deploy's
         // `attemptTestnetTopUp` self-transfer guard.
         const { client, transferFactory } = makeClient({ [DEV_FUNDER]: 0n });
         const result = await topUpFromBulletinDev(client, DEV_FUNDER);

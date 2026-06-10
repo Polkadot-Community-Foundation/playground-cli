@@ -21,7 +21,7 @@
  * that (each chunk is up to 2 MiB). Without a pre-flight check the upload
  * dies mid-flight with Payment dispatch errors — and mid-upload failures do
  * NOT fall back to the pool (only a failure on first connection does, see
- * bulletin-deploy's `selectStorageReconnect`). This module supplies
+ * polkadot-app-deploy's `selectStorageReconnect`). This module supplies
  * `resolveStorageSignerOptions` with the two inputs it needs to verify the
  * extent up front and trigger the one-tap `Increase` flow when short:
  * a size estimate and a short-lived Bulletin API handle.

@@ -70,7 +70,7 @@ the Parity Apache-2.0 block (SPDX line + Parity copyright line, both required) �
 - `@novasamatech/*` resolves through `@parity/product-sdk-terminal` (host-papp ≥ 0.8.6). Do NOT
   re-pin to 0.7.x or 0.8.5 — pairing compatibility is purely which host-papp version resolves. See
   `CLAUDE.md` for the full pairing-version rationale.
-- Keep `bulletin-deploy` pinned to an explicit version — never `latest`. When bumping, check public
+- Keep `polkadot-app-deploy` pinned to an explicit version — never `latest`. When bumping, check public
   API changes for `deploy()`, DotNS methods, `DeployOptions`, `jsMerkle`, the signer/storageSigner
   options, RPC handling, and attributes.
 - Two local pnpm patches remain (statement-store, sdk-statement); they are local-only and version
@@ -86,30 +86,30 @@ the Parity Apache-2.0 block (SPDX line + Parity copyright line, both required) �
   (e.g. RevX) and must not import React or Ink.
 - CLI/TUI code lives under `src/commands/*`.
 - `src/bootstrap.ts` is the first import in `src/index.ts` and owns the ambient Sentry handoff to
-  `bulletin-deploy`. Keep `DOT_TELEMETRY` as the privacy gate for both CLI telemetry and
-  `BULLETIN_DEPLOY_TELEMETRY`.
+  `polkadot-app-deploy`. Keep `DOT_TELEMETRY` as the privacy gate for both CLI telemetry and
+  `PAD_TELEMETRY`.
 - The Bun compiled-binary stdin warm-up in `src/index.ts` is intentional. Do not remove it until
   Bun compiled TTY stdin works reliably with Ink.
 
 ## Deploy And Storage Invariants
 
-- Deploy delegates storage hardening to `bulletin-deploy`: chunking, retries, pool accounts, nonce
+- Deploy delegates storage hardening to `polkadot-app-deploy`: chunking, retries, pool accounts, nonce
   fallback, DAG-PB, and DotNS commit-reveal stay there.
 - The CLI owns `registry.publish()` because the registry contract must record the user as the app
   owner. See `CLAUDE.md` for the `Option<Address> owner` / `env::caller()` ownership detail.
 - Bulletin storage chunks must never sign with the phone session signer (the statement-store
   request cap is far below chunk size); phone mode threads a `storageSigner` slot key instead.
-- Do not call `bulletin-deploy.deploy()` just to store playground metadata JSON. Submit
+- Do not call `polkadot-app-deploy.deploy()` just to store playground metadata JSON. Submit
   `TransactionStorage.store` directly via PAPI using `calculateCid` from
   `@parity/product-sdk-bulletin` (see `src/utils/deploy/playground.ts::publishToPlayground`).
   `deploy()` would also run a DotNS register/setContenthash pass on a random `test-domain-*` label,
   which reverts opaquely.
-- Dev mode must pass EXPLICIT auth options to `bulletin-deploy.deploy()` — never `{}` — or it probes
+- Dev mode must pass EXPLICIT auth options to `polkadot-app-deploy.deploy()` — never `{}` — or it probes
   for a persisted SSO session and turns a 0-tap dev deploy into multiple phone approvals.
 - Metadata uploads need a dedicated Bulletin client with `heartbeatTimeout: 300_000`, destroyed
   immediately after upload.
 - `playground deploy` currently relies on the Kubo binary path and must not pass `jsMerkle: true`
-  until bulletin-deploy's pure-JS merkleizer preserves DAG-PB directory/file blocks correctly.
+  until polkadot-app-deploy's pure-JS merkleizer preserves DAG-PB directory/file blocks correctly.
   `playground login` installs `ipfs` so deploys can rely on the Kubo CLI after setup.
 
 ## Runtime Safety

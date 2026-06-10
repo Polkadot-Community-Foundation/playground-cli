@@ -52,7 +52,7 @@ describe("createPlaygroundSessionSigner", () => {
     // SS58 — the product account derived at `mnemonic + "/product/{id}/0"`.
     //   - `playground login` displays `ss58Encode(signer.publicKey)`.
     //   - `playground deploy --signer phone` passes the same SS58 to
-    //     bulletin-deploy as `signerAddress`.
+    //     polkadot-app-deploy as `signerAddress`.
     //   - The deployed playground-app's `HostProvider.getProductAccount`
     //     asks the mobile to compute `seedToAccount(mnemonic, "/product/{id}/0")`.
     // As long as all three pin the same `(rootPubKey, productId, 0)` triple they

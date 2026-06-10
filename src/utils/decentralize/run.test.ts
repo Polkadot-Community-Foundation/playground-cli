@@ -52,7 +52,7 @@ vi.mock("@parity/product-sdk-terminal/host", () => ({
     getCachedAllocation: vi.fn(async () => ({ tag: "BulletInAllowance" })),
     requestResourceAllocation: vi.fn(),
 }));
-import { DEFAULT_MNEMONIC } from "bulletin-deploy";
+import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import type { ResolvedSigner } from "../signer.js";
 import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 import { describeDeployEvent, runDecentralize } from "./run.js";
@@ -145,7 +145,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
         const arg = runStorageDeployMock.mock.calls[0][0] as unknown as {
             auth: { mnemonic?: string; signer?: unknown; storageSignerAddress?: string };
         };
-        // Explicit dev identity: an empty auth object would let bulletin-deploy
+        // Explicit dev identity: an empty auth object would let polkadot-app-deploy
         // 0.8.x resolve the persisted phone session (DotNS taps) and the
         // user's cached slot key (quota burn). See signerMode.ts.
         expect(arg.auth.mnemonic).toBe(DEFAULT_MNEMONIC);

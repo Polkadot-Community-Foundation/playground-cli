@@ -13,21 +13,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Env-var wiring that MUST be applied before any `bulletin-deploy` module
+// Env-var wiring that MUST be applied before any `polkadot-app-deploy` module
 // evaluates. ES-module top-level evaluation is dependency-first + ordered
 // across siblings of the same parent, so importing this module as the very
 // first statement in `src/index.ts` guarantees its side effects run before
-// bulletin-deploy initialises its telemetry gates. Plain `process.env.X`
+// polkadot-app-deploy initialises its telemetry gates. Plain `process.env.X`
 // assignments later in `index.ts` are too late because import hoisting would
-// have already evaluated the bulletin-deploy import chain.
+// have already evaluated the polkadot-app-deploy import chain.
 //
-// The CLI owns the Sentry SDK and hands the active client to bulletin-deploy
+// The CLI owns the Sentry SDK and hands the active client to polkadot-app-deploy
 // through ambient mode. `DOT_TELEMETRY` remains the privacy gate for both apps:
 // unknown external users stay off by default, while known internal contexts
-// and explicit `DOT_TELEMETRY=1` opt in. Do not set
-// `BULLETIN_DEPLOY_HOST_APP=playground-cli` without also setting an explicit
-// `BULLETIN_DEPLOY_TELEMETRY` value; bulletin-deploy treats this host app as
-// internal.
+// and explicit `DOT_TELEMETRY=1` opt in. We always set `PAD_TELEMETRY`
+// explicitly alongside `PAD_HOST_APP` rather than relying on the package's own
+// default: the open-source polkadot-app-deploy's `isInternalContext()` returns
+// false in its public build, so it no longer infers a telemetry default from
+// the host app, and setting the gate ourselves keeps the privacy contract
+// owned here regardless of how the dependency evolves.
 
 import { configure as configureProductSdkLogger } from "@parity/product-sdk-logger";
 import { configureBulletinTelemetryEnv } from "./telemetry-config.js";

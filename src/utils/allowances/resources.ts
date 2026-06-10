@@ -36,7 +36,7 @@ import type { AllocatableResource, ApAllocationOutcome } from "@parity/product-s
  * `ssSecret` (`@novasamatech/host-papp`'s `createSsoStatementProver`), not
  * from a `StatementStoreAllowance` allocation. The product slot key is only
  * consumed by `papp.allowance.getStatementStoreProver`, an opt-in API the CLI
- * never calls; bulletin-deploy's storage path likewise reads only the Bulletin
+ * never calls; polkadot-app-deploy's storage path likewise reads only the Bulletin
  * slot key (we always inject explicit signer/storageSigner). Requesting it was
  * pure overhead AND a failure source: it is the one resource that needs the
  * phone to seat a slot in the scarce on-chain SSS ring, so for users whose ring

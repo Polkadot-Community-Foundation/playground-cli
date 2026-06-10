@@ -24,7 +24,7 @@
  * `env::caller()` matches their address — that's what drives the playground-app
  * "myApps" view.
  *
- * We deliberately do NOT use `bulletin-deploy.deploy()` for the metadata
+ * We deliberately do NOT use `polkadot-app-deploy.deploy()` for the metadata
  * upload: `deploy()` unconditionally runs a DotNS `register()` +
  * `setContenthash()` on whatever name you give it (or a randomly generated
  * `test-domain-*` when you pass `null`). That second DotNS pass is wasteful

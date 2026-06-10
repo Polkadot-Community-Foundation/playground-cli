@@ -19,7 +19,7 @@ import { isBenignUnsubscriptionError, setProcessGuardWarningHandler } from "./pr
 // Construct an object shaped like rxjs's `UnsubscriptionError` — rxjs builds
 // it via `createErrorClass`, so in practice all we rely on is (a) `name ===
 // "UnsubscriptionError"` and (b) an `errors` array. Mirror that here rather
-// than import rxjs (the CLI doesn't depend on it directly; bulletin-deploy
+// than import rxjs (the CLI doesn't depend on it directly; polkadot-app-deploy
 // does, transitively).
 function makeUnsubscriptionError(innerMessages: string[]): Error {
     const err = new Error(

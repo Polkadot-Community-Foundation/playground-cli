@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// MUST be the first import — sets env vars that gate bulletin-deploy's
+// MUST be the first import — sets env vars that gate polkadot-app-deploy's
 // ambient Sentry handoff before its modules evaluate. See
 // `src/bootstrap.ts` for the rationale.
 import "./bootstrap.js";
@@ -60,7 +60,9 @@ async function withoutBundledDotnsCliWarning<T>(fn: () => Promise<T>): Promise<T
     console.warn = (...args: unknown[]) => {
         const message = String(args[0] ?? "");
         if (
-            message.startsWith("[bulletin-deploy] @parity/dotns-cli not found in node_modules") &&
+            message.startsWith(
+                "[polkadot-app-deploy] @parity/dotns-cli not found in node_modules",
+            ) &&
             message.includes("from '/$bunfs/root/")
         ) {
             return;

@@ -109,7 +109,7 @@ export const SESSION_EXPIRED_MESSAGE =
  * actionable message. Renewal genuinely requires re-pairing: the
  * `requestResourceAllocation` that would extend the allowance itself travels
  * over SSS, and only the QR login flow has a direct WebSocket channel.
- * Mirrors bulletin-deploy's vendored `sessionSigner.ts` fast-fail, which does
+ * Mirrors polkadot-app-deploy's vendored `sessionSigner.ts` fast-fail, which does
  * not cover us because we inject our own signer.
  *
  * Re-entrancy: the deploy pipeline (`deploy/storage.ts::interceptConsoleLog`)

@@ -15,7 +15,7 @@
 
 /**
  * Wraps a `PolkadotSigner` so the TUI can render a "check your phone" panel
- * around each signing call. We cannot infer this from bulletin-deploy's
+ * around each signing call. We cannot infer this from polkadot-app-deploy's
  * stdout (the log is printed before the signer is invoked and gives no
  * completion hook), so the reliable place to hook is the signer itself.
  */
@@ -38,7 +38,7 @@ export interface SigningCounter {
 /**
  * Sequential tap counter shared across a whole deploy run. Deliberately has
  * NO predicted total: the pre-deploy approvals plan regularly diverged from
- * what bulletin-deploy actually submitted (e.g. a predicted `setUserPopStatus`
+ * what polkadot-app-deploy actually submitted (e.g. a predicted `setUserPopStatus`
  * that runtime skipped left users on "step 4 of 5" with no fifth step), and
  * RFC-0010 allowance taps are demand-driven so they can't be counted up
  * front. The UI shows "step 1", "step 2", … and never has to guess.

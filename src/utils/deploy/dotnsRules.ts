@@ -20,7 +20,7 @@
  * RPC-free so both the flag path and the TUI can share it, and so it stays
  * inside the `src/utils/deploy/*` SDK boundary (no React/Ink, no chain reads).
  *
- * bulletin-deploy enforces the same rules in `classifyDotnsLabel` /
+ * polkadot-app-deploy enforces the same rules in `classifyDotnsLabel` /
  * `validateDomainLabel`, but does not re-export them from its package root
  * (its `exports` map blocks deep imports), so we reproduce them. Keep this in
  * sync if the contract rule set changes (governance threshold, PoP-tier remap,
@@ -29,7 +29,7 @@
  * Rules (operate on a BARE label — no `.dot` suffix):
  *   - charset `[a-z0-9-]`, length 3..63, no leading/trailing hyphen
  *   - trailing digits MUST be exactly 0 or 2 (1 or >2 revert on-chain)
- *   - a 2-digit suffix may not be preceded by a hyphen: this matches bulletin-deploy's
+ *   - a 2-digit suffix may not be preceded by a hyphen: this matches polkadot-app-deploy's
  *     own deploy-time gate (`/-\d+$/`, "drop the hyphen"), which strips trailing digits
  *     to a trailing-hyphen base. We reject it up front so the user gets the error before
  *     the deploy rather than mid-flight.
