@@ -23,7 +23,7 @@ import { checkMapping, ensureMapped } from "../../utils/account/mapping.js";
 import { getCachedAllocation, requestResourceAllocation } from "@parity/product-sdk-terminal/host";
 import {
     PLAYGROUND_RESOURCES,
-    describeResource,
+    describeAllocationFailure,
     summarizeOutcomes,
 } from "../../utils/allowances/resources.js";
 import {
@@ -208,23 +208,24 @@ export function AccountSetup({
                     setPhonePrompt(null);
                     const summary = summarizeOutcomes(outcomes, PLAYGROUND_RESOURCES);
 
-                    if (summary.rejected.length > 0 || summary.unavailable.length > 0) {
+                    const failure = describeAllocationFailure(summary);
+                    if (failure) {
                         // Telemetry is off by default, so this stderr line is
-                        // the only signal that distinguishes a user decline
-                        // (Rejected) from the account holder being unable to
-                        // provision (NotAvailable — e.g. a full on-chain SSS
-                        // ring). Positional: outcomes[i] ↔ PLAYGROUND_RESOURCES[i].
+                        // the only machine-readable signal that distinguishes a
+                        // user decline (Rejected) from the account holder being
+                        // unable to provision (NotAvailable, e.g. an out-of-date
+                        // mobile build or a full on-chain slot ring). Positional:
+                        // outcomes[i] ↔ PLAYGROUND_RESOURCES[i]. The user-facing
+                        // `failure` line already gives each bucket its own
+                        // remedy (re-approve vs update-the-app).
                         const detail = PLAYGROUND_RESOURCES.map(
                             (r, i) => `${r.tag}=${outcomes[i]?.tag ?? "missing"}`,
                         ).join(" ");
                         console.error(`[allowances] resource allocation outcomes: ${detail}`);
-                        const denied = [...summary.rejected, ...summary.unavailable]
-                            .map(describeResource)
-                            .join(", ");
                         accountSetupOk = false;
                         update(0, {
                             status: "failed",
-                            error: `denied: ${denied}. Re-run \`playground login\` and approve on your phone.`,
+                            error: failure,
                             valueTone: "danger",
                         });
                     } else {
