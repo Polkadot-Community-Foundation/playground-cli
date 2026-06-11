@@ -111,11 +111,18 @@ export interface PublishToPlaygroundOptions {
      */
     isModdable?: boolean;
     /**
-     * Domain (`<label>.dot`) the user `dot mod`'d this app from, or `""` if
+     * Domain (`<label>.dot`) the user modded this app from, or `""`/omitted if
      * this is a first-party publish. Recorded on-chain so the playground-app
-     * can render a "modded from" badge. Normally captured by `dot mod` into
-     * `dot.json` and read via `readModdedFrom`; this option is an explicit
-     * fallback for callers that already know the source domain.
+     * can render a "modded from" badge AND so the contract credits the SOURCE
+     * app's owner the mod XP.
+     *
+     * When set (non-empty), this is AUTHORITATIVE — it takes precedence over
+     * any `moddedFrom` read from `dot.json`. A caller that just performed the
+     * mod (the `dot mod` TUI captures it in `dot.json`; an SDK consumer like
+     * RevX clones the source itself and passes it here) knows the true
+     * immediate parent, whereas `dot.json`'s field can be a STALE value that
+     * merely rode along in a cloned repo. See the precedence note in
+     * `publishToPlayground` (playground-app#335).
      */
     moddedFrom?: string;
     /**
@@ -374,12 +381,14 @@ export async function publishToPlayground(
             for (let attempt = 1; attempt <= MAX_REGISTRY_RETRIES; attempt++) {
                 try {
                     const visibility = options.isPrivate ? 0 : 1;
-                    // Prefer the lineage captured by `dot mod` in `dot.json`
-                    // (the `moddedFrom` read above); fall back to an explicit option.
-                    // The contract awards the source owner the "your app is
-                    // modded" XP off this argument, so an empty string here
-                    // means no lineage edge is ever recorded.
-                    const moddedFromArg = moddedFrom ?? options.moddedFrom ?? "";
+                    // Explicit `options.moddedFrom` wins over the `dot.json`
+                    // value (see the option's doc + playground-app#335); an
+                    // empty/whitespace explicit value falls through to
+                    // `dot.json` ("not provided", not "no parent"). The contract
+                    // credits the source owner the mod XP off this argument, so
+                    // an empty string records no lineage edge.
+                    const explicitModdedFrom = options.moddedFrom?.trim();
+                    const moddedFromArg = explicitModdedFrom || moddedFrom || "";
                     const isModdable = options.isModdable ?? false;
                     const isDevSigner = options.isDevSigner ?? false;
                     const result = await registry.publish.tx(

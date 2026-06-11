@@ -651,6 +651,72 @@ describe("publishToPlayground", () => {
         }
     });
 
+    // playground-app#335: an SDK/RevX consumer that clones the source itself
+    // (skipping the `dot mod` TUI that rewrites `dot.json`) passes the true
+    // immediate parent via the `moddedFrom` option. It MUST win over the stale
+    // value the cloned repo's `dot.json` carried — otherwise a mod-of-a-mod
+    // re-publishes the grandparent and credits the wrong owner.
+    it("prefers an explicit moddedFrom option over a stale dot.json value", async () => {
+        const dir = makeTmpDir();
+        try {
+            // Stale value inherited from the cloned source (e.g. tutorial).
+            writeFileSync(
+                join(dir, "dot.json"),
+                JSON.stringify({ moddedFrom: "playground-tutorial.dot" }),
+            );
+            await publishToPlayground({
+                domain: "my-mod",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: dir,
+                // True immediate parent, known by the caller that did the mod.
+                moddedFrom: "steampunk-lizard-spock01.dot",
+            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-mod.dot",
+                "bafymeta",
+                1,
+                {
+                    isSome: false,
+                    value: "0x0000000000000000000000000000000000000000",
+                },
+                "steampunk-lizard-spock01.dot",
+                false,
+                false,
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("falls back to dot.json when the explicit moddedFrom is empty/whitespace", async () => {
+        const dir = makeTmpDir();
+        try {
+            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
+            await publishToPlayground({
+                domain: "my-mod",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: dir,
+                moddedFrom: "   ",
+            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-mod.dot",
+                "bafymeta",
+                1,
+                {
+                    isSome: false,
+                    value: "0x0000000000000000000000000000000000000000",
+                },
+                "original.dot",
+                false,
+                false,
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     it("retries up to 3 times on registry publish failure", async () => {
         publishTx.mockImplementationOnce(async () => {
             throw new Error("nonce race");
