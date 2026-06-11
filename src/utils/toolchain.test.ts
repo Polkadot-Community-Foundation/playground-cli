@@ -69,6 +69,36 @@ describe("TOOL_STEPS", () => {
         expect(gitIndex).toBeLessThan(cargoPvmIndex);
     });
 
+    it("installs curl before any step whose installer fetches with it (#248)", () => {
+        // Bare Ubuntu ships no curl. The rustup and IPFS install commands
+        // both pipe from curl, so the curl step must run first. macOS masks
+        // this because curl ships with the OS.
+        const names = TOOL_STEPS.map((step) => step.name);
+        const curlIndex = names.indexOf("curl");
+        expect(curlIndex).toBeGreaterThanOrEqual(0);
+
+        const rustupIndex = names.indexOf("rustup");
+        expect(rustupIndex).toBeGreaterThanOrEqual(0);
+        expect(curlIndex).toBeLessThan(rustupIndex);
+
+        const ipfsIndex = names.indexOf("IPFS");
+        expect(ipfsIndex).toBeGreaterThanOrEqual(0);
+        expect(curlIndex).toBeLessThan(ipfsIndex);
+    });
+
+    it("installs the C linker before cargo-pvm-contract, which compiles (#248)", () => {
+        // `cargo install` needs a system linker; bare Ubuntu has no cc until
+        // build-essential lands. macOS masks this via Xcode CLT, so the
+        // ordering is pinned by test, same as git in #247.
+        const names = TOOL_STEPS.map((step) => step.name);
+        const ccIndex = names.indexOf("C linker (cc)");
+        expect(ccIndex).toBeGreaterThanOrEqual(0);
+
+        const cargoPvmIndex = names.indexOf("cargo-pvm-contract");
+        expect(cargoPvmIndex).toBeGreaterThanOrEqual(0);
+        expect(ccIndex).toBeLessThan(cargoPvmIndex);
+    });
+
     it("installs cargo-pvm-contract directly instead of the CDM CLI installer", () => {
         const names = TOOL_STEPS.map((step) => step.name);
         expect(names).toContain("cargo-pvm-contract");

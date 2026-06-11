@@ -7,6 +7,14 @@ CLI tooling for Polkadot Playground. Installed as the `playground` command, with
 
 ## Quick Start
 
+On a fresh **Debian/Ubuntu** system, install the base prerequisites first (macOS needs no preparation — curl ships with the OS and the Xcode Command Line Tools cover the rest):
+
+```bash
+sudo apt update && sudo apt install -y build-essential curl
+```
+
+Then install:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | bash
 ```
@@ -26,7 +34,7 @@ The installer drops the binary into `~/.polkadot/bin/playground`, symlinks both 
 End-to-end first-run setup. Login and toolchain install run **concurrently**; account setup runs **once both have completed successfully**.
 
 1. **Login via the Polkadot mobile app** — a QR code is printed to the terminal. Scan it with the app. If you already have a session persisted in `~/.polkadot-apps/`, this step is skipped.
-2. **Toolchain install** — `rustup`, nightly, `rust-src`, `cargo-pvm-contract`, IPFS, and `git`. Existing installs are detected and skipped.
+2. **Toolchain install** — `git`, `curl`, a C linker (`build-essential`), `rustup`, nightly, `rust-src`, `cargo-pvm-contract`, IPFS, and `wget`. Existing installs are detected and skipped.
 3. **Account setup** (only if a session is available) — in order:
     - **Fund** — if your balance on Paseo Asset Hub is below 1 PAS, Alice sends 10 PAS (testnet).
     - **Map** — `Revive.map_account` is signed by you on the mobile app so an H160 is associated with your SS58 address.

@@ -118,8 +118,10 @@ cargo install --force --locked --target "$host_target" --path "$tmp_dir/crates/c
 // install script starts with `git clone` (#247 — clean Ubuntu has no git, so
 // the clone failed before the git step ran; macOS masked it via Xcode CLT).
 // git goes first overall: it's the cheapest step, so a broken apt surfaces
-// before the multi-hundred-MB rustup/nightly downloads. Pinned by a test in
-// toolchain.test.ts.
+// before the multi-hundred-MB rustup/nightly downloads. Likewise curl MUST
+// come before rustup/IPFS (their installers fetch via curl) and the C linker
+// MUST come before cargo-pvm-contract (`cargo install` links) — #248. Pinned
+// by tests in toolchain.test.ts.
 export const TOOL_STEPS: ToolStep[] = [
     {
         name: "git",
@@ -136,6 +138,46 @@ export const TOOL_STEPS: ToolStep[] = [
             }
         },
         manualHint: "https://git-scm.com/downloads",
+    },
+    {
+        // The rustup and IPFS install commands below fetch via curl (#248).
+        // The install.sh one-liner already implies curl exists, but `playground
+        // init` can also run standalone on a machine the binary was copied to.
+        name: "curl",
+        check: () => commandExists("curl"),
+        install: async (onData) => {
+            if (platform() === "darwin" && (await commandExists("brew"))) {
+                await runPiped("brew install curl", onData);
+            } else if (platform() === "linux") {
+                await runPiped(`${sudo()}apt update && ${sudo()}apt install -y curl`, onData);
+            } else {
+                throw new Error(
+                    "Cannot install curl automatically on this platform — install manually.",
+                );
+            }
+        },
+        manualHint: "https://curl.se/download.html",
+    },
+    {
+        // cargo-pvm-contract's `cargo install` compiles Rust, which needs a
+        // system C linker (#248). Bare Ubuntu ships none; macOS masks the gap
+        // via Xcode CLT, same pattern as #247's missing git.
+        name: "C linker (cc)",
+        check: () => commandExists("cc"),
+        install: async (onData) => {
+            if (platform() === "linux") {
+                await runPiped(
+                    `${sudo()}apt update && ${sudo()}apt install -y build-essential`,
+                    onData,
+                );
+            } else {
+                throw new Error(
+                    "Cannot install a C toolchain automatically on this platform — install manually.",
+                );
+            }
+        },
+        manualHint:
+            "Debian/Ubuntu: sudo apt install -y build-essential — macOS: xcode-select --install",
     },
     {
         name: "rustup",
