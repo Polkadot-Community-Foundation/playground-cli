@@ -89,3 +89,35 @@ export function describeResource(resource: AllocatableResource): string {
             return "auto-signing";
     }
 }
+
+/**
+ * Compose the user-facing failure line for an allocation summary, or null when
+ * every requested resource was granted.
+ *
+ * `Rejected` and `NotAvailable` need DIFFERENT remedies and must not be
+ * conflated (the old code surfaced both as one "denied ... approve on your
+ * phone" line). `Rejected` is a user decline on the phone, so re-running and
+ * approving genuinely fixes it. `NotAvailable` means the wallet could not
+ * provision the resource at all: an out-of-date mobile build that does not
+ * implement the grant (the way AutoSigning returns NotAvailable on every
+ * current wallet), or a full on-chain slot ring. "Approve on your phone" is a
+ * dead end there, because the dialog never offers the resource; the real fix is
+ * updating the app. Each bucket gets its own sentence so the printed guidance
+ * is actionable for whichever outcome occurred.
+ */
+export function describeAllocationFailure(summary: AllocationSummary): string | null {
+    const parts: string[] = [];
+    if (summary.rejected.length > 0) {
+        const names = summary.rejected.map(describeResource).join(", ");
+        parts.push(`declined: ${names}. Re-run \`playground login\` and approve on your phone.`);
+    }
+    if (summary.unavailable.length > 0) {
+        const names = summary.unavailable.map(describeResource).join(", ");
+        const noun = summary.unavailable.length > 1 ? "these allowances" : "this allowance";
+        parts.push(
+            `unavailable: ${names}. Your Polkadot mobile app could not grant ${noun}. ` +
+                "Make sure you're on the latest version of the app, then re-run `playground login`.",
+        );
+    }
+    return parts.length > 0 ? parts.join(" ") : null;
+}
