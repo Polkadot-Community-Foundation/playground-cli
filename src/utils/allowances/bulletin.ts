@@ -24,7 +24,6 @@ import {
     createSlotAccountSigner,
     ensureSlotAccountSigner,
     getCachedAllocation,
-    requestResourceAllocation,
     type AllocatableResource,
 } from "@parity/product-sdk-terminal/host";
 import type { ResolvedSigner } from "../signer.js";
@@ -69,8 +68,8 @@ export interface AllowancePromptHandle {
 }
 
 /**
- * Called right before a step that needs a tap on the phone (slot grant on
- * first use, quota Increase). RFC-0010 allocation requests travel over the
+ * Called right before a step that needs a tap on the phone (the first-use
+ * slot grant). RFC-0010 allocation requests travel over the
  * statement store outside any `PolkadotSigner`, so the deploy TUI's signing
  * proxy cannot see them — without this hook the phone shows an approval
  * dialog while the terminal sits silent.
@@ -82,7 +81,6 @@ export type AllowancePrompt = (label: string) => AllowancePromptHandle;
 export interface BulletinAllowanceSignerOptions {
     publishSigner: ResolvedSigner;
     bulletinApi?: CloudStorageApi;
-    requiredBytes?: number;
     /** Surfaces "check your phone" UI for allocation requests. Optional: headless callers omit it. */
     onPrompt?: AllowancePrompt;
 }
@@ -90,14 +88,46 @@ export interface BulletinAllowanceSignerOptions {
 export interface CachedBulletinAllowanceSignerOptions {
     publishSigner: ResolvedSigner;
     bulletinApi?: CloudStorageApi;
-    requiredBytes?: number;
 }
 
-function hasUsableAuthorization(status: AuthorizationStatus, requiredBytes = 0): boolean {
-    return (
-        status.authorized &&
-        status.remainingTransactions > 0 &&
-        status.remainingBytes >= BigInt(requiredBytes)
+/**
+ * Whether a slot's Bulletin authorization will let `TransactionStorage.store`
+ * land. The chain's only hard gate is existence + non-expiry: pallet
+ * transaction-storage's `check_authorization` rejects a store ONLY when the
+ * authorization is missing or expired. The `transactions` / `bytes` extent
+ * counters are SOFT limits — they saturate upward on each store and feed a
+ * mempool-priority boost, but never cause a rejection (the hard per-account
+ * caps apply to `renew`, which this CLI never calls). So remaining quota is
+ * irrelevant; we never gate on it and never request an `Increase`.
+ *
+ * Expiry is `now >= expiration` on-chain, so "not expired" is
+ * `currentBlock < expiration`. product-sdk's `checkAuthorization` returns the
+ * raw `expiration` block and leaves the comparison to callers, hence the
+ * separate block read.
+ */
+function isAuthorizationActive(status: AuthorizationStatus, currentBlock: number): boolean {
+    return status.authorized && status.expiration > currentBlock;
+}
+
+/**
+ * Current Bulletin chain height, needed to evaluate authorization expiry.
+ * `CloudStorageApi` is the descriptor-typed Bulletin API; `System.Number` is
+ * present at runtime but outside the nominal `CloudStorageApi` surface, so we
+ * reach it through a narrow structural cast (the same shape `checkAuthorization`
+ * uses internally for `TransactionStorage.Authorizations`).
+ */
+async function readBulletinBlockNumber(bulletinApi: CloudStorageApi): Promise<number> {
+    const api = bulletinApi as unknown as {
+        query: { System: { Number: { getValue(): Promise<number | bigint> } } };
+    };
+    return Number(await api.query.System.Number.getValue());
+}
+
+function unusableAuthorizationError({ address, status }: BulletinSlotAuthorization): Error {
+    return new Error(
+        status.authorized
+            ? `Bulletin allowance for ${address} has expired. Re-run \`playground login\` and approve on your phone.`
+            : `Bulletin allowance account ${address} is not authorized on-chain yet. Re-run \`playground login\` and approve on your phone.`,
     );
 }
 
@@ -107,15 +137,17 @@ export interface BulletinSlotAuthorization {
     usable: boolean;
 }
 
-/** On-chain authorization status of a slot signer's account. */
+/** On-chain authorization status of a slot signer's account (existence + non-expiry). */
 export async function getBulletinSlotAuthorization(
     bulletinApi: CloudStorageApi,
     slotSigner: PolkadotSigner,
-    requiredBytes = 0,
 ): Promise<BulletinSlotAuthorization> {
     const address = ss58Encode(slotSigner.publicKey);
-    const status = await checkAuthorization(bulletinApi, address);
-    return { address, status, usable: hasUsableAuthorization(status, requiredBytes) };
+    const [status, currentBlock] = await Promise.all([
+        checkAuthorization(bulletinApi, address),
+        readBulletinBlockNumber(bulletinApi),
+    ]);
+    return { address, status, usable: isAuthorizationActive(status, currentBlock) };
 }
 
 /**
@@ -127,11 +159,10 @@ export async function getBulletinSlotAuthorization(
 export async function cachedBulletinSlotAuthorization(
     adapter: NonNullable<ResolvedSigner["adapter"]>,
     bulletinApi: CloudStorageApi,
-    requiredBytes = 0,
 ): Promise<BulletinSlotAuthorization | null> {
     const slotSigner = await createSlotAccountSigner(adapter, BULLETIN_RESOURCE);
     if (!slotSigner) return null;
-    return getBulletinSlotAuthorization(bulletinApi, slotSigner, requiredBytes);
+    return getBulletinSlotAuthorization(bulletinApi, slotSigner);
 }
 
 function requireSession(publishSigner: ResolvedSigner) {
@@ -145,14 +176,19 @@ function requireSession(publishSigner: ResolvedSigner) {
 /**
  * Resolve the signer used for Bulletin `TransactionStorage.store` calls
  * (metadata uploads). Slot allocation, key caching and signer construction
- * are all the SDK's (`@parity/product-sdk-terminal/host`); this function owns
- * the QUOTA check: verify the slot's on-chain authorization and, when the
- * allowance is exhausted, make a single `Increase` retry on the phone.
+ * are all the SDK's (`@parity/product-sdk-terminal/host`); this function
+ * verifies the slot's on-chain authorization is present and unexpired.
+ *
+ * It does NOT gate on remaining tx/byte quota and never requests an
+ * `Increase`: the Bulletin `store` extrinsic treats those counters as soft
+ * limits, so an authorized, unexpired slot stores fine regardless of how
+ * "exhausted" its allowance counters read (see `isAuthorizationActive`).
+ * Dropping the quota gate removes the per-deploy "approve an Increase on your
+ * phone" friction that quota-exhausted-but-valid slots used to trigger.
  */
 export async function getBulletinAllowanceSigner({
     publishSigner,
     bulletinApi,
-    requiredBytes,
     onPrompt,
 }: BulletinAllowanceSignerOptions): Promise<PolkadotSigner> {
     // Local dev/SURI deploys are the explicit CI escape hatch: the caller
@@ -181,32 +217,20 @@ export async function getBulletinAllowanceSigner({
     }
     if (!bulletinApi) return slotSigner;
 
-    let authorization = await getBulletinSlotAuthorization(bulletinApi, slotSigner, requiredBytes);
-
-    if (!authorization.usable && authorization.status.authorized) {
-        // Slot exists on-chain but quota is exhausted: ask for one more slot.
-        const increasePrompt = onPrompt?.("Increase Bulletin storage allowance") ?? null;
-        try {
-            await requestResourceAllocation(userSession, adapter, [BULLETIN_RESOURCE], {
-                onExisting: "Increase",
-            });
-            increasePrompt?.complete();
-        } catch (err) {
-            increasePrompt?.fail(err instanceof Error ? err.message : String(err));
-            throw err;
-        }
-        slotSigner = await ensureSlotAccountSigner(userSession, adapter, BULLETIN_RESOURCE);
-        authorization = await getBulletinSlotAuthorization(bulletinApi, slotSigner, requiredBytes);
+    // The up-front authorization check is an optimization — fail fast before a
+    // long upload — not a hard gate. If the on-chain status can't be READ (a
+    // transient WS error on the dedicated client), degrade to proceeding with
+    // the slot signer, exactly as when the auth client couldn't be built at
+    // all. polkadot-app-deploy reports per-chunk truth if the authorization
+    // really is bad. We abort ONLY when we successfully read the status and it
+    // is definitively missing/expired — the case "re-run login" actually fixes.
+    let authorization: BulletinSlotAuthorization;
+    try {
+        authorization = await getBulletinSlotAuthorization(bulletinApi, slotSigner);
+    } catch {
+        return slotSigner;
     }
-
-    if (!authorization.usable) {
-        const { address, status } = authorization;
-        throw new Error(
-            status.authorized
-                ? `Bulletin allowance for ${address} is live but does not have enough quota. Re-run \`playground login\` and approve on your phone.`
-                : `Bulletin allowance account ${address} is not authorized on-chain yet. Re-run \`playground login\` and approve on your phone.`,
-        );
-    }
+    if (!authorization.usable) throw unusableAuthorizationError(authorization);
 
     return slotSigner;
 }
@@ -219,7 +243,6 @@ export async function getBulletinAllowanceSigner({
 export async function getCachedBulletinAllowanceSigner({
     publishSigner,
     bulletinApi,
-    requiredBytes,
 }: CachedBulletinAllowanceSignerOptions): Promise<PolkadotSigner> {
     if (publishSigner.source === "dev") return publishSigner.signer;
 
@@ -230,19 +253,9 @@ export async function getCachedBulletinAllowanceSigner({
     }
     if (!bulletinApi) return slotSigner;
 
-    const authorization = await getBulletinSlotAuthorization(
-        bulletinApi,
-        slotSigner,
-        requiredBytes,
-    );
+    const authorization = await getBulletinSlotAuthorization(bulletinApi, slotSigner);
     if (authorization.usable) return slotSigner;
-
-    const { address, status } = authorization;
-    throw new Error(
-        status.authorized
-            ? `Bulletin allowance for ${address} is live but does not have enough quota. Re-run \`playground login\` and approve on your phone.`
-            : `Bulletin allowance account ${address} is not authorized on-chain yet. Re-run \`playground login\` and approve on your phone.`,
-    );
+    throw unusableAuthorizationError(authorization);
 }
 
 export function isInvalidPaymentError(err: unknown): boolean {

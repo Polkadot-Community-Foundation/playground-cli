@@ -23,13 +23,11 @@ const {
     createSlotAccountSignerMock,
     ensureSlotAccountSignerMock,
     getCachedAllocationMock,
-    requestResourceAllocationMock,
 } = vi.hoisted(() => ({
     checkAuthorizationMock: vi.fn(),
     createSlotAccountSignerMock: vi.fn(),
     ensureSlotAccountSignerMock: vi.fn(),
     getCachedAllocationMock: vi.fn(),
-    requestResourceAllocationMock: vi.fn(),
 }));
 
 vi.mock("@parity/product-sdk-cloud-storage", () => ({
@@ -40,7 +38,6 @@ vi.mock("@parity/product-sdk-terminal/host", () => ({
     createSlotAccountSigner: createSlotAccountSignerMock,
     ensureSlotAccountSigner: ensureSlotAccountSignerMock,
     getCachedAllocation: getCachedAllocationMock,
-    requestResourceAllocation: requestResourceAllocationMock,
 }));
 
 import {
@@ -56,6 +53,25 @@ const PUBLIC_KEY = new Uint8Array(32).fill(1);
 const SLOT_SIGNER = { publicKey: PUBLIC_KEY } as any;
 
 const ENV_HINT = /playground login/;
+
+// The Bulletin authorization check reads the live chain height (to evaluate
+// expiry) directly off the typed API. `checkAuthorization` is mocked, but the
+// block read goes through `bulletinApi.query.System.Number`, so the api stub
+// must carry that path. Default height is 0, so any positive `expiration`
+// counts as "not expired".
+function bulletinApiAtBlock(block = 0): any {
+    return { query: { System: { Number: { getValue: async () => block } } } };
+}
+
+// An authorization that exists and has not expired (the only thing that gates
+// a Bulletin `store`). Quota counters are intentionally zeroed to prove they
+// no longer matter.
+const ACTIVE_EXHAUSTED = {
+    authorized: true,
+    remainingTransactions: 0,
+    remainingBytes: 0n,
+    expiration: 100,
+};
 
 function sessionSigner(): ResolvedSigner {
     return {
@@ -82,7 +98,6 @@ beforeEach(() => {
     createSlotAccountSignerMock.mockReset();
     ensureSlotAccountSignerMock.mockReset();
     getCachedAllocationMock.mockReset();
-    requestResourceAllocationMock.mockReset();
     // Default: slot key already in the SDK cache, so ensureSlotAccountSigner
     // resolves silently and no grant prompt fires.
     getCachedAllocationMock.mockResolvedValue({ tag: "BulletInAllowance" });
@@ -94,7 +109,6 @@ describe("getBulletinAllowanceSigner", () => {
         const signer = await getBulletinAllowanceSigner({ publishSigner: dev });
         expect(signer).toBe(dev.signer);
         expect(ensureSlotAccountSignerMock).not.toHaveBeenCalled();
-        expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 
     it("throws the login hint when there is no session/adapter", async () => {
@@ -110,23 +124,32 @@ describe("getBulletinAllowanceSigner", () => {
         ).rejects.toThrow(ENV_HINT);
     });
 
-    it("returns the slot signer when its on-chain authorization is usable", async () => {
+    it("returns the slot signer when its authorization exists and is not expired", async () => {
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 1,
-            remainingBytes: 100n,
-            expiration: 1,
-        });
+        checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
 
         const signer = await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: {} as any,
-            requiredBytes: 50,
+            bulletinApi: bulletinApiAtBlock(50),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
-        expect(requestResourceAllocationMock).not.toHaveBeenCalled();
+    });
+
+    it("returns the slot signer even when the tx/byte quota counters are exhausted (soft limits)", async () => {
+        // The whole point of dropping the quota gate: an authorized, unexpired
+        // slot with zeroed counters still stores fine, so no Increase, no throw.
+        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
+
+        const signer = await getBulletinAllowanceSigner({
+            publishSigner: sessionSigner(),
+            bulletinApi: bulletinApiAtBlock(50),
+        });
+
+        expect(signer).toBe(SLOT_SIGNER);
+        // Authorization is read exactly once — no re-check after an Increase.
+        expect(checkAuthorizationMock).toHaveBeenCalledTimes(1);
     });
 
     it("returns the slot signer without checking authorization when no bulletinApi is supplied", async () => {
@@ -138,56 +161,21 @@ describe("getBulletinAllowanceSigner", () => {
         expect(checkAuthorizationMock).not.toHaveBeenCalled();
     });
 
-    it("requests an Increase once when the slot is authorized but out of quota, then succeeds", async () => {
+    it("throws the expired error when the slot authorization is past its expiration block", async () => {
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        requestResourceAllocationMock.mockResolvedValue([]);
-        checkAuthorizationMock
-            .mockResolvedValueOnce({
-                authorized: true,
-                remainingTransactions: 0,
-                remainingBytes: 100n,
-                expiration: 1,
-            })
-            .mockResolvedValueOnce({
-                authorized: true,
-                remainingTransactions: 1,
-                remainingBytes: 100n,
-                expiration: 1,
-            });
-
-        const signer = await getBulletinAllowanceSigner({
-            publishSigner: sessionSigner(),
-            bulletinApi: {} as any,
-            requiredBytes: 50,
-        });
-
-        expect(signer).toBe(SLOT_SIGNER);
-        expect(requestResourceAllocationMock).toHaveBeenCalledTimes(1);
-        expect(requestResourceAllocationMock).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.anything(),
-            [{ tag: "BulletInAllowance", value: undefined }],
-            { onExisting: "Increase" },
-        );
-    });
-
-    it("throws the quota error when still unusable after an Increase", async () => {
-        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        requestResourceAllocationMock.mockResolvedValue([]);
         checkAuthorizationMock.mockResolvedValue({
             authorized: true,
-            remainingTransactions: 0,
-            remainingBytes: 100n,
-            expiration: 1,
+            remainingTransactions: 5,
+            remainingBytes: 1000n,
+            expiration: 10,
         });
 
         await expect(
             getBulletinAllowanceSigner({
                 publishSigner: sessionSigner(),
-                bulletinApi: {} as any,
-                requiredBytes: 50,
+                bulletinApi: bulletinApiAtBlock(20), // now (20) >= expiration (10) ⇒ expired
             }),
-        ).rejects.toThrow(/does not have enough quota/);
+        ).rejects.toThrow(/has expired/);
     });
 
     it("throws the not-authorized error when the slot is not authorized on-chain", async () => {
@@ -202,20 +190,33 @@ describe("getBulletinAllowanceSigner", () => {
         await expect(
             getBulletinAllowanceSigner({
                 publishSigner: sessionSigner(),
-                bulletinApi: {} as any,
-                requiredBytes: 50,
+                bulletinApi: bulletinApiAtBlock(0),
             }),
         ).rejects.toThrow(/not authorized on-chain yet/);
-        // Never authorized → no Increase attempt (Increase only fires when authorized).
-        expect(requestResourceAllocationMock).not.toHaveBeenCalled();
+    });
+
+    it("degrades to the slot signer when the authorization status cannot be READ (transient error)", async () => {
+        // The up-front check is an optimization, not a gate: a transient
+        // failure reading on-chain status must NOT abort the deploy with a
+        // misleading "re-run login" message — the auth may be perfectly valid.
+        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        checkAuthorizationMock.mockRejectedValue(new Error("WS halt (3)"));
+
+        const signer = await getBulletinAllowanceSigner({
+            publishSigner: sessionSigner(),
+            bulletinApi: bulletinApiAtBlock(50),
+        });
+
+        expect(signer).toBe(SLOT_SIGNER);
     });
 });
 
 describe("getBulletinAllowanceSigner — phone approval prompts", () => {
     // Allocation requests travel over the statement store outside any
     // PolkadotSigner, so the deploy TUI's signing proxy can't see them. The
-    // onPrompt hook is the only "check your phone" surface for these taps —
-    // these tests pin when it fires and when it must stay silent.
+    // onPrompt hook is the only "check your phone" surface for the first-use
+    // slot grant — these tests pin when it fires and when it stays silent.
+    // (There is no longer an Increase prompt: quota is a soft limit.)
     function recordingPrompt() {
         const calls: Array<{ label: string; closed: "complete" | "fail" | null }> = [];
         const prompt = (label: string) => {
@@ -233,20 +234,14 @@ describe("getBulletinAllowanceSigner — phone approval prompts", () => {
         return { calls, prompt };
     }
 
-    it("stays silent when the slot key is cached and quota is fine", async () => {
+    it("stays silent when the slot key is cached and the authorization is active", async () => {
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 1,
-            remainingBytes: 100n,
-            expiration: 1,
-        });
+        checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
         const { calls, prompt } = recordingPrompt();
 
         await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: {} as any,
-            requiredBytes: 50,
+            bulletinApi: bulletinApiAtBlock(50),
             onPrompt: prompt,
         });
 
@@ -274,59 +269,6 @@ describe("getBulletinAllowanceSigner — phone approval prompts", () => {
 
         expect(calls).toEqual([{ label: "Grant Bulletin storage allowance", closed: "fail" }]);
     });
-
-    it("prompts for the Increase when the slot is authorized but out of quota", async () => {
-        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        requestResourceAllocationMock.mockResolvedValue([]);
-        checkAuthorizationMock
-            .mockResolvedValueOnce({
-                authorized: true,
-                remainingTransactions: 0,
-                remainingBytes: 100n,
-                expiration: 1,
-            })
-            .mockResolvedValueOnce({
-                authorized: true,
-                remainingTransactions: 1,
-                remainingBytes: 100n,
-                expiration: 1,
-            });
-        const { calls, prompt } = recordingPrompt();
-
-        await getBulletinAllowanceSigner({
-            publishSigner: sessionSigner(),
-            bulletinApi: {} as any,
-            requiredBytes: 50,
-            onPrompt: prompt,
-        });
-
-        expect(calls).toEqual([
-            { label: "Increase Bulletin storage allowance", closed: "complete" },
-        ]);
-    });
-
-    it("fails the Increase prompt when the allocation request throws", async () => {
-        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        requestResourceAllocationMock.mockRejectedValue(new Error("declined"));
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 0,
-            remainingBytes: 100n,
-            expiration: 1,
-        });
-        const { calls, prompt } = recordingPrompt();
-
-        await expect(
-            getBulletinAllowanceSigner({
-                publishSigner: sessionSigner(),
-                bulletinApi: {} as any,
-                requiredBytes: 50,
-                onPrompt: prompt,
-            }),
-        ).rejects.toThrow("declined");
-
-        expect(calls).toEqual([{ label: "Increase Bulletin storage allowance", closed: "fail" }]);
-    });
 });
 
 describe("getBulletinAllowanceSigner — SDK signer passthrough", () => {
@@ -336,17 +278,11 @@ describe("getBulletinAllowanceSigner — SDK signer passthrough", () => {
     // used as-is, and the authorization check must run against ITS address.
     it("uses the SDK-built slot signer and checks authorization on its address", async () => {
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 1,
-            remainingBytes: 100n,
-            expiration: 1,
-        });
+        checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
 
         const signer = await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: {} as any,
-            requiredBytes: 50,
+            bulletinApi: bulletinApiAtBlock(50),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
@@ -366,7 +302,6 @@ describe("getCachedBulletinAllowanceSigner", () => {
         expect(signer).toBe(dev.signer);
         expect(createSlotAccountSignerMock).not.toHaveBeenCalled();
         expect(ensureSlotAccountSignerMock).not.toHaveBeenCalled();
-        expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 
     it("fails with the login hint on a cache miss without requesting allocation", async () => {
@@ -377,48 +312,38 @@ describe("getCachedBulletinAllowanceSigner", () => {
         ).rejects.toThrow(ENV_HINT);
 
         expect(ensureSlotAccountSignerMock).not.toHaveBeenCalled();
-        expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 
-    it("returns the cached slot signer when authorization is usable", async () => {
+    it("returns the cached slot signer when the authorization is active", async () => {
         createSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 1,
-            remainingBytes: 100n,
-            expiration: 1,
-        });
+        checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
 
         const signer = await getCachedBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: {} as any,
-            requiredBytes: 50,
+            bulletinApi: bulletinApiAtBlock(50),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
         expect(ensureSlotAccountSignerMock).not.toHaveBeenCalled();
-        expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 
-    it("throws the quota error without requesting an Increase", async () => {
+    it("throws the expired error without requesting an allocation", async () => {
         createSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
         checkAuthorizationMock.mockResolvedValue({
             authorized: true,
-            remainingTransactions: 0,
-            remainingBytes: 100n,
-            expiration: 1,
+            remainingTransactions: 5,
+            remainingBytes: 1000n,
+            expiration: 10,
         });
 
         await expect(
             getCachedBulletinAllowanceSigner({
                 publishSigner: sessionSigner(),
-                bulletinApi: {} as any,
-                requiredBytes: 50,
+                bulletinApi: bulletinApiAtBlock(20),
             }),
-        ).rejects.toThrow(/does not have enough quota/);
+        ).rejects.toThrow(/has expired/);
 
         expect(ensureSlotAccountSignerMock).not.toHaveBeenCalled();
-        expect(requestResourceAllocationMock).not.toHaveBeenCalled();
     });
 });
 
@@ -426,40 +351,58 @@ describe("cachedBulletinSlotAuthorization", () => {
     it("returns null on a cache miss without touching the wire", async () => {
         createSlotAccountSignerMock.mockResolvedValue(null);
 
-        const result = await cachedBulletinSlotAuthorization({} as any, {} as any, 1);
+        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiAtBlock());
 
         expect(result).toBeNull();
         expect(checkAuthorizationMock).not.toHaveBeenCalled();
     });
 
-    it("returns the on-chain authorization for a cached slot key", async () => {
+    it("flags an active (exists + unexpired) authorization as usable", async () => {
+        createSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
+
+        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiAtBlock(50));
+
+        expect(result?.usable).toBe(true);
+    });
+
+    it("flags an expired authorization as not usable", async () => {
         createSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
         checkAuthorizationMock.mockResolvedValue({
             authorized: true,
-            remainingTransactions: 1,
-            remainingBytes: 100n,
-            expiration: 1,
+            remainingTransactions: 5,
+            remainingBytes: 1000n,
+            expiration: 10,
         });
 
-        const result = await cachedBulletinSlotAuthorization({} as any, {} as any, 50);
+        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiAtBlock(20));
 
-        expect(result?.usable).toBe(true);
+        expect(result?.usable).toBe(false);
     });
 });
 
 describe("getBulletinSlotAuthorization", () => {
-    it("encodes the signer public key and flags usability", async () => {
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 1,
-            remainingBytes: 100n,
-            expiration: 1,
-        });
+    it("encodes the signer public key and flags an active authorization as usable", async () => {
+        checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
+        const api = bulletinApiAtBlock(50);
 
-        const result = await getBulletinSlotAuthorization({} as any, SLOT_SIGNER, 50);
+        const result = await getBulletinSlotAuthorization(api, SLOT_SIGNER);
 
         expect(result.usable).toBe(true);
         expect(result.address).toMatch(/^5/);
-        expect(checkAuthorizationMock).toHaveBeenCalledWith({}, result.address);
+        expect(checkAuthorizationMock).toHaveBeenCalledWith(api, result.address);
+    });
+
+    it("flags an unexpired-but-not-authorized account as not usable", async () => {
+        checkAuthorizationMock.mockResolvedValue({
+            authorized: false,
+            remainingTransactions: 0,
+            remainingBytes: 0n,
+            expiration: 0,
+        });
+
+        const result = await getBulletinSlotAuthorization(bulletinApiAtBlock(0), SLOT_SIGNER);
+
+        expect(result.usable).toBe(false);
     });
 });

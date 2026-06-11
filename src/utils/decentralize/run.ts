@@ -165,9 +165,9 @@ export async function runDecentralize(
     // "step 4 of 5").
     const counter = createSigningCounter();
     const emitSigning = (event: SigningEvent) => onEvent?.({ kind: "signing", event });
-    // "Check your phone" surface for allocation taps (Bulletin slot grant /
-    // quota Increase) — they happen outside any PolkadotSigner, so the
-    // signer wrap below can't see them.
+    // "Check your phone" surface for allocation taps (the first-use Bulletin
+    // slot grant) — they happen outside any PolkadotSigner, so the signer
+    // wrap below can't see them.
     const allowancePrompt = createApprovalPrompt(counter, emitSigning);
 
     let mirrorDir: string | null = null;

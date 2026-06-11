@@ -313,24 +313,20 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
  *
  * Resolution is delegated to `allowances/bulletin.ts::getBulletinAllowanceSigner`
  * — the single source for slot allocation (cache hit → silent; miss → one
- * phone approval) and the quota check + `Increase` flow when `quota` is
- * provided. Key derivation is the SDK's (`@parity/product-sdk-terminal`
- * 0.3.1+ derives the schnorrkel-normalized address the chain granted to).
+ * phone approval) and the existence + non-expiry authorization check when a
+ * `bulletinApi` is provided. Key derivation is the SDK's
+ * (`@parity/product-sdk-terminal` 0.3.1+ derives the schnorrkel-normalized
+ * address the chain granted to).
  *
- * Pass `quota` ({ bulletinApi, requiredBytes }) when the upload size is
- * known: the slot's on-chain extent is verified up front and an undersized
- * allowance triggers a single `Increase` request on the phone, instead of
- * the upload dying mid-flight with Payment errors (which do NOT fall back
- * to the pool — only a first-connection failure does).
- *
- * Quota shortfall is WARN-AND-PROCEED, never a block: whether the chain
- * enforces the authorization extent at `store()` time is unconfirmed
- * (upstream guidance is "the authorization is what counts", i.e. existence
- * and expiry). After the Increase attempt the resolution retries without
- * the quota check, surfaces `quota.onWarning`, and the deploy continues
- * with the slot signer — polkadot-app-deploy reports per-chunk truth if the
- * extent does turn out to be enforced. Only a total resolution failure
- * (no slot key at all, grant declined) aborts the deploy.
+ * Pass `bulletinApi` to verify the slot's authorization up front: a missing
+ * or expired authorization fails fast with a "re-run login" message instead
+ * of the upload dying mid-flight (mid-upload Payment failures do NOT fall back
+ * to the pool — only a first-connection failure does). We do NOT gate on the
+ * slot's tx/byte allowance counters and never request an `Increase`: the
+ * Bulletin `store` extrinsic treats those as soft limits, so an authorized,
+ * unexpired slot stores fine regardless of how exhausted they read (confirmed
+ * in pallet-transaction-storage's `check_authorization`). Dropping the quota
+ * gate removes the per-deploy phone-tap friction it used to cause.
  *
  * Dev and `--suri` deploys pin `storageSigner` to their own local key
  * instead of returning `{}`. polkadot-app-deploy 0.8.x auto-reads the user's
@@ -347,11 +343,7 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
 export async function resolveStorageSignerOptions(
     mode: SignerMode,
     userSigner: ResolvedSigner | null,
-    quota?: {
-        bulletinApi?: CloudStorageApi;
-        requiredBytes?: number;
-        onWarning?: (message: string) => void;
-    },
+    bulletinApi?: CloudStorageApi,
     onPrompt?: AllowancePrompt,
 ): Promise<Pick<DeployOptions, "storageSigner" | "storageSignerAddress">> {
     // A --suri key (either mode): the caller supplied a local key and owns
@@ -369,34 +361,24 @@ export async function resolveStorageSignerOptions(
     }
     if (userSigner?.source !== "session") return {};
 
-    const resolve = async (withQuota: boolean) => {
+    // Existence + non-expiry check only (no quota gate, no Increase). A
+    // genuinely missing/expired authorization — or a declined first-use grant
+    // — aborts here; without the slot key polkadot-app-deploy would route the
+    // 2 MiB chunks to the phone and every one would die with "message too
+    // big". Wrap any failure into a single actionable fix-it message.
+    try {
         const storageSigner = await getBulletinAllowanceSigner({
             publishSigner: userSigner,
-            bulletinApi: withQuota ? quota?.bulletinApi : undefined,
-            requiredBytes: withQuota ? quota?.requiredBytes : undefined,
+            bulletinApi,
             onPrompt,
         });
         return { storageSigner, storageSignerAddress: ss58Encode(storageSigner.publicKey) };
-    };
-
-    try {
-        return await resolve(true);
-    } catch (firstError) {
-        const firstMessage = firstError instanceof Error ? firstError.message : String(firstError);
-        try {
-            const fallback = await resolve(false);
-            quota?.onWarning?.(
-                `Bulletin storage quota check did not pass (${firstMessage}). ` +
-                    "Continuing with the existing authorization — the upload will report " +
-                    "per-chunk errors if the allowance really is exhausted.",
-            );
-            return fallback;
-        } catch {
-            throw new Error(
-                `Could not resolve the Bulletin storage key for this session (${firstMessage}). ` +
-                    "Storage uploads are too large to sign on the phone, so deploy cannot continue. " +
-                    'Re-run "playground login" and approve the Bulletin allowance on your phone.',
-            );
-        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Could not resolve the Bulletin storage key for this session (${message}). ` +
+                "Storage uploads are too large to sign on the phone, so deploy cannot continue. " +
+                'Re-run "playground login" and approve the Bulletin allowance on your phone.',
+        );
     }
 }

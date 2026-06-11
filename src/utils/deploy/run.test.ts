@@ -84,19 +84,19 @@ vi.mock("../../telemetry.js", () => ({
 // session signer's so assertions can prove which key was threaded through.
 const SLOT_PUBLIC_KEY = new Uint8Array(32).fill(7);
 const slotSigner = { publicKey: SLOT_PUBLIC_KEY } as any;
-const { getBulletinAllowanceSignerMock, createStorageQuotaContextMock, quotaDestroyMock } =
+const { getBulletinAllowanceSignerMock, createBulletinAuthContextMock, authDestroyMock } =
     vi.hoisted(() => ({
         getBulletinAllowanceSignerMock: vi.fn(),
-        createStorageQuotaContextMock: vi.fn(),
-        quotaDestroyMock: vi.fn(),
+        createBulletinAuthContextMock: vi.fn(),
+        authDestroyMock: vi.fn(),
     }));
 vi.mock("../allowances/bulletin.js", () => ({
     getBulletinAllowanceSigner: getBulletinAllowanceSignerMock,
 }));
-vi.mock("./storageQuota.js", () => ({
-    createStorageQuotaContext: createStorageQuotaContextMock,
+vi.mock("./bulletinAuthContext.js", () => ({
+    createBulletinAuthContext: createBulletinAuthContextMock,
 }));
-const quotaApi = { marker: "bulletin-api" } as any;
+const bulletinApi = { marker: "bulletin-api" } as any;
 
 import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { runDeploy, type DeployEvent } from "./run.js";
@@ -138,12 +138,11 @@ beforeEach(() => {
     withSpanMock.mockClear();
     getBulletinAllowanceSignerMock.mockReset();
     getBulletinAllowanceSignerMock.mockResolvedValue(slotSigner);
-    createStorageQuotaContextMock.mockReset();
-    quotaDestroyMock.mockClear();
-    createStorageQuotaContextMock.mockReturnValue({
-        bulletinApi: quotaApi,
-        requiredBytes: 1234,
-        destroy: quotaDestroyMock,
+    createBulletinAuthContextMock.mockReset();
+    authDestroyMock.mockClear();
+    createBulletinAuthContextMock.mockReturnValue({
+        bulletinApi,
+        destroy: authDestroyMock,
     });
 });
 
@@ -177,9 +176,9 @@ describe("runDeploy", () => {
         expect(arg.auth.storageSignerAddress).toBe(DEV_PUBLISH_ADDRESS);
         expect(arg.domainName).toBe("my-app");
 
-        // Dev mode never opens a Bulletin client for quota checks — no slot
-        // signer is used, so there is nothing to check.
-        expect(createStorageQuotaContextMock).not.toHaveBeenCalled();
+        // Dev mode never opens a Bulletin client for the authorization check —
+        // no slot signer is used, so there is nothing to verify.
+        expect(createBulletinAuthContextMock).not.toHaveBeenCalled();
     });
 
     it("dev mode with playground: ZERO planned approvals AND user H160 is claimed as owner", async () => {
@@ -318,21 +317,21 @@ describe("runDeploy", () => {
         expect(arg.auth.storageSignerAddress).toBeDefined();
         expect(arg.auth.storageSignerAddress).not.toBe("5Fake");
 
-        // The quota context flows into the allowance resolution so an
-        // undersized slot grant triggers the Increase flow BEFORE the upload
-        // starts (mid-upload Payment failures never fall back to the pool),
-        // and the dedicated WS client is always torn down.
-        expect(createStorageQuotaContextMock).toHaveBeenCalledWith(undefined, "/tmp/proj/dist");
+        // The Bulletin client flows into the allowance resolution so the
+        // slot's authorization is verified (existence + non-expiry) BEFORE the
+        // upload starts (mid-upload Payment failures never fall back to the
+        // pool), and the dedicated WS client is always torn down. No quota /
+        // requiredBytes is passed — Bulletin `store` treats those as soft limits.
+        expect(createBulletinAuthContextMock).toHaveBeenCalledWith(undefined);
         expect(getBulletinAllowanceSignerMock).toHaveBeenCalledWith({
             publishSigner: fakeUserSigner,
-            bulletinApi: quotaApi,
-            requiredBytes: 1234,
+            bulletinApi,
             // The deploy threads a "check your phone" prompt into the
             // allowance resolution — allocation taps happen outside any
             // PolkadotSigner, so this hook is their only TUI surface.
             onPrompt: expect.any(Function),
         });
-        expect(quotaDestroyMock).toHaveBeenCalledTimes(1);
+        expect(authDestroyMock).toHaveBeenCalledTimes(1);
 
         const plan = events.find((e) => e.kind === "plan");
         if (plan?.kind === "plan") {

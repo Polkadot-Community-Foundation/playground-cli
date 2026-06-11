@@ -92,7 +92,7 @@ export interface PublishToPlaygroundOptions {
     onLogEvent?: (event: DeployLogEvent) => void;
     /**
      * Surfaces "check your phone" UI when the metadata upload needs an
-     * RFC-0010 allocation tap (slot grant on first use, quota Increase).
+     * RFC-0010 allocation tap (the first-use slot grant).
      * Without it the phone shows an approval dialog the TUI never mentions.
      */
     onAllowancePrompt?: AllowancePrompt;
@@ -325,7 +325,6 @@ export async function publishToPlayground(
                 let storageSigner = await getBulletinAllowanceSigner({
                     publishSigner: options.publishSigner,
                     bulletinApi: asCloudStorageApi(bulletinApi),
-                    requiredBytes: metadataBytes.length,
                     onPrompt: options.onAllowancePrompt,
                 });
                 try {
@@ -341,7 +340,6 @@ export async function publishToPlayground(
                     storageSigner = await getBulletinAllowanceSigner({
                         publishSigner: options.publishSigner,
                         bulletinApi: asCloudStorageApi(bulletinApi),
-                        requiredBytes: metadataBytes.length,
                         onPrompt: options.onAllowancePrompt,
                     });
                     await withRetry(() => submitAndWatch(storeTx, storageSigner));
