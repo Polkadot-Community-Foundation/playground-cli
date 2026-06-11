@@ -28,7 +28,20 @@ import { execFileSync } from "node:child_process";
 import { commandExists, TOOL_STEPS } from "../toolchain.js";
 import { parseGitHubRepoUrl } from "../mod/source.js";
 
-export class ModdablePreflightError extends Error {}
+export class ModdablePreflightError extends Error {
+    /**
+     * Copy for the interactive deploy TUI, which must not reference CLI flags
+     * (the user may have arrived via a prompt, never having typed one).
+     * Defaults to `message`, which stays flag-flavoured for the headless path
+     * that prints it directly.
+     */
+    readonly interactiveMessage: string;
+
+    constructor(message: string, interactiveMessage: string = message) {
+        super(message);
+        this.interactiveMessage = interactiveMessage;
+    }
+}
 
 /**
  * Upper bound on the public-repo HEAD probe. A *stalled* socket (as opposed to
@@ -65,11 +78,22 @@ export interface ResolveRepoOptions {
     fetch?: typeof fetch;
 }
 
+/** Step-by-step remedy shared by both no-origin messages so they can't drift. */
+const NO_ORIGIN_SETUP_STEPS =
+    "Create a public GitHub repository, commit and push your code, set it as " +
+    "`origin` (e.g. `git remote add origin https://github.com/<user>/<repo>` " +
+    "followed by `git push -u origin main`)";
+
 const NO_ORIGIN_MESSAGE =
-    "--moddable: no GitHub origin configured. Create a public GitHub repository, " +
-    "commit and push your code, set it as `origin` (e.g. `git remote add origin " +
-    "https://github.com/<user>/<repo>` followed by `git push -u origin main`), " +
+    `--moddable: no GitHub origin configured. ${NO_ORIGIN_SETUP_STEPS}, ` +
     "and re-run. Pass --no-moddable to skip publishing source.";
+
+/**
+ * Prompt-flow variant of NO_ORIGIN_MESSAGE. The TUI's recovery menu (#332)
+ * owns the continue/back/exit affordances, so this copy stays surface-neutral:
+ * it explains the problem and the setup steps, nothing about flags or menus.
+ */
+export const NO_ORIGIN_INTERACTIVE_MESSAGE = `No GitHub origin is configured for this project. ${NO_ORIGIN_SETUP_STEPS}.`;
 
 /**
  * Verifies that a repository URL is a publicly accessible GitHub repo.
@@ -123,7 +147,7 @@ export async function assertPublicGitHubRepo(url: string, f: typeof fetch = fetc
 export async function resolveRepositoryUrl(opts: ResolveRepoOptions): Promise<string> {
     const f = opts.fetch ?? fetch;
     const origin = readOrigin(opts.cwd);
-    if (!origin) throw new ModdablePreflightError(NO_ORIGIN_MESSAGE);
+    if (!origin) throw new ModdablePreflightError(NO_ORIGIN_MESSAGE, NO_ORIGIN_INTERACTIVE_MESSAGE);
     const normalised = origin.replace(/\.git$/, "");
     opts.onLog?.(`using existing origin (${normalised})…`);
     await assertPublicGitHubRepo(normalised, f);

@@ -316,10 +316,10 @@ export type DeployDoneDisposition = "success" | "graceful-cancel" | "failure";
 /**
  * Maps a `DeployScreen` `onDone` callback into the outcome the interactive
  * runner should produce. A non-null outcome is a success; a null outcome is a
- * failure (exit 1) UNLESS it was a graceful cancel — the user pressing Esc on
- * the README acknowledgement to go edit it, which exits 0 with a friendly
- * nudge. Extracted as a pure function so this branch is unit-testable without
- * rendering the Ink TUI.
+ * failure (exit 1) UNLESS it was a graceful cancel: a deliberate exit from a
+ * setup screen (the README acknowledgement, or the moddable setup menu),
+ * which exits 0 with a friendly nudge. Extracted as a pure function so this
+ * branch is unit-testable without rendering the Ink TUI.
  */
 export function classifyDeployDone(
     outcome: DeployOutcome | null,
@@ -549,21 +549,23 @@ function runInteractive(ctx: {
                         userSigner: ctx.userSigner,
                         onDone: (
                             outcome: DeployOutcome | null,
-                            doneOpts?: { graceful?: boolean },
+                            doneOpts?: { graceful?: boolean; gracefulMessage?: string },
                         ) => {
                             if (settled) return;
                             settled = true;
                             app?.unmount();
                             switch (classifyDeployDone(outcome, doneOpts)) {
-                                case "graceful-cancel":
-                                    // The user pressed Esc on the README
-                                    // acknowledgement to go edit it — not a
+                                case "graceful-cancel": {
+                                    // A deliberate exit from a setup screen
+                                    // (README ack, moddable setup), not a
                                     // failure. Exit 0 with a friendly nudge.
-                                    process.stdout.write(
-                                        "\nNo problem. Update your README.md and re-run `playground deploy` when ready.\n",
-                                    );
+                                    const nudge =
+                                        doneOpts?.gracefulMessage ??
+                                        "No problem. Update your README.md and re-run `playground deploy` when ready.";
+                                    process.stdout.write(`\n${nudge}\n`);
                                     resolvePromise();
                                     break;
+                                }
                                 case "failure":
                                     process.exitCode = 1;
                                     rejectPromise(new Error("Deploy was cancelled or failed."));

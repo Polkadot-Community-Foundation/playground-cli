@@ -57,7 +57,11 @@ import {
 import type { ResolvedSigner } from "../../utils/signer.js";
 import { DEFAULT_BUILD_DIR, getChainConfig, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
-import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
+import {
+    ensureGitInstalled,
+    ModdablePreflightError,
+    resolveRepositoryUrl,
+} from "../../utils/deploy/moddable.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
 import { NO_SESSION_NOTICE_TITLE, NO_SESSION_NOTICE_BODY } from "./signerNotice.js";
@@ -99,7 +103,10 @@ export interface DeployScreenInputs {
      */
     tag?: string;
     userSigner: ResolvedSigner | null;
-    onDone: (outcome: DeployOutcome | null, opts?: { graceful?: boolean }) => void;
+    onDone: (
+        outcome: DeployOutcome | null,
+        opts?: { graceful?: boolean; gracefulMessage?: string },
+    ) => void;
 }
 
 export type Stage =
@@ -229,6 +236,14 @@ export function DeployScreen({
             nextTag,
         );
         setStage(s);
+    };
+
+    // Single "user declined moddable" transition, shared by the remix prompt's
+    // "no" answer and the setup-error menu's "continue without moddable", so
+    // the two paths can't drift apart.
+    const declineModdable = () => {
+        setModdable(false);
+        advance(skipBuild, mode, deployContracts, buildDir, domain, publishToPlayground, false);
     };
 
     const resolved = useMemo<Resolved | null>(() => {
@@ -473,19 +488,11 @@ export function DeployScreen({
                         ]}
                         initialIndex={0}
                         onSelect={(yes) => {
-                            setModdable(yes);
                             if (yes) {
+                                setModdable(true);
                                 setStage({ kind: "moddable-preflight" });
                             } else {
-                                advance(
-                                    skipBuild,
-                                    mode,
-                                    deployContracts,
-                                    buildDir,
-                                    domain,
-                                    publishToPlayground,
-                                    false,
-                                );
+                                declineModdable();
                             }
                         }}
                     />
@@ -515,7 +522,24 @@ export function DeployScreen({
             )}
 
             {stage.kind === "moddable-error" && (
-                <ModdableErrorStage message={stage.message} onExit={() => onDone(null)} />
+                <ModdableErrorStage
+                    message={stage.message}
+                    onContinueWithoutModdable={declineModdable}
+                    onBack={() => {
+                        setModdable(null);
+                        setStage({ kind: "prompt-moddable" });
+                    }}
+                    onExit={() =>
+                        onDone(null, {
+                            graceful: true,
+                            // Cause-neutral: this stage is reached for a missing
+                            // origin, a private repo, or a non-GitHub origin, and
+                            // the Callout above already named the specific problem.
+                            gracefulMessage:
+                                "No problem. Fix the GitHub repository setup and re-run `playground deploy` when ready.",
+                        })
+                    }
+                />
             )}
 
             {stage.kind === "prompt-tags" && (
@@ -690,7 +714,13 @@ function ModdablePreflightStage({
                 onResolved(url);
             } catch (err) {
                 if (cancelled) return;
-                onError(err instanceof Error ? err.message : String(err));
+                const message =
+                    err instanceof ModdablePreflightError
+                        ? err.interactiveMessage
+                        : err instanceof Error
+                          ? err.message
+                          : String(err);
+                onError(message);
             }
         })();
         return () => {
@@ -705,24 +735,64 @@ function ModdablePreflightStage({
     );
 }
 
+type ModdableErrorChoice = "continue" | "back" | "exit";
+
 /**
- * Formal warning stage shown when the moddable preflight cannot proceed —
+ * Formal warning stage shown when the moddable preflight cannot proceed,
  * almost always because the user hasn't set up a public GitHub `origin` yet.
  * Renders the actionable error inside a yellow Callout (matching the
  * "check your phone" banner) so it visually registers as a setup requirement
- * rather than a deploy crash. Pressing Enter or Esc exits the deploy.
+ * rather than a deploy crash. Must never dead-end (#332): the menu offers
+ * continuing as non-moddable, going back to the remix question (answering
+ * yes there re-runs the preflight, i.e. a retry), or a graceful exit. Esc
+ * also exits, matching the Ack and Confirm stages (and the previous
+ * incarnation of this screen).
  */
-function ModdableErrorStage({ message, onExit }: { message: string; onExit: () => void }) {
+function ModdableErrorStage({
+    message,
+    onContinueWithoutModdable,
+    onBack,
+    onExit,
+}: {
+    message: string;
+    onContinueWithoutModdable: () => void;
+    onBack: () => void;
+    onExit: () => void;
+}) {
     useInput((_input, key) => {
-        if (key.return || key.escape) onExit();
+        if (key.escape) onExit();
     });
     return (
         <Box flexDirection="column">
             <Callout tone="warning" title="Moddable Setup Needed">
                 <Text>{message}</Text>
             </Callout>
-            <Box marginTop={1}>
-                <Hint>{"enter or esc to exit"}</Hint>
+            <Box marginTop={1} flexDirection="column">
+                <Select<ModdableErrorChoice>
+                    label="how do you want to continue?"
+                    options={[
+                        {
+                            value: "continue",
+                            label: "continue without moddable",
+                            hint: "publish, but keep my source private",
+                        },
+                        {
+                            value: "back",
+                            label: "go back",
+                            hint: "re-answer the remix question",
+                        },
+                        {
+                            value: "exit",
+                            label: "exit",
+                            hint: "set up GitHub first, re-run deploy later",
+                        },
+                    ]}
+                    onSelect={(choice) => {
+                        if (choice === "continue") onContinueWithoutModdable();
+                        else if (choice === "back") onBack();
+                        else onExit();
+                    }}
+                />
             </Box>
         </Box>
     );
