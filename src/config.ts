@@ -90,10 +90,10 @@ export interface ChainConfig {
      */
     faucetUrl: string | null;
     /**
-     * Chain name that `@parity/cdm-env`'s `getRegistryAddress` understands, used
+     * Chain name that `@polkadot-community-foundation/cdm-env`'s `getRegistryAddress` understands, used
      * to resolve the CDM meta-registry address for this env. Differs from `env`
      * where the two catalogs disagree (our `summit` is cdm-env's `w3s`). The
-     * meta-registry ADDRESS itself lives ONLY in `@parity/cdm-env` and is never
+     * meta-registry ADDRESS itself lives ONLY in `@polkadot-community-foundation/cdm-env` and is never
      * stored here — see `src/utils/registry.ts` and CLAUDE.md.
      */
     cdmEnvName: string;
@@ -118,7 +118,7 @@ const PASEO_NEXT_V2: ChainConfig = {
 // Web3 Summit network. Every endpoint/network value mirrors polkadot-app-deploy's
 // `assets/environments.json` `summit` entry verbatim (the `config.test.ts` guard
 // fails CI if they drift). The CDM meta-registry address is NOT stored here — it
-// resolves at runtime from `@parity/cdm-env` via `cdmEnvName: "w3s"`, and is empty
+// resolves at runtime from `@polkadot-community-foundation/cdm-env` via `cdmEnvName: "w3s"`, and is empty
 // until that package ships it (see CLAUDE.md → "Adding a network / summit").
 const SUMMIT: ChainConfig = {
     env: "summit",

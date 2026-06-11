@@ -30,13 +30,13 @@
  * source by construction.
  *
  * It also guards the single-line network switch: the default env's CDM
- * meta-registry address (owned by `@parity/cdm-env`, keyed by `cdmEnvName`) must
+ * meta-registry address (owned by `@polkadot-community-foundation/cdm-env`, keyed by `cdmEnvName`) must
  * be non-empty, so nobody can ship a default whose registry isn't deployed yet.
  */
 
 import { describe, expect, it } from "vitest";
 import { loadEnvironments } from "@parity/polkadot-app-deploy";
-import { getRegistryAddress } from "@parity/cdm-env";
+import { getRegistryAddress } from "@polkadot-community-foundation/cdm-env";
 import { CONFIGS, DEFAULT_ENV, type ChainConfig, type Env } from "./config.js";
 
 const { doc } = await loadEnvironments();
@@ -88,7 +88,7 @@ describe("config ↔ polkadot-app-deploy environments.json (divergence guard)", 
         });
     }
 
-    it("default env has a non-empty CDM meta-registry address in @parity/cdm-env", () => {
+    it("default env has a non-empty CDM meta-registry address in @polkadot-community-foundation/cdm-env", () => {
         const cfg = CONFIGS[DEFAULT_ENV];
         expect(cfg).toBeDefined();
         // getRegistryAddress("") / unknown name returns "" — switching the default

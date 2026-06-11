@@ -42,7 +42,7 @@ import {
     getChainPreset,
     getRegistryAddress,
     resolveQueryOrigin,
-} from "@parity/cdm-env";
+} from "@polkadot-community-foundation/cdm-env";
 import { createContractFromClient } from "@parity/product-sdk-contracts";
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import { paseo_bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
