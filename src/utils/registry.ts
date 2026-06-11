@@ -20,7 +20,7 @@
 import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
-import { getRegistryAddress } from "@parity/cdm-env";
+import { getRegistryAddress } from "@polkadot-community-foundation/cdm-env";
 import type { PolkadotClient } from "polkadot-api";
 import { getChainConfig } from "../config.js";
 import type { ResolvedSigner } from "./signer.js";
@@ -63,7 +63,7 @@ const READ_ONLY_QUERY_ORIGIN = ss58Encode(REVIVE_PALLET_PUBLIC_KEY);
  * resolves, so both ends always talk to the same playground-registry contract
  * even when either repo's snapshot is stale.
  *
- * The meta-registry address is env-specific and owned by `@parity/cdm-env`
+ * The meta-registry address is env-specific and owned by `@polkadot-community-foundation/cdm-env`
  * (`getRegistryAddress`), NOT by `cdm.json` (whose `registry` is just whatever
  * `cdm i` baked for one env). We resolve it for the default env — the same env
  * `getConnection()` (the only client this is used with) is bound to — and inject
@@ -82,8 +82,8 @@ async function liveManager(
     const metaRegistry = getRegistryAddress(cdmEnvName);
     if (!metaRegistry) {
         throw new Error(
-            `Playground registry not available on ${env}: @parity/cdm-env has no registry ` +
-                `address for "${cdmEnvName}" yet. Bump @parity/cdm-env to a version that ` +
+            `Playground registry not available on ${env}: @polkadot-community-foundation/cdm-env has no registry ` +
+                `address for "${cdmEnvName}" yet. Bump @polkadot-community-foundation/cdm-env to a version that ` +
                 `includes it (see CLAUDE.md → "Adding a network / Summit").`,
         );
     }

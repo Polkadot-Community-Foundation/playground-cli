@@ -27,7 +27,7 @@ import { getChainConfig, getNetworkLabel } from "../config.js";
 
 // The chain DESCRIPTORS are intentionally the `paseo_*` ones for EVERY env,
 // including summit — only the RPC URLs are env-driven (via getChainConfig). This
-// mirrors `@parity/cdm-env`, whose `DEPLOY_CHAIN_DESCRIPTORS`/`ASSET_HUB_DESCRIPTORS`
+// mirrors `@polkadot-community-foundation/cdm-env`, whose `DEPLOY_CHAIN_DESCRIPTORS`/`ASSET_HUB_DESCRIPTORS`
 // also map `w3s` (summit) → `paseo_asset_hub`/`paseo_bulletin`; the deploy engine
 // `@parity/polkadot-app-deploy` is descriptor-free (live `getUnsafeApi()`). PAPI
 // typed calls decode by structural type IDs, so this holds as long as summit's

@@ -27,7 +27,7 @@
     "dependencies": {
         "@parity/cdm-builder": "3.1.5",
         "@parity/cdm-codegen": "0.6.18",
-        "@parity/cdm-env": "^2.0.5",
+        "@polkadot-community-foundation/cdm-env": "^2.1.0",
         "@parity/dotns-cli": "0.6.6",
         "@parity/product-sdk-address": "^0.1.1",
         "@parity/product-sdk-cloud-storage": "^0.6.0",

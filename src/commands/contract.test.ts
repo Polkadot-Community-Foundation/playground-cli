@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { getRegistryAddress } from "@parity/cdm-env";
+import { getRegistryAddress } from "@polkadot-community-foundation/cdm-env";
 import type { CdmJson } from "@parity/cdm-builder";
 import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { describe, expect, it } from "vitest";
