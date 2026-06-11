@@ -52,14 +52,14 @@ describe("createApprovalPrompt", () => {
         const events: SigningEvent[] = [];
         const prompt = createApprovalPrompt(createSigningCounter(), (e) => events.push(e));
 
-        const handle = prompt("Increase Bulletin storage allowance");
+        const handle = prompt("Grant Bulletin storage allowance");
         handle.fail("declined on phone");
 
         expect(events).toEqual([
-            { kind: "sign-request", label: "Increase Bulletin storage allowance", step: 1 },
+            { kind: "sign-request", label: "Grant Bulletin storage allowance", step: 1 },
             {
                 kind: "sign-error",
-                label: "Increase Bulletin storage allowance",
+                label: "Grant Bulletin storage allowance",
                 step: 1,
                 message: "declined on phone",
             },

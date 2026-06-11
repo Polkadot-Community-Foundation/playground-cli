@@ -150,7 +150,9 @@ export function AccountSetup({
             // only written after the wallet returns Allocated, so "cached"
             // doubles as "granted". Bulletin additionally needs an on-chain
             // authorization check (the slot key may exist but be unauthorized
-            // or out of quota).
+            // or expired). We do NOT re-prompt on low tx/byte quota — Bulletin
+            // `store` treats those counters as soft limits, so a live,
+            // unexpired slot is usable regardless of how exhausted they read.
             update(0, { status: "active", value: "checking…", valueTone: "muted" });
             let accountSetupOk = true;
             try {
@@ -161,7 +163,6 @@ export function AccountSetup({
                 const bulletinAuth = await cachedBulletinSlotAuthorization(
                     adapter,
                     asCloudStorageApi(client.bulletin),
-                    1,
                 ).catch(() => null);
 
                 const allReady =

@@ -119,7 +119,7 @@ export function buildSummaryView(input: SummaryInputs): SummaryView {
             input.mode === "phone"
                 ? input.deployContracts
                     ? "contract deploy and Bulletin allowance requests may add phone approvals"
-                    : "your phone may also ask to grant or top up the Bulletin storage allowance"
+                    : "your phone may also ask to grant the Bulletin storage allowance on first use"
                 : null,
     };
 }

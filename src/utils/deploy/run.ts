@@ -38,7 +38,7 @@ import {
     type SigningEvent,
 } from "./signingProxy.js";
 import type { DeployLogEvent } from "./progress.js";
-import { createStorageQuotaContext } from "./storageQuota.js";
+import { createBulletinAuthContext } from "./bulletinAuthContext.js";
 import { withDeployPhase } from "./phase.js";
 import type { ResolvedSigner } from "../signer.js";
 import type { Env } from "../../config.js";
@@ -139,8 +139,8 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
     options.onEvent({ kind: "plan", approvals: setup.approvals });
 
     const counter = createSigningCounter();
-    // "Check your phone" surface for RFC-0010 allocation taps (Bulletin slot
-    // grant / quota Increase). These ride the statement store outside any
+    // "Check your phone" surface for RFC-0010 allocation taps (the first-use
+    // Bulletin slot grant). These ride the statement store outside any
     // PolkadotSigner, so the signing proxy below can't see them — without
     // this the phone shows an approval dialog the TUI never mentions.
     const allowancePrompt = createApprovalPrompt(counter, (event) =>
@@ -183,35 +183,27 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         // statement-store message cap. Resolved AFTER the wrap so the slot
         // signer never goes through the phone-approval event proxy.
         //
-        // The quota context (size estimate + dedicated Bulletin client) lets
-        // the slot's on-chain extent be verified BEFORE the upload starts; an
-        // undersized grant triggers one Increase tap on the phone instead of
-        // the upload dying mid-flight with Payment errors. Best-effort: a null
-        // context just skips the check. Built only for phone-mode sessions —
-        // dev mode never uses the slot key.
-        const quota =
+        // A dedicated Bulletin client lets the slot's on-chain authorization
+        // be verified BEFORE the upload starts: a missing/expired grant fails
+        // fast with a "re-run login" message instead of the upload dying
+        // mid-flight. We do NOT gate on tx/byte quota — Bulletin `store` treats
+        // those as soft limits. Best-effort: a null context just skips the
+        // check. Built only for phone-mode sessions — dev mode never uses the
+        // slot key.
+        const authContext =
             options.mode === "phone" && options.userSigner?.source === "session"
-                ? createStorageQuotaContext(options.env, buildAbs)
+                ? createBulletinAuthContext(options.env)
                 : null;
         let storageSignerOptions: Awaited<ReturnType<typeof resolveStorageSignerOptions>>;
         try {
             storageSignerOptions = await resolveStorageSignerOptions(
                 options.mode,
                 options.userSigner,
-                quota
-                    ? {
-                          ...quota,
-                          onWarning: (message) =>
-                              options.onEvent({
-                                  kind: "storage-event",
-                                  event: { kind: "info", message },
-                              }),
-                      }
-                    : undefined,
+                authContext?.bulletinApi,
                 allowancePrompt,
             );
         } finally {
-            quota?.destroy();
+            authContext?.destroy();
         }
         const storage = await withDeployPhase(
             "storage-and-dotns",
