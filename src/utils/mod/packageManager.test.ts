@@ -40,6 +40,11 @@ describe("detectReferencedPackageManagers", () => {
         expect(detectReferencedPackageManagers("bunx vite")).toEqual(["bun"]);
     });
 
+    it("detects yarn and yarnpkg", () => {
+        expect(detectReferencedPackageManagers("yarn install")).toEqual(["yarn"]);
+        expect(detectReferencedPackageManagers("yarnpkg add foo")).toEqual(["yarn"]);
+    });
+
     it("detects multiple managers in one script", () => {
         expect(detectReferencedPackageManagers("npm ci\nbun run build")).toEqual(["npm", "bun"]);
     });
@@ -53,6 +58,7 @@ describe("detectReferencedPackageManagers", () => {
         expect(detectReferencedPackageManagers("echo npmrc")).toEqual([]);
         expect(detectReferencedPackageManagers("./bundle.sh")).toEqual([]);
         expect(detectReferencedPackageManagers("run-pnpm-thing")).toEqual([]);
+        expect(detectReferencedPackageManagers("echo yarnball")).toEqual([]);
     });
 
     it("ignores comments", () => {
@@ -85,6 +91,11 @@ describe("findUnsatisfiedPackageManagers", () => {
     it("flags the manager when it is the only one referenced and is missing", async () => {
         mockCommandExists.mockResolvedValue(false);
         await expect(findUnsatisfiedPackageManagers("npm install")).resolves.toEqual(["npm"]);
+    });
+
+    it("flags yarn when a yarn-only script has no yarn installed", async () => {
+        mockCommandExists.mockResolvedValue(false);
+        await expect(findUnsatisfiedPackageManagers("yarn install")).resolves.toEqual(["yarn"]);
     });
 
     it("is satisfied when ANY referenced manager from a fallback chain is present", async () => {
