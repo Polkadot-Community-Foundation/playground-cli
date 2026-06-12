@@ -22,11 +22,16 @@
  */
 
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
+import { prepareLocalDirectory } from "../../utils/decentralize/local.js";
 import type { DecentralizeOutcome } from "../../utils/decentralize/run.js";
 import type { SignerMode } from "../../utils/deploy/signerMode.js";
 
+export type SourceKind = "url" | "path";
+
 export type Stage =
+    | { kind: "prompt-source" }
     | { kind: "prompt-url" }
+    | { kind: "prompt-path" }
     | { kind: "prompt-signer" }
     | { kind: "prompt-domain" }
     | { kind: "validate-domain"; raw: string }
@@ -38,7 +43,16 @@ export type Stage =
     | { kind: "error"; message: string };
 
 export interface PickStageInput {
+    /**
+     * Where the site content comes from: a live URL (mirrored) or a local
+     * build directory (uploaded as-is). `null` until the user picks in the
+     * source prompt; pre-set to `"url"` when the caller passed a site URL.
+     */
+    sourceKind: SourceKind | null;
+    /** Site URL once submitted. Only relevant when `sourceKind === "url"`. */
     siteUrl: string | null;
+    /** Local directory once submitted. Only relevant when `sourceKind === "path"`. */
+    localPath: string | null;
     /**
      * `null` when neither --suri nor a session signer has resolved one yet
      * AND the user hasn't picked a mode in the TUI. `"phone" | "dev"` once a
@@ -68,16 +82,18 @@ export interface PickStageInput {
 
 /**
  * Decide which prompt stage to show next given the inputs collected so far.
- * URL → signer → domain → validate-domain → publish? → tag? → confirm. Each
- * missing piece surfaces its prompt; once everything is filled the `confirm`
- * stage gates the actual run. The tag prompt only runs when publishing and no
- * `--tag` pre-filled it (mirroring deploy).
+ * source → URL|path → signer → domain → validate-domain → publish? → tag? →
+ * confirm. Each missing piece surfaces its prompt; once everything is filled
+ * the `confirm` stage gates the actual run. The tag prompt only runs when
+ * publishing and no `--tag` pre-filled it (mirroring deploy).
  *
  * `domainRaw` exists so the screen can distinguish "user hasn't been
  * asked yet" from "user typed input but validation hasn't finished".
  */
 export function pickNextStage(input: PickStageInput): Stage {
-    if (input.siteUrl === null) return { kind: "prompt-url" };
+    if (input.sourceKind === null) return { kind: "prompt-source" };
+    if (input.sourceKind === "url" && input.siteUrl === null) return { kind: "prompt-url" };
+    if (input.sourceKind === "path" && input.localPath === null) return { kind: "prompt-path" };
     if (input.signerMode === null) return { kind: "prompt-signer" };
     if (input.domainLabel === null) {
         if (input.domainRaw === null) return { kind: "prompt-domain" };
@@ -106,6 +122,26 @@ export function validateSiteUrlInput(raw: string): string | null {
     // Bare hostname — mirror.ts will normalise it.
     if (/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(\/.*)?$/i.test(trimmed)) return null;
     return "doesn't look like a URL";
+}
+
+/**
+ * Inline TUI gate for the local-directory prompt. Delegates the real checks
+ * (exists, is a directory, contains an index.html somewhere) to
+ * `prepareLocalDirectory` — the same validation the run itself applies — and
+ * surfaces its actionable message inline. Sync fs is fine here: the theme
+ * `Input` runs `validate` only on submit, never per keystroke.
+ *
+ * Returns `null` when the input is acceptable, an error message otherwise.
+ */
+export function validateLocalPathInput(raw: string): string | null {
+    const trimmed = raw.trim();
+    if (!trimmed) return "enter a directory path";
+    try {
+        prepareLocalDirectory(trimmed);
+        return null;
+    } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+    }
 }
 
 /**

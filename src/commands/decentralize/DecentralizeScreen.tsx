@@ -47,13 +47,23 @@ import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { decentralizeSignerOptions, decentralizeSignerInitialIndex } from "./signerPrompt.js";
 import type { SigningEvent } from "../../utils/deploy/signingProxy.js";
 import { resolveDomain } from "../../utils/decentralize/domain.js";
+import { prepareLocalDirectory, type LocalSiteResult } from "../../utils/decentralize/local.js";
 import { FREE_DOMAIN_SUFFIX_NOTE } from "../../utils/decentralize/randomName.js";
 import {
     describeDeployEvent,
+    LARGE_SITE_FILE_THRESHOLD,
     runDecentralize,
     type DecentralizeOutcome,
+    type DecentralizeSource,
 } from "../../utils/decentralize/run.js";
-import { pickNextStage, validateDomainInput, validateSiteUrlInput, type Stage } from "./state.js";
+import {
+    pickNextStage,
+    validateDomainInput,
+    validateLocalPathInput,
+    validateSiteUrlInput,
+    type SourceKind,
+    type Stage,
+} from "./state.js";
 
 /**
  * What the screen reports back when it unmounts. The host (`runInteractive`)
@@ -98,7 +108,14 @@ export function DecentralizeScreen({
     initialTag,
     onDone,
 }: DecentralizeScreenProps) {
+    // A caller-provided site URL pre-selects the URL flow (vestigial today —
+    // `--site` forces headless — but kept so the prop keeps meaning something).
+    const [sourceKind, setSourceKind] = useState<SourceKind | null>(initialSiteUrl ? "url" : null);
     const [siteUrl, setSiteUrl] = useState<string | null>(initialSiteUrl);
+    const [localPath, setLocalPath] = useState<string | null>(null);
+    // Captured at path submit so the confirm screen can show the resolved
+    // upload root + file count without re-walking the directory on render.
+    const [preparedLocal, setPreparedLocal] = useState<LocalSiteResult | null>(null);
     // If --suri was passed, the user has effectively pre-chosen dev.
     const [signerMode, setSignerMode] = useState<SignerMode | null>(explicitSigner ? "dev" : null);
     // Which signer option the cursor is on in the prompt-signer Select. Drives
@@ -123,7 +140,9 @@ export function DecentralizeScreen({
 
     const [stage, setStage] = useState<Stage>(() =>
         pickNextStage({
+            sourceKind: initialSiteUrl ? "url" : null,
             siteUrl: initialSiteUrl,
+            localPath: null,
             signerMode: explicitSigner ? "dev" : null,
             domainLabel: null,
             domainRaw: initialDot,
@@ -134,7 +153,9 @@ export function DecentralizeScreen({
 
     const advance = (
         next: Partial<{
+            sourceKind: SourceKind | null;
             siteUrl: string | null;
+            localPath: string | null;
             signerMode: SignerMode | null;
             domainLabel: string | null;
             domainRaw: string | null;
@@ -144,7 +165,9 @@ export function DecentralizeScreen({
     ) => {
         setStage(
             pickNextStage({
+                sourceKind: next.sourceKind !== undefined ? next.sourceKind : sourceKind,
                 siteUrl: next.siteUrl !== undefined ? next.siteUrl : siteUrl,
+                localPath: next.localPath !== undefined ? next.localPath : localPath,
                 signerMode: next.signerMode !== undefined ? next.signerMode : signerMode,
                 domainLabel: next.domainLabel !== undefined ? next.domainLabel : domainLabel,
                 domainRaw: next.domainRaw !== undefined ? next.domainRaw : domainRaw,
@@ -171,31 +194,85 @@ export function DecentralizeScreen({
         return null;
     }, [explicitSigner, signerMode, sessionSigner]);
 
+    // The resolved content source. Null until the picker + matching prompt
+    // are answered; stages past prompt-url/prompt-path only mount once set.
+    const source = useMemo<DecentralizeSource | null>(() => {
+        if (sourceKind === "url" && siteUrl !== null) return { kind: "url", url: siteUrl };
+        if (sourceKind === "path" && localPath !== null) {
+            return { kind: "path", directory: localPath };
+        }
+        return null;
+    }, [sourceKind, siteUrl, localPath]);
+
     return (
         <Box flexDirection="column">
             <Header
                 cmd="playground decentralize"
-                subtitle={fullDomain ?? siteUrl ?? undefined}
+                subtitle={fullDomain ?? siteUrl ?? localPath ?? undefined}
                 network={getNetworkLabel(env)}
                 right={VERSION_LABEL}
             />
 
-            {stage.kind === "prompt-url" && (
+            {stage.kind === "prompt-source" && (
                 <>
                     <Callout tone="accent" title="About This Command">
                         <Text>
-                            Mirrors a live static site (https URL) and republishes it as a .dot
-                            site. Large sites can take several minutes to download — press Ctrl+C
-                            any time to cancel.
+                            Republishes a static site as a .dot site — either mirrored from a live
+                            https URL or uploaded from a local build directory. Press Ctrl+C any
+                            time to cancel.
                         </Text>
                     </Callout>
+                    <Select<SourceKind>
+                        label="source"
+                        options={[
+                            {
+                                value: "url",
+                                label: "live site (URL)",
+                                hint: "mirror it with wget — large sites can take minutes",
+                            },
+                            {
+                                value: "path",
+                                label: "local directory",
+                                hint: "upload an already-built static site, e.g. ./dist",
+                            },
+                        ]}
+                        onSelect={(kind) => {
+                            setSourceKind(kind);
+                            advance({ sourceKind: kind });
+                        }}
+                    />
+                </>
+            )}
+
+            {stage.kind === "prompt-url" && (
+                <Input
+                    label="site URL"
+                    placeholder="example.com or https://you.github.io/site"
+                    validate={validateSiteUrlInput}
+                    onSubmit={(value) => {
+                        setSiteUrl(value);
+                        advance({ siteUrl: value });
+                    }}
+                />
+            )}
+
+            {stage.kind === "prompt-path" && (
+                <>
+                    <Hint indent={2}>
+                        The directory must contain an index.html — a built static site like ./dist.
+                        Files upload as-is (no build step runs).
+                    </Hint>
                     <Input
-                        label="site URL"
-                        placeholder="example.com or https://you.github.io/site"
-                        validate={validateSiteUrlInput}
+                        label="directory"
+                        placeholder="./dist"
+                        validate={validateLocalPathInput}
                         onSubmit={(value) => {
-                            setSiteUrl(value);
-                            advance({ siteUrl: value });
+                            // validate just accepted this path, so the second
+                            // walk can't throw; it returns the resolved upload
+                            // root + file count for the confirm screen.
+                            setPreparedLocal(prepareLocalDirectory(value));
+                            setLocalPath(value);
+                            advance({ localPath: value });
                         }}
                     />
                 </>
@@ -239,7 +316,11 @@ export function DecentralizeScreen({
                     <PromptInfo box={DOMAIN_HELP} />
                     <Input
                         label="domain"
-                        placeholder="leave blank to auto-generate from the URL"
+                        placeholder={
+                            sourceKind === "path"
+                                ? "leave blank to auto-generate from the directory name"
+                                : "leave blank to auto-generate from the URL"
+                        }
                         prefill={domainRaw ?? ""}
                         externalError={domainError}
                         validate={validateDomainInput}
@@ -256,7 +337,7 @@ export function DecentralizeScreen({
                 <ValidateDomainStage
                     raw={stage.raw}
                     env={env}
-                    siteUrl={siteUrl!}
+                    source={source!}
                     signer={activeSigner}
                     onResolved={({ label, fullDomain: full, note, autoGenerated: auto }) => {
                         setDomainLabel(label);
@@ -282,6 +363,14 @@ export function DecentralizeScreen({
             {stage.kind === "prompt-publish" && (
                 <Box flexDirection="column">
                     <PromptInfo box={PUBLISH_HELP} />
+                    {sourceKind === "path" && (
+                        <Callout tone="accent" title="Your app detail page">
+                            <Text>
+                                If you publish, the README.md in your directory becomes your app's
+                                detail page on the playground. Make sure it's up to date.
+                            </Text>
+                        </Callout>
+                    )}
                     <Select<boolean>
                         label="publish to the playground registry?"
                         options={[
@@ -327,7 +416,8 @@ export function DecentralizeScreen({
 
             {stage.kind === "confirm" && (
                 <ConfirmStage
-                    siteUrl={siteUrl!}
+                    source={source!}
+                    preparedLocal={preparedLocal}
                     fullDomain={fullDomain!}
                     autoGenerated={autoGenerated}
                     availabilityNote={availabilityNote}
@@ -342,7 +432,7 @@ export function DecentralizeScreen({
 
             {stage.kind === "running" && (
                 <RunningStage
-                    siteUrl={siteUrl!}
+                    source={source!}
                     label={domainLabel!}
                     fullDomain={fullDomain!}
                     mode={signerMode!}
@@ -377,7 +467,7 @@ export function DecentralizeScreen({
 function ValidateDomainStage({
     raw,
     env,
-    siteUrl,
+    source,
     signer,
     progressMessage,
     onResolved,
@@ -386,7 +476,7 @@ function ValidateDomainStage({
 }: {
     raw: string;
     env: Env;
-    siteUrl: string;
+    source: DecentralizeSource;
     signer: ResolvedSigner | null;
     progressMessage: string | null;
     onResolved: (result: {
@@ -405,8 +495,7 @@ function ValidateDomainStage({
                 const result = await resolveDomain({
                     env,
                     providedDot: raw || null,
-                    // The TUI only supports the URL flow; `--path` is headless-only.
-                    source: { kind: "url", url: siteUrl },
+                    source,
                     signer,
                     onMessage: (m) => {
                         if (!cancelled) onProgress(m.trim());
@@ -420,7 +509,7 @@ function ValidateDomainStage({
         return () => {
             cancelled = true;
         };
-        // We intentionally key on `raw` only — `signer`/`siteUrl` are stable
+        // We intentionally key on `raw` only — `signer`/`source` are stable
         // for the lifetime of a single validate stage.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [raw]);
@@ -438,7 +527,8 @@ function ValidateDomainStage({
 // ── Confirm stage ────────────────────────────────────────────────────────────
 
 function ConfirmStage({
-    siteUrl,
+    source,
+    preparedLocal,
     fullDomain,
     autoGenerated,
     availabilityNote,
@@ -449,7 +539,9 @@ function ConfirmStage({
     onConfirm,
     onCancel,
 }: {
-    siteUrl: string;
+    source: DecentralizeSource;
+    /** Set when `source.kind === "path"` — resolved upload root + file count. */
+    preparedLocal: LocalSiteResult | null;
     fullDomain: string;
     autoGenerated: boolean;
     availabilityNote: string | null;
@@ -460,10 +552,31 @@ function ConfirmStage({
     onConfirm: () => void;
     onCancel: () => void;
 }) {
+    const steps = source.kind === "url" ? "mirror + upload + register" : "upload + register";
+    // For local dirs the file count is known up front — reuse the mirror
+    // flow's threshold to flag a long upload before the user commits.
+    const largeLocal =
+        source.kind === "path" &&
+        preparedLocal !== null &&
+        preparedLocal.fileCount >= LARGE_SITE_FILE_THRESHOLD;
     return (
         <Box flexDirection="column">
             <Section title={`decentralizing ${fullDomain}`}>
-                <Row label="site" value={siteUrl} />
+                {source.kind === "url" ? (
+                    <Row label="site" value={source.url} />
+                ) : (
+                    <Row
+                        label="path"
+                        // Show the resolved upload root, not the typed path —
+                        // when index.html sits in a subdirectory, this is what
+                        // actually uploads and the user should see it here.
+                        value={
+                            preparedLocal
+                                ? `${preparedLocal.uploadRoot} (${preparedLocal.fileCount} files)`
+                                : source.directory
+                        }
+                    />
+                )}
                 <Row label="domain" value={`${fullDomain}.li`} />
                 <Row
                     label="signer"
@@ -482,6 +595,13 @@ function ConfirmStage({
                     <Row label="tag" value={tag ?? "none"} tone={tag ? "accent" : "muted"} />
                 )}
                 {availabilityNote && <Row label="note" value={availabilityNote} tone="warning" />}
+                {largeLocal && (
+                    <Row
+                        label="note"
+                        value={`${preparedLocal!.fileCount} files — the upload may take a while`}
+                        tone="warning"
+                    />
+                )}
             </Section>
             {autoGenerated && <Hint indent={2}>{FREE_DOMAIN_SUFFIX_NOTE}</Hint>}
             <Select<"go" | "cancel">
@@ -490,9 +610,7 @@ function ConfirmStage({
                     {
                         value: "go",
                         label: "yes, decentralize it",
-                        hint: publishToPlayground
-                            ? "mirror + upload + register + publish"
-                            : "mirror + upload + register",
+                        hint: publishToPlayground ? `${steps} + publish` : steps,
                     },
                     { value: "cancel", label: "cancel", hint: "exit without changes" },
                 ]}
@@ -518,7 +636,7 @@ function stepMark(status: StepStatus): MarkKind {
 }
 
 function RunningStage({
-    siteUrl,
+    source,
     label,
     fullDomain,
     mode,
@@ -529,7 +647,7 @@ function RunningStage({
     onComplete,
     onFailed,
 }: {
-    siteUrl: string;
+    source: DecentralizeSource;
     label: string;
     fullDomain: string;
     mode: SignerMode;
@@ -575,8 +693,7 @@ function RunningStage({
         (async () => {
             try {
                 const outcome = await runDecentralize({
-                    // The TUI only supports the URL flow; `--path` is headless-only.
-                    source: { kind: "url", url: siteUrl },
+                    source,
                     label,
                     fullDomain,
                     mode,
@@ -600,6 +717,11 @@ function RunningStage({
                                 setMirrorStatus("complete");
                                 setUploadStatus("running");
                                 queueLog(`mirrored ${event.fileCount} files`);
+                                break;
+                            case "local-done":
+                                setMirrorStatus("complete");
+                                setUploadStatus("running");
+                                queueLog(`prepared ${event.fileCount} files`);
                                 break;
                             case "storage-start":
                                 setUploadStatus("running");
@@ -660,7 +782,11 @@ function RunningStage({
     return (
         <Box flexDirection="column">
             <Section title={`decentralizing ${fullDomain}`} gapBelow={false}>
-                <Row mark={stepMark(mirrorStatus)} label="mirror" tone="muted" />
+                <Row
+                    mark={stepMark(mirrorStatus)}
+                    label={source.kind === "url" ? "mirror" : "prepare"}
+                    tone="muted"
+                />
                 <Row mark={stepMark(uploadStatus)} label="upload + dotns" tone="muted" />
                 {publishToPlayground && (
                     <Row

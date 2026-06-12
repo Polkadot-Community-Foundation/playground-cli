@@ -26,10 +26,10 @@
  *
  * Headless flow runs when `--site` or `--path` is provided (preserves the
  * existing `dot decentralize --suri=//Bob` demo-service contract). Without
- * either, the command mounts an Ink TUI that prompts for URL → signer →
- * domain → publish? before kicking off the same upload pipeline (the TUI is
- * URL-only; `--path` is headless-only). The publish-to-playground step
- * delegates to deploy's `publishToPlayground` helper.
+ * either, the command mounts an Ink TUI that prompts for source (URL or
+ * local directory) → URL/path → signer → domain → publish? before kicking
+ * off the same upload pipeline. The publish-to-playground step delegates to
+ * deploy's `publishToPlayground` helper.
  */
 
 import { Command, Option } from "commander";

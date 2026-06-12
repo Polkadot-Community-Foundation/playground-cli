@@ -13,14 +13,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, it, expect } from "vitest";
-import { pickNextStage, validateDomainInput, validateSiteUrlInput } from "./state.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, it, expect } from "vitest";
+import {
+    pickNextStage,
+    validateDomainInput,
+    validateLocalPathInput,
+    validateSiteUrlInput,
+} from "./state.js";
 
 describe("pickNextStage", () => {
-    it("starts at prompt-url when nothing has been filled", () => {
+    it("starts at prompt-source when nothing has been filled", () => {
         expect(
             pickNextStage({
+                sourceKind: null,
                 siteUrl: null,
+                localPath: null,
+                signerMode: null,
+                domainLabel: null,
+                domainRaw: null,
+                publishToPlayground: null,
+            }),
+        ).toEqual({ kind: "prompt-source" });
+    });
+
+    it("prompts for the URL once the url source is picked", () => {
+        expect(
+            pickNextStage({
+                sourceKind: "url",
+                siteUrl: null,
+                localPath: null,
                 signerMode: null,
                 domainLabel: null,
                 domainRaw: null,
@@ -29,10 +53,40 @@ describe("pickNextStage", () => {
         ).toEqual({ kind: "prompt-url" });
     });
 
+    it("prompts for the directory once the path source is picked", () => {
+        expect(
+            pickNextStage({
+                sourceKind: "path",
+                siteUrl: null,
+                localPath: null,
+                signerMode: null,
+                domainLabel: null,
+                domainRaw: null,
+                publishToPlayground: null,
+            }),
+        ).toEqual({ kind: "prompt-path" });
+    });
+
+    it("path flow joins the shared stages at prompt-signer", () => {
+        expect(
+            pickNextStage({
+                sourceKind: "path",
+                siteUrl: null,
+                localPath: "./dist",
+                signerMode: null,
+                domainLabel: null,
+                domainRaw: null,
+                publishToPlayground: null,
+            }),
+        ).toEqual({ kind: "prompt-signer" });
+    });
+
     it("advances to prompt-signer once the URL is known", () => {
         expect(
             pickNextStage({
+                sourceKind: "url",
                 siteUrl: "https://example.com",
+                localPath: null,
                 signerMode: null,
                 domainLabel: null,
                 domainRaw: null,
@@ -44,7 +98,9 @@ describe("pickNextStage", () => {
     it("advances to prompt-domain once URL + signer are picked", () => {
         expect(
             pickNextStage({
+                sourceKind: "url",
                 siteUrl: "https://example.com",
+                localPath: null,
                 signerMode: "dev",
                 domainLabel: null,
                 domainRaw: null,
@@ -56,7 +112,9 @@ describe("pickNextStage", () => {
     it("advances to validate-domain once domain has been typed but not yet validated", () => {
         expect(
             pickNextStage({
+                sourceKind: "url",
                 siteUrl: "https://example.com",
+                localPath: null,
                 signerMode: "phone",
                 domainLabel: null,
                 domainRaw: "myapp",
@@ -68,7 +126,9 @@ describe("pickNextStage", () => {
     it("asks the publish question once the domain is validated", () => {
         expect(
             pickNextStage({
+                sourceKind: "url",
                 siteUrl: "https://example.com",
+                localPath: null,
                 signerMode: "dev",
                 domainLabel: "myapp",
                 domainRaw: "myapp",
@@ -80,7 +140,9 @@ describe("pickNextStage", () => {
     it("lands on confirm once the publish answer is locked in", () => {
         expect(
             pickNextStage({
+                sourceKind: "url",
                 siteUrl: "https://example.com",
+                localPath: null,
                 signerMode: "dev",
                 domainLabel: "myapp",
                 domainRaw: "myapp",
@@ -94,7 +156,9 @@ describe("pickNextStage", () => {
         // before confirm, mirroring deploy.
         expect(
             pickNextStage({
+                sourceKind: "url",
                 siteUrl: "https://example.com",
+                localPath: null,
                 signerMode: "dev",
                 domainLabel: "myapp",
                 domainRaw: "myapp",
@@ -124,7 +188,9 @@ describe("pickNextStage", () => {
         // Mirrors the user submitting a blank domain prompt to opt into auto-naming.
         expect(
             pickNextStage({
+                sourceKind: "url",
                 siteUrl: "https://example.com",
+                localPath: null,
                 signerMode: "dev",
                 domainLabel: null,
                 domainRaw: "",
@@ -196,5 +262,44 @@ describe("validateDomainInput", () => {
 
     it("rejects a dash before the digit suffix (strips to a trailing-hyphen base)", () => {
         expect(validateDomainInput("my-app-42")).toMatch(/dash/i);
+    });
+});
+
+describe("validateLocalPathInput", () => {
+    const tempDirs: string[] = [];
+
+    function makeTempDir(): string {
+        const dir = mkdtempSync(join(tmpdir(), "dot-state-path-test-"));
+        tempDirs.push(dir);
+        return dir;
+    }
+
+    afterEach(() => {
+        for (const dir of tempDirs.splice(0)) {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("accepts a directory containing an index.html", () => {
+        const dir = makeTempDir();
+        writeFileSync(join(dir, "index.html"), "<html></html>");
+        expect(validateLocalPathInput(dir)).toBeNull();
+    });
+
+    it("rejects empty input", () => {
+        expect(validateLocalPathInput("")).toBe("enter a directory path");
+        expect(validateLocalPathInput("   ")).toBe("enter a directory path");
+    });
+
+    it("rejects a missing directory with prepareLocalDirectory's message", () => {
+        expect(validateLocalPathInput("/tmp/dot-state-path-test-does-not-exist")).toMatch(
+            /directory not found/,
+        );
+    });
+
+    it("states the index.html requirement for a directory without one", () => {
+        const dir = makeTempDir();
+        writeFileSync(join(dir, "main.js"), "console.log(1)");
+        expect(validateLocalPathInput(dir)).toMatch(/no index\.html found.*built static site/);
     });
 });
