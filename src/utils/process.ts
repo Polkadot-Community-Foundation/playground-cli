@@ -92,11 +92,16 @@ export async function runStreamed(opts: RunStreamedOptions): Promise<void> {
  * one-liner verbatim (curl | bash installers, chained commands); anything
  * structured should use the arg-array form for safety.
  */
-export async function runShell(cmd: string, onData?: (line: string) => void): Promise<void> {
+export async function runShell(
+    cmd: string,
+    onData?: (line: string) => void,
+    opts?: { description?: string; failurePrefix?: string },
+): Promise<void> {
     await runStreamed({
         cmd: "bash",
         args: ["-c", cmd],
-        description: cmd,
+        description: opts?.description ?? cmd,
+        failurePrefix: opts?.failurePrefix,
         onData,
     });
 }

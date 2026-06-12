@@ -166,7 +166,11 @@ export const TOOL_STEPS: ToolStep[] = [
     {
         name: "cargo-pvm-contract",
         check: hasCargoPvmContract,
-        install: (onData) => runPiped(CARGO_PVM_CONTRACT_INSTALL, onData),
+        install: (onData) =>
+            runPiped(CARGO_PVM_CONTRACT_INSTALL, onData, {
+                description: `cargo install cargo-pvm-contract @ ${CARGO_PVM_CONTRACT_REV.slice(0, 12)}`,
+                failurePrefix: "cargo-pvm-contract build failed",
+            }),
         manualHint: `Install cargo-pvm-contract from https://github.com/paritytech/cargo-pvm-contract at commit ${CARGO_PVM_CONTRACT_REV}`,
     },
     {

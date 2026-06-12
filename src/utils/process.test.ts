@@ -163,4 +163,22 @@ describe("runShell", () => {
         await runShell('printf "x\\ny\\n"', (line) => lines.push(line));
         expect(lines).toEqual(["x", "y"]);
     });
+
+    it("uses opts.description and opts.failurePrefix instead of the raw script in failures", async () => {
+        const script = "set -euo pipefail\necho real-cargo-error >&2\nexit 5";
+        await expect(
+            runShell(script, undefined, {
+                description: "cargo install cargo-pvm-contract",
+                failurePrefix: "cargo-pvm-contract build failed",
+            }),
+        ).rejects.toThrow(
+            /cargo-pvm-contract build failed.*cargo install cargo-pvm-contract.*exit code 5[\s\S]*real-cargo-error/,
+        );
+        await expect(
+            runShell(script, undefined, {
+                description: "cargo install cargo-pvm-contract",
+                failurePrefix: "cargo-pvm-contract build failed",
+            }),
+        ).rejects.not.toThrow(/\(set -euo pipefail/);
+    });
 });
