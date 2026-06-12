@@ -19,6 +19,7 @@ import {
     type AllocatableResource,
 } from "@parity/product-sdk-terminal/host";
 import type { ResolvedSigner } from "../signer.js";
+import { productScopedAdapter } from "./resources.js";
 
 const SMART_CONTRACT_ALLOWANCE: AllocatableResource = {
     tag: "SmartContractAllowance",
@@ -39,12 +40,15 @@ export async function ensureSmartContractAllowance({
 }: SmartContractAllowanceOptions): Promise<void> {
     if (deploySigner.source === "dev") return;
 
-    const { userSession, adapter } = deploySigner;
-    if (!userSession || !adapter) {
+    const { userSession, adapter: rawAdapter } = deploySigner;
+    if (!userSession || !rawAdapter) {
         throw new Error(
             'No smart-contract gas allowance available. Run "playground login" to grant allowances.',
         );
     }
+    // Product-scoped on purpose: the wire `callingProductId` is what the phone
+    // derives the PGAS claim TARGET from — see `productScopedAdapter`.
+    const adapter = productScopedAdapter(rawAdapter);
 
     if (await getCachedAllocation(adapter, SMART_CONTRACT_ALLOWANCE)) return;
 

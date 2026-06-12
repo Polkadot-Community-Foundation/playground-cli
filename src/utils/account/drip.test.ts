@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * Tests for the polkadot-app-deploy-style dev top-up.
+ * Tests for the `playground drip` dev top-up.
  *
  * We mock `@parity/product-sdk-tx::submitAndWatch` to observe what got
  * submitted without touching the network. The real `polkadot-api` `Enum(...)`
@@ -26,29 +26,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockSubmitAndWatch = vi
     .fn<(tx: unknown, signer: unknown, options?: unknown) => Promise<unknown>>()
-    .mockResolvedValue({
-        ok: true,
-    });
+    .mockResolvedValue({ ok: true });
 
 vi.mock("@parity/product-sdk-tx", () => ({
     submitAndWatch: (...args: unknown[]) =>
         mockSubmitAndWatch(args[0], args[1] as unknown, args[2] as unknown),
 }));
 
-const { topUpFromBulletinDev, DevFunderExhaustedError } = await import("./bulletinTopUp.js");
+const { dripToProductAccount, DevFunderExhaustedError, DRIP_AMOUNT, DRIP_CAP, formatPas } =
+    await import("./drip.js");
 
 const RECIPIENT = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 // SS58 of the bare-master account derived from the standard dev mnemonic with
 // empty derivation; see the pubkey assertion at the bottom of the file.
 const DEV_FUNDER = "5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV";
 const ONE_PAS = 1_000_000_000_000n;
-const SKIP_FLOOR = 100_000_000_000n;
-const SOURCE_BUFFER = 1_000_000_000_000n;
-const FUNDER_REQUIRED = ONE_PAS + SOURCE_BUFFER;
+const SOURCE_BUFFER = ONE_PAS;
+const FUNDER_REQUIRED = DRIP_AMOUNT + SOURCE_BUFFER;
 // Plenty of headroom so the preflight balance check passes in tests that
-// expect the transfer to fire. Bumping this on a real change to the buffer
-// would require revisiting `bulletinTopUp.ts::SOURCE_BUFFER` first.
-const FUNDER_HEALTHY = FUNDER_REQUIRED * 10n;
+// expect the transfer to fire.
+const FUNDER_HEALTHY = FUNDER_REQUIRED * 100n;
 
 function makeClient(balances: Record<string, bigint>) {
     const transferFactory = vi.fn().mockImplementation((args: unknown) => ({
@@ -83,27 +80,27 @@ beforeEach(() => {
     mockSubmitAndWatch.mockClear();
 });
 
-describe("topUpFromBulletinDev", () => {
-    it("skips the transfer when the recipient is already at the floor (>= check)", async () => {
-        // Exact-floor boundary: `recipient.free >= SKIP_TRANSFER_THRESHOLD`
-        // SKIPS. If a future refactor flips the inequality this test fails.
+describe("dripToProductAccount", () => {
+    it("skips the transfer when the recipient is already at the cap (>= check)", async () => {
+        // Exact-cap boundary: `recipient.free >= DRIP_CAP` SKIPS. If a future
+        // refactor flips the inequality this test fails.
         const { client, transferFactory } = makeClient({
-            [RECIPIENT]: SKIP_FLOOR,
+            [RECIPIENT]: DRIP_CAP,
             [DEV_FUNDER]: FUNDER_HEALTHY,
         });
-        const result = await topUpFromBulletinDev(client, RECIPIENT);
-        expect(result).toEqual({ skipped: true });
+        const result = await dripToProductAccount(client, RECIPIENT);
+        expect(result).toEqual({ skipped: true, balance: DRIP_CAP });
         expect(transferFactory).not.toHaveBeenCalled();
         expect(mockSubmitAndWatch).not.toHaveBeenCalled();
     });
 
-    it("sends 1 PAS via transfer_allow_death when below the floor", async () => {
+    it("sends 1 PAS via transfer_allow_death when below the cap", async () => {
         const { client, transferFactory } = makeClient({
-            [RECIPIENT]: SKIP_FLOOR - 1n,
+            [RECIPIENT]: DRIP_CAP - 1n,
             [DEV_FUNDER]: FUNDER_HEALTHY,
         });
-        const result = await topUpFromBulletinDev(client, RECIPIENT);
-        expect(result).toEqual({ skipped: false, transferred: ONE_PAS });
+        const result = await dripToProductAccount(client, RECIPIENT);
+        expect(result).toEqual({ skipped: false, transferred: ONE_PAS, balance: DRIP_CAP - 1n });
         expect(transferFactory).toHaveBeenCalledTimes(1);
         const [args] = transferFactory.mock.calls[0];
         expect(args).toMatchObject({
@@ -115,33 +112,28 @@ describe("topUpFromBulletinDev", () => {
         expect(options).toEqual({ waitFor: "finalized" });
     });
 
-    it("tops up a zero-balance recipient when the funder is healthy", async () => {
-        const { client, transferFactory } = makeClient({ [DEV_FUNDER]: FUNDER_HEALTHY });
-        const result = await topUpFromBulletinDev(client, RECIPIENT);
-        expect(result.skipped).toBe(false);
-        expect(transferFactory).toHaveBeenCalledTimes(1);
+    it("sends only 1 PAS at a time even far below the cap", async () => {
+        // A near-empty account still receives exactly one DRIP_AMOUNT, never a
+        // top-up-to-cap lump sum — the user drips repeatedly to climb.
+        const { client } = makeClient({ [RECIPIENT]: 0n, [DEV_FUNDER]: FUNDER_HEALTHY });
+        const result = await dripToProductAccount(client, RECIPIENT);
+        expect(result).toEqual({ skipped: false, transferred: ONE_PAS, balance: 0n });
     });
 
     it("short-circuits without submitting if the recipient IS the dev funder", async () => {
-        // Hypothetical: a user's product-derived account collides with the
-        // bare-master dev address. Mirrors polkadot-app-deploy's
-        // `attemptTestnetTopUp` self-transfer guard.
         const { client, transferFactory } = makeClient({ [DEV_FUNDER]: 0n });
-        const result = await topUpFromBulletinDev(client, DEV_FUNDER);
-        expect(result).toEqual({ skipped: true });
+        const result = await dripToProductAccount(client, DEV_FUNDER);
+        expect(result).toEqual({ skipped: true, balance: 0n });
         expect(transferFactory).not.toHaveBeenCalled();
         expect(mockSubmitAndWatch).not.toHaveBeenCalled();
     });
 
     it("throws DevFunderExhaustedError before broadcasting when the funder is low", async () => {
-        // Funder free balance is below the `ONE_PAS + SOURCE_BUFFER` floor.
-        // The error must fire BEFORE `submitAndWatch` so we don't spam the
-        // chain with reverting transfers.
         const { client, transferFactory } = makeClient({
             [RECIPIENT]: 0n,
             [DEV_FUNDER]: FUNDER_REQUIRED - 1n,
         });
-        await expect(topUpFromBulletinDev(client, RECIPIENT)).rejects.toBeInstanceOf(
+        await expect(dripToProductAccount(client, RECIPIENT)).rejects.toBeInstanceOf(
             DevFunderExhaustedError,
         );
         expect(transferFactory).not.toHaveBeenCalled();
@@ -149,12 +141,9 @@ describe("topUpFromBulletinDev", () => {
     });
 
     it("DevFunderExhaustedError carries the funder address and required amount", async () => {
-        const { client } = makeClient({
-            [RECIPIENT]: 0n,
-            [DEV_FUNDER]: 0n,
-        });
+        const { client } = makeClient({ [RECIPIENT]: 0n, [DEV_FUNDER]: 0n });
         try {
-            await topUpFromBulletinDev(client, RECIPIENT);
+            await dripToProductAccount(client, RECIPIENT);
             throw new Error("should have thrown");
         } catch (err) {
             expect(err).toBeInstanceOf(DevFunderExhaustedError);
@@ -167,7 +156,7 @@ describe("topUpFromBulletinDev", () => {
 
     it("signs the transfer with the bare-master pubkey, NOT //Alice", async () => {
         const { client } = makeClient({ [DEV_FUNDER]: FUNDER_HEALTHY });
-        await topUpFromBulletinDev(client, RECIPIENT);
+        await dripToProductAccount(client, RECIPIENT);
         const [, signer] = mockSubmitAndWatch.mock.calls[0];
         // biome-ignore lint/suspicious/noExplicitAny: signer shape mocked
         const pubkey = (signer as any).publicKey as Uint8Array;
@@ -175,17 +164,28 @@ describe("topUpFromBulletinDev", () => {
         expect(pubkey.length).toBe(32);
         // Positive lock: full pubkey for the bare master account of the
         // standard dev mnemonic ("bottom drive ..." with empty derivation,
-        // sr25519). Verified live via `bun run tools/print-bulletin-dev-address.ts`.
-        // If `BULLETIN_DEV_MNEMONIC` or the derivation path ever changes,
-        // this assertion fails loudly instead of letting the CLI silently
-        // point at an unfunded address.
+        // sr25519). If `DEV_MNEMONIC` or the derivation path ever changes, this
+        // fails loudly instead of letting the CLI point at an unfunded address.
         const expectedBareMaster =
             "46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a";
         expect(Buffer.from(pubkey).toString("hex")).toBe(expectedBareMaster);
-        // Negative guard: canonical `//Alice` is a common typo / regression
-        // ("Alice" the label, `//Alice` the derivation). It is unfunded on
-        // paseo-next-v2 and must never be used here.
+        // Negative guard: canonical `//Alice` is unfunded on paseo-next-v2 and
+        // must never be used here.
         const canonicalAliceFirstFour = "d43593c7";
         expect(Buffer.from(pubkey.slice(0, 4)).toString("hex")).not.toBe(canonicalAliceFirstFour);
+    });
+});
+
+describe("formatPas", () => {
+    it("renders whole amounts without a fraction", () => {
+        expect(formatPas(0n)).toBe("0 PAS");
+        expect(formatPas(ONE_PAS)).toBe("1 PAS");
+        expect(formatPas(DRIP_CAP)).toBe("10 PAS");
+    });
+
+    it("trims trailing zeros and caps at 4 fractional digits", () => {
+        expect(formatPas(ONE_PAS + ONE_PAS / 2n)).toBe("1.5 PAS");
+        // 0.123456 PAS -> truncated to 4 dp
+        expect(formatPas(123_456_000_000n)).toBe("0.1234 PAS");
     });
 });

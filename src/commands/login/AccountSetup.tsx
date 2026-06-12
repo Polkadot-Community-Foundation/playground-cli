@@ -18,12 +18,12 @@ import { useState, useEffect } from "react";
 import { Row, Section, PhoneApprovalCallout, type MarkKind } from "../../utils/ui/theme/index.js";
 import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
-import { topUpFromBulletinDev } from "../../utils/account/bulletinTopUp.js";
-import { checkMapping, ensureMapped } from "../../utils/account/mapping.js";
+import { checkMapping } from "../../utils/account/mapping.js";
 import { getCachedAllocation, requestResourceAllocation } from "@parity/product-sdk-terminal/host";
 import {
     PLAYGROUND_RESOURCES,
     describeAllocationFailure,
+    productScopedAdapter,
     summarizeOutcomes,
 } from "../../utils/allowances/resources.js";
 import {
@@ -93,7 +93,7 @@ export function AccountSetup({
 }) {
     const [steps, setSteps] = useState<StepState[]>([
         { label: "allowances", status: "pending" },
-        { label: "funding", status: "pending" },
+        { label: "mapping", status: "pending" },
     ]);
     const [phonePrompt, setPhonePrompt] = useState<PhonePrompt | null>(null);
 
@@ -156,7 +156,12 @@ export function AccountSetup({
             update(0, { status: "active", value: "checking…", valueTone: "muted" });
             let accountSetupOk = true;
             try {
-                const { adapter, userSession } = session;
+                const { adapter: rawAdapter, userSession } = session;
+                // Product-scoped on purpose: the wire `callingProductId` is what
+                // the phone derives the PGAS claim TARGET from. The raw adapter's
+                // `dot-cli` id minted the PGAS to `dot-cli/0` instead of
+                // `playground.dot/0` — see `productScopedAdapter`.
+                const adapter = productScopedAdapter(rawAdapter);
                 const cached = await Promise.all(
                     PLAYGROUND_RESOURCES.map((r) => getCachedAllocation(adapter, r)),
                 );
@@ -210,18 +215,20 @@ export function AccountSetup({
 
                     const failure = describeAllocationFailure(summary);
                     if (failure) {
-                        // Telemetry is off by default, so this stderr line is
-                        // the only machine-readable signal that distinguishes a
-                        // user decline (Rejected) from the account holder being
-                        // unable to provision (NotAvailable, e.g. an out-of-date
-                        // mobile build or a full on-chain slot ring). Positional:
-                        // outcomes[i] ↔ PLAYGROUND_RESOURCES[i]. The user-facing
-                        // `failure` line already gives each bucket its own
-                        // remedy (re-approve vs update-the-app).
-                        const detail = PLAYGROUND_RESOURCES.map(
-                            (r, i) => `${r.tag}=${outcomes[i]?.tag ?? "missing"}`,
-                        ).join(" ");
-                        console.error(`[allowances] resource allocation outcomes: ${detail}`);
+                        // Diagnostic-only stderr line distinguishing a user
+                        // decline (Rejected) from the wallet being unable to
+                        // provision (NotAvailable, e.g. an out-of-date mobile
+                        // build or a full on-chain slot ring). Positional:
+                        // outcomes[i] ↔ PLAYGROUND_RESOURCES[i]. Verbose-gated:
+                        // the user-facing `failure` line already gives each
+                        // bucket its own remedy, and raw tag dumps confuse
+                        // users.
+                        if (process.env.DOT_DEPLOY_VERBOSE === "1") {
+                            const detail = PLAYGROUND_RESOURCES.map(
+                                (r, i) => `${r.tag}=${outcomes[i]?.tag ?? "missing"}`,
+                            ).join(" ");
+                            console.error(`[allowances] resource allocation outcomes: ${detail}`);
+                        }
                         accountSetupOk = false;
                         update(0, {
                             status: "failed",
@@ -248,56 +255,40 @@ export function AccountSetup({
                 });
             }
 
-            // ── Step 1: Top up the product-derived account ──────────────────
-            // paseo-next-v2's pallet_revive::AutoMapper creates the H160
-            // mapping on the first state-changing tx the product account
-            // submits, so we don't run an explicit `Revive.map_account` here
-            // by default. We mirror polkadot-app-deploy's `attemptTestnetTopUp`
-            // and ensure the product-derived account has enough PAS to cover
-            // the auto-map trigger fee polkadot-app-deploy submits during
-            // `dot deploy`. Reuses the same dev source signer polkadot-app-deploy
-            // uses so the funding lands on a chain that is actually
-            // pre-funded (paseo-next-v2).
+            // ── Step 1: Verify Revive H160 mapping (read-only) ──────────────
+            // No funding, no `map_account`: the `SmartContractAllowance` grant
+            // in Step 0 makes the phone submit `Pgas.claim_pgas`, minting PGAS
+            // (a `sufficient` asset) to the product account — which creates it
+            // in `frame_system` and fires `pallet_revive::AutoMapper`, mapping
+            // SS58 -> H160 with zero native funding (verified on-chain on
+            // paseo-next-v2, 2026-06-11). This step only READS the mapping.
             //
-            // Belt-and-braces: after funding, re-check the on-chain mapping
-            // and submit an explicit `Revive.map_account` if AutoMapper did
-            // not fire (e.g. the account pre-existed the AutoMapper runtime
-            // upgrade and a fresh `OnNewAccount` was never triggered). This
-            // covers the cold-start case the deploy preflight error message
-            // ("Account is not mapped in Revive. Run `dot login`...") would
-            // otherwise leave the user stuck on.
-            update(1, { status: "active", value: "checking balance…", valueTone: "muted" });
+            // The retry window absorbs node propagation: the phone confirms
+            // the claim in-block on ITS node before answering Allocated, and
+            // this read can hit a different RPC node a moment behind.
+            // `checkMapping` reads the BEST head — finalization lags ~80 s
+            // here and must not gate this check.
+            update(1, { status: "active", value: "checking…", valueTone: "muted" });
             try {
-                const result = await topUpFromBulletinDev(client, address);
+                const mapped = await checkMapping(client, address, { attempts: 6, delayMs: 2000 });
                 if (cancelled) return;
-                let detail = result.skipped ? "already funded" : "+1 PAS";
-
-                // `ensureMapped` is a no-op when the account is already
-                // mapped (the underlying SDK helper hard-errors only on
-                // mapping failures we want to surface). `checkMapping`
-                // catches the common case so we don't print "mapping…" on
-                // every re-run.
-                const mapped = await checkMapping(client, address);
-                if (cancelled) return;
-                if (!mapped) {
-                    update(1, {
-                        status: "active",
-                        value: "registering H160 mapping…",
-                        valueTone: "muted",
-                    });
-                    await ensureMapped(client, address, session.signer);
-                    if (cancelled) return;
-                    detail = `${detail} + mapped`;
-                }
-                update(1, { status: "ok", value: detail, valueTone: "muted" });
+                update(
+                    1,
+                    mapped
+                        ? { status: "ok", value: "ready", valueTone: "muted" }
+                        : {
+                              status: "failed",
+                              value: "not ready yet",
+                              valueTone: "warning",
+                              hint: "Your account isn't ready for smart contracts yet — this usually resolves on its own. Wait a minute, then run `playground login` again. If it keeps failing, run `playground logout`, then `playground login` and approve the allowances on your phone.",
+                          },
+                );
             } catch (err) {
                 update(1, {
                     status: "failed",
                     error: describe(err),
                     valueTone: "danger",
                 });
-                finish(false);
-                return;
             }
 
             finish(accountSetupOk);

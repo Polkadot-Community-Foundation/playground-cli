@@ -27,6 +27,7 @@ import {
     type AllocatableResource,
 } from "@parity/product-sdk-terminal/host";
 import type { ResolvedSigner } from "../signer.js";
+import { productScopedAdapter } from "./resources.js";
 
 /**
  * Bridge the one nominal type skew between our bulletin chain API and
@@ -160,7 +161,10 @@ export async function cachedBulletinSlotAuthorization(
     adapter: NonNullable<ResolvedSigner["adapter"]>,
     bulletinApi: CloudStorageApi,
 ): Promise<BulletinSlotAuthorization | null> {
-    const slotSigner = await createSlotAccountSigner(adapter, BULLETIN_RESOURCE);
+    const slotSigner = await createSlotAccountSigner(
+        productScopedAdapter(adapter),
+        BULLETIN_RESOURCE,
+    );
     if (!slotSigner) return null;
     return getBulletinSlotAuthorization(bulletinApi, slotSigner);
 }
@@ -195,7 +199,8 @@ export async function getBulletinAllowanceSigner({
     // supplied a local key and owns making sure it has Bulletin allowance.
     if (publishSigner.source === "dev") return publishSigner.signer;
 
-    const { userSession, adapter } = requireSession(publishSigner);
+    const { userSession, adapter: rawAdapter } = requireSession(publishSigner);
+    const adapter = productScopedAdapter(rawAdapter);
 
     // Cache hit → local sr25519 signer; miss → one phone approval. The SDK
     // call owns allocation, caching, and signer construction (terminal 0.3.1+
@@ -247,7 +252,10 @@ export async function getCachedBulletinAllowanceSigner({
     if (publishSigner.source === "dev") return publishSigner.signer;
 
     const { adapter } = requireSession(publishSigner);
-    const slotSigner = await createSlotAccountSigner(adapter, BULLETIN_RESOURCE);
+    const slotSigner = await createSlotAccountSigner(
+        productScopedAdapter(adapter),
+        BULLETIN_RESOURCE,
+    );
     if (!slotSigner) {
         throw new Error(`No cached Bulletin allowance account available. ${LOGIN_HINT}`);
     }

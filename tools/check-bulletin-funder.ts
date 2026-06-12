@@ -21,7 +21,7 @@
  * `dot login` consumes funds from). Run via:
  *   bun run tools/check-bulletin-funder.ts
  *
- * Address is derived inside `src/utils/account/bulletinTopUp.ts` — keep this
+ * Address is polkadot-app-deploy’s `DEFAULT_MNEMONIC` bare-root — keep this
  * tool's hardcoded SS58 in sync with the bare-master output of
  * `tools/print-bulletin-dev-address.ts`.
  */

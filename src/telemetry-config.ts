@@ -48,6 +48,7 @@ export interface InternalContextSignals {
 
 export type CliCommandName =
     | "login"
+    | "drip"
     | "deploy"
     | "deploy-all"
     | "contract"

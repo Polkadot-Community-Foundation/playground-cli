@@ -22,6 +22,7 @@ import "./bootstrap.js";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { loginCommand } from "./commands/login/index.js";
+import { dripCommand } from "./commands/drip/index.js";
 import { modCommand } from "./commands/mod/index.js";
 import { buildCommand } from "./commands/build.js";
 import { contractCommand } from "./commands/contract.js";
@@ -129,6 +130,7 @@ const program = new Command()
     .version(pkg.version);
 
 program.addCommand(loginCommand);
+program.addCommand(dripCommand);
 program.addCommand(modCommand);
 program.addCommand(buildCommand);
 program.addCommand(contractCommand);
