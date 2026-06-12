@@ -23,6 +23,7 @@ const {
     mirrorSiteMock,
     prepareLocalDirectoryMock,
     ensureSlotAccountSignerMock,
+    publishToPlaygroundMock,
 } = vi.hoisted(() => ({
     // Explicit arg type so `mock.calls[0][0]` typechecks (an arg-less vi.fn
     // infers Parameters = [] and indexing the empty tuple is a tsc error).
@@ -49,9 +50,13 @@ const {
         fileCount: 5,
     })),
     ensureSlotAccountSignerMock: vi.fn(),
+    publishToPlaygroundMock: vi.fn<(arg: unknown) => Promise<{ metadataCid: string }>>(
+        async () => ({ metadataCid: "bafymeta" }),
+    ),
 }));
 
 vi.mock("../deploy/storage.js", () => ({ runStorageDeploy: runStorageDeployMock }));
+vi.mock("../deploy/playground.js", () => ({ publishToPlayground: publishToPlaygroundMock }));
 vi.mock("./mirror.js", () => ({ mirrorSite: mirrorSiteMock }));
 vi.mock("./local.js", () => ({ prepareLocalDirectory: prepareLocalDirectoryMock }));
 vi.mock("@parity/product-sdk-terminal/host", () => ({
@@ -204,6 +209,83 @@ describe("runDecentralize — Bulletin storage signer", () => {
         };
         expect(arg.auth.signerAddress).toBe("5Fake");
         expect(arg.auth.storageSigner).toBe(slotSigner);
+    });
+});
+
+describe("runDecentralize — playground publish metadata", () => {
+    beforeEach(() => {
+        runStorageDeployMock.mockClear();
+        mirrorSiteMock.mockClear();
+        prepareLocalDirectoryMock.mockClear();
+        publishToPlaygroundMock.mockClear();
+        ensureSlotAccountSignerMock.mockReset();
+        ensureSlotAccountSignerMock.mockResolvedValue({ publicKey: new Uint8Array(32) } as any);
+    });
+
+    type PublishArg = {
+        repositoryUrl: string | null;
+        isModdable?: boolean;
+        cwd?: string;
+    };
+
+    it("path source threads the preflighted repo URL + cwd (README root) through", async () => {
+        const outcome = await runDecentralize({
+            source: { kind: "path", directory: "./dist" },
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "dev",
+            userSigner: null,
+            publishToPlayground: true,
+            repositoryUrl: "https://github.com/acme/site",
+            env: "paseo-next-v2",
+        });
+
+        expect(publishToPlaygroundMock).toHaveBeenCalledTimes(1);
+        const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
+        expect(arg.repositoryUrl).toBe("https://github.com/acme/site");
+        expect(arg.isModdable).toBe(true);
+        // The typed --path directory is the project root — publishToPlayground
+        // inlines its README.md as the app's playground detail page.
+        expect(arg.cwd).toBe("./dist");
+        expect(outcome.metadataCid).toBe("bafymeta");
+    });
+
+    it("path source without a repo URL still inlines the README but is not moddable", async () => {
+        await runDecentralize({
+            source: { kind: "path", directory: "./dist" },
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "dev",
+            userSigner: null,
+            publishToPlayground: true,
+            env: "paseo-next-v2",
+        });
+
+        const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
+        expect(arg.repositoryUrl).toBeNull();
+        expect(arg.isModdable).toBe(false);
+        expect(arg.cwd).toBe("./dist");
+    });
+
+    it("url source records no repository, no moddable bit, and no project root", async () => {
+        // Mirrored sites have no git source: even if a caller smuggled a repo
+        // URL in, the contract for url mode is null/false/undefined — pinned
+        // here without the smuggling (callers can't reach the option in url
+        // mode through the CLI surface).
+        await runDecentralize({
+            source: { kind: "url", url: "https://example.com" },
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "dev",
+            userSigner: null,
+            publishToPlayground: true,
+            env: "paseo-next-v2",
+        });
+
+        const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
+        expect(arg.repositoryUrl).toBeNull();
+        expect(arg.isModdable).toBe(false);
+        expect(arg.cwd).toBeUndefined();
     });
 });
 

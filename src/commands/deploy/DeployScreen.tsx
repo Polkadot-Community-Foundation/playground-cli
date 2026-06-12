@@ -58,11 +58,7 @@ import {
 import type { ResolvedSigner } from "../../utils/signer.js";
 import { DEFAULT_BUILD_DIR, getChainConfig, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
-import {
-    ensureGitInstalled,
-    ModdablePreflightError,
-    resolveRepositoryUrl,
-} from "../../utils/deploy/moddable.js";
+import { ModdableErrorStage, ModdablePreflightStage } from "./ModdableStages.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
 import {
@@ -669,113 +665,6 @@ function AckStage({ onContinue, onExit }: { onContinue: () => void; onExit: () =
             </Callout>
             <Box marginTop={1}>
                 <Hint>{"enter to continue · esc to exit and edit"}</Hint>
-            </Box>
-        </Box>
-    );
-}
-
-// ── Moddable preflight ────────────────────────────────────────────────────────
-
-function ModdablePreflightStage({
-    projectDir,
-    onResolved,
-    onError,
-}: {
-    projectDir: string;
-    onResolved: (url: string) => void;
-    onError: (message: string) => void;
-}) {
-    const [status, setStatus] = useState<string>("checking git…");
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                setStatus("ensuring git is installed…");
-                await ensureGitInstalled();
-                if (cancelled) return;
-
-                setStatus("resolving repository…");
-                const url = await resolveRepositoryUrl({
-                    cwd: projectDir,
-                    onLog: (line) => {
-                        if (!cancelled) setStatus(line);
-                    },
-                });
-                if (cancelled) return;
-                onResolved(url);
-            } catch (err) {
-                if (cancelled) return;
-                const message =
-                    err instanceof ModdablePreflightError
-                        ? err.interactiveMessage
-                        : err instanceof Error
-                          ? err.message
-                          : String(err);
-                onError(message);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [projectDir]);
-
-    return (
-        <Section>
-            <Row mark="run" label={status} tone="muted" />
-        </Section>
-    );
-}
-
-type ModdableErrorChoice = "continue" | "exit";
-
-/**
- * Formal warning stage shown when the moddable preflight cannot proceed,
- * almost always because the user hasn't set up a public GitHub `origin` yet.
- * Renders the actionable error inside a yellow Callout (matching the
- * "check your phone" banner) so it visually registers as a setup requirement
- * rather than a deploy crash. Must never dead-end (#332): the menu offers
- * continuing as non-moddable or a graceful exit. Esc also exits, matching the
- * Ack and Confirm stages (and the previous incarnation of this screen).
- */
-function ModdableErrorStage({
-    message,
-    onContinueWithoutModdable,
-    onExit,
-}: {
-    message: string;
-    onContinueWithoutModdable: () => void;
-    onExit: () => void;
-}) {
-    useInput((_input, key) => {
-        if (key.escape) onExit();
-    });
-    return (
-        <Box flexDirection="column">
-            <Callout tone="warning" title="Moddable Setup Needed">
-                <Text>{message}</Text>
-            </Callout>
-            <Box marginTop={1} flexDirection="column">
-                <Select<ModdableErrorChoice>
-                    label="how do you want to continue?"
-                    options={[
-                        {
-                            value: "continue",
-                            label: "continue without moddable",
-                            hint: "publish, but keep my source private",
-                        },
-                        {
-                            value: "exit",
-                            label: "exit",
-                            hint: "set up GitHub first, re-run deploy later",
-                        },
-                    ]}
-                    initialIndex={0}
-                    onSelect={(choice) => {
-                        if (choice === "continue") onContinueWithoutModdable();
-                        else onExit();
-                    }}
-                />
             </Box>
         </Box>
     );

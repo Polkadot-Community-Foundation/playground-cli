@@ -36,6 +36,11 @@ export type Stage =
     | { kind: "prompt-domain" }
     | { kind: "validate-domain"; raw: string }
     | { kind: "prompt-publish" }
+    | { kind: "prompt-moddable" }
+    | { kind: "moddable-preflight" }
+    // Entered imperatively by the screen when the preflight fails (missing /
+    // private / non-GitHub origin) — never returned by `pickNextStage`.
+    | { kind: "moddable-error"; message: string }
     | { kind: "prompt-tags" }
     | { kind: "confirm" }
     | { kind: "running" }
@@ -71,6 +76,20 @@ export interface PickStageInput {
      */
     publishToPlayground: boolean | null;
     /**
+     * Whether to record the path directory's public GitHub origin so others
+     * can `playground mod` the app. Only asked for `path` sources that
+     * publish to the playground (mirrored URL sites have no git source).
+     * `null` ⇒ not answered yet; pre-set to `true` when the caller passed
+     * `--moddable` so the prompt is skipped and the preflight runs directly.
+     */
+    moddable: boolean | null;
+    /**
+     * Public GitHub URL resolved by the moddable preflight. `null` until the
+     * preflight succeeds; `moddable === true` without it keeps the preflight
+     * stage up.
+     */
+    repositoryUrl: string | null;
+    /**
      * Category tag for the playground listing (tri-state, mirroring deploy):
      * `undefined` ⇒ not asked yet (the tag prompt runs when publishing);
      * `null` ⇒ explicitly skipped (untagged); a string ⇒ a chosen tag. Pre-set
@@ -82,10 +101,12 @@ export interface PickStageInput {
 
 /**
  * Decide which prompt stage to show next given the inputs collected so far.
- * source → URL|path → signer → domain → validate-domain → publish? → tag? →
- * confirm. Each missing piece surfaces its prompt; once everything is filled
- * the `confirm` stage gates the actual run. The tag prompt only runs when
- * publishing and no `--tag` pre-filled it (mirroring deploy).
+ * source → URL|path → signer → domain → validate-domain → publish? →
+ * moddable? (path-only) → tag? → confirm. Each missing piece surfaces its
+ * prompt; once everything is filled the `confirm` stage gates the actual run.
+ * Moddable and tag are publish-only follow-ups (mirroring deploy): moddable is
+ * asked first and only for `path` sources, then the tag prompt runs unless
+ * `--tag` pre-filled it.
  *
  * `domainRaw` exists so the screen can distinguish "user hasn't been
  * asked yet" from "user typed input but validation hasn't finished".
@@ -100,8 +121,19 @@ export function pickNextStage(input: PickStageInput): Stage {
         return { kind: "validate-domain", raw: input.domainRaw };
     }
     if (input.publishToPlayground === null) return { kind: "prompt-publish" };
-    // Tag is the last publish-only choice: asked only when publishing and no
-    // `--tag` flag already set it (`undefined` = not asked yet).
+    // Moddable applies only to local-directory publishes — a mirrored URL has
+    // no git source to record. The screen, not this picker, transitions to
+    // `moddable-error` when the preflight fails.
+    if (input.sourceKind === "path" && input.publishToPlayground === true) {
+        if (input.moddable === null) return { kind: "prompt-moddable" };
+        // --moddable via flag: skip the prompt, drive straight into preflight.
+        if (input.moddable === true && input.repositoryUrl === null) {
+            return { kind: "moddable-preflight" };
+        }
+    }
+    // Tag is the last publish-only choice: asked after the moddable decision is
+    // resolved, only when publishing and no `--tag` flag already set it
+    // (`undefined` = not asked yet).
     if (input.publishToPlayground && input.tag === undefined) return { kind: "prompt-tags" };
     return { kind: "confirm" };
 }

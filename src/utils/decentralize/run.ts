@@ -127,9 +127,10 @@ export interface RunDecentralizeOptions {
     userSigner: ResolvedSigner | null;
     /**
      * When true, after the storage upload + DotNS register the runner
-     * publishes a minimal AppInfo entry to the playground registry. No
-     * `repository` is recorded (decentralized sites aren't moddable from
-     * GitHub) and `isModdable` is forced to false.
+     * publishes a minimal AppInfo entry to the playground registry. For
+     * `path` sources the directory's README.md (if any) is inlined as the
+     * app's detail page; URL sources have no project root so no README is
+     * recorded.
      */
     publishToPlayground?: boolean;
     /**
@@ -138,6 +139,15 @@ export interface RunDecentralizeOptions {
      * deploy's `--tag`; values come from `PLAYGROUND_TAGS`.
      */
     tag?: string | null;
+    /**
+     * Public GitHub URL to record in the playground metadata so others can
+     * `playground mod` the app. Callers preflight it (`resolveRepositoryUrl`
+     * — git origin exists, public, GitHub) before passing it in; the runner
+     * just threads it through. Only meaningful for `path` sources — mirrored
+     * URL sites have no git source, so URL-mode callers always pass
+     * null/omit, and `isModdable` stays false.
+     */
+    repositoryUrl?: string | null;
     env: Env;
     onEvent?: (event: DecentralizeLogEvent) => void;
 }
@@ -303,18 +313,23 @@ export async function runDecentralize(
                       }
                     : setup.publishSigner;
 
+            // Preflighted by the caller; null/omitted for mirrored URL sites
+            // (no git source) and for path publishes that declined moddable.
+            const repositoryUrl = options.repositoryUrl ?? null;
             onEvent?.({ kind: "playground-start", fullDomain });
             const publishResult = await publishToPlayground({
                 domain: label,
                 publishSigner,
                 claimedOwnerH160: setup.claimedOwnerH160,
-                // Mirrored sites have no git source — `repository` is omitted
-                // from the metadata JSON and `is_moddable` is forced false.
-                repositoryUrl: null,
+                repositoryUrl,
                 tag: options.tag ?? null,
+                // Path sources have a real project root — its README.md (if
+                // any) becomes the app's playground detail page. URL sources
+                // upload a temp mirror with no project root.
+                cwd: source.kind === "path" ? source.directory : undefined,
                 env,
                 isPrivate: false,
-                isModdable: false,
+                isModdable: repositoryUrl !== null,
                 isDevSigner: setup.publishSigner.source === "dev",
                 onLogEvent: (event) => onEvent?.({ kind: "playground-event", event }),
                 onAllowancePrompt: allowancePrompt,

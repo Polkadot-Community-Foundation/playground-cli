@@ -27,9 +27,10 @@
  * Headless flow runs when `--site` or `--path` is provided (preserves the
  * existing `dot decentralize --suri=//Bob` demo-service contract). Without
  * either, the command mounts an Ink TUI that prompts for source (URL or
- * local directory) → URL/path → signer → domain → publish? before kicking
- * off the same upload pipeline. The publish-to-playground step delegates to
- * deploy's `publishToPlayground` helper.
+ * local directory) → URL/path → signer → domain → publish? → moddable?
+ * (path mode only) before kicking off the same upload pipeline. The
+ * publish-to-playground step delegates to deploy's `publishToPlayground`
+ * helper.
  */
 
 import { Command, Option } from "commander";
@@ -48,6 +49,11 @@ import {
     type DecentralizeSource,
 } from "../../utils/decentralize/run.js";
 import { destroyConnection } from "../../utils/connection.js";
+import {
+    ensureGitInstalled,
+    ModdablePreflightError,
+    resolveRepositoryUrl,
+} from "../../utils/deploy/moddable.js";
 import type { SignerMode } from "../../utils/deploy/signerMode.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { onProcessShutdown } from "../../utils/process-guard.js";
@@ -66,6 +72,13 @@ interface DecentralizeOpts {
     playground?: boolean;
     /** Playground category tag (from PLAYGROUND_TAGS). Requires --playground. */
     tag?: string;
+    /**
+     * Record the path directory's public GitHub origin in the playground
+     * metadata so others can `playground mod` the app. Path mode only
+     * (`.conflicts("site")` — a mirrored URL has no git source) and requires
+     * `--playground` in headless mode. `undefined` ⇒ ask in the TUI.
+     */
+    moddable?: boolean;
 }
 
 /**
@@ -124,6 +137,13 @@ export const decentralizeCommand = new Command("decentralize")
             "Tag the published app so people can filter for it in the playground. Requires --playground.",
         ).choices([...PLAYGROUND_TAGS]),
     )
+    .addOption(
+        new Option(
+            "--moddable",
+            "Record the public GitHub origin of --path's repo so others can " +
+                "`playground mod` it. Requires --path and --playground. Off by default.",
+        ).conflicts("site"),
+    )
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
@@ -154,6 +174,38 @@ async function runHeadless({
         // learn the directory doesn't exist. runDecentralize re-validates
         // (prepareLocalDirectory is cheap and pure fs).
         if (opts.path) prepareLocalDirectory(opts.path);
+
+        // Moddable preflight, same fail-fast rationale: resolve the public
+        // GitHub origin (git walks up from the --path directory) before any
+        // signer/chain work. `ModdablePreflightError`'s headless message
+        // already names the fix, so it propagates as-is. `--site` is blocked
+        // by commander's `.conflicts()`, so `opts.path` is set here.
+        let repositoryUrl: string | null = null;
+        if (opts.moddable) {
+            if (opts.playground !== true) {
+                throw new Error(
+                    "--moddable requires --playground — the repo URL is recorded in the " +
+                        "playground metadata, which is only published with --playground.",
+                );
+            }
+            await ensureGitInstalled();
+            try {
+                repositoryUrl = await resolveRepositoryUrl({
+                    cwd: opts.path!,
+                    onLog: (line) => process.stdout.write(`  ${line}\n`),
+                });
+            } catch (err) {
+                // The headless message in moddable.ts names deploy's
+                // `--no-moddable` escape hatch, which this command doesn't
+                // have — use the surface-neutral copy + the right remedy.
+                if (err instanceof ModdablePreflightError) {
+                    throw new Error(
+                        `${err.interactiveMessage} Or omit --moddable to publish without source.`,
+                    );
+                }
+                throw err;
+            }
+        }
 
         signer = await withSpan("cli.decentralize.signer", "resolve signer", () =>
             resolveSigner({ suri: opts.suri }),
@@ -192,6 +244,7 @@ async function runHeadless({
             userSigner: signer,
             publishToPlayground: opts.playground === true,
             tag: opts.tag ?? null,
+            repositoryUrl,
             env,
             onEvent: (ev) => {
                 switch (ev.kind) {
@@ -299,6 +352,7 @@ async function runInteractive({
                     sessionSigner: preflight.sessionSigner,
                     initialPublishToPlayground: opts.playground === true ? true : null,
                     initialTag: opts.tag,
+                    initialModdable: opts.moddable === true ? true : null,
                     onDone: (result) => {
                         if (settled) return;
                         settled = true;

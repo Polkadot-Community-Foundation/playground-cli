@@ -56,6 +56,7 @@ import {
     type DecentralizeOutcome,
     type DecentralizeSource,
 } from "../../utils/decentralize/run.js";
+import { ModdableErrorStage, ModdablePreflightStage } from "../deploy/ModdableStages.js";
 import {
     pickNextStage,
     validateDomainInput,
@@ -95,6 +96,13 @@ export interface DecentralizeScreenProps {
      * `undefined` means the tag prompt is shown when publishing.
      */
     initialTag?: string;
+    /**
+     * Pre-set when `--moddable` was passed on the CLI: skips the moddable
+     * prompt and drives straight into the git-origin preflight (only if the
+     * user ends up in the path + publish flow — URL mode ignores it). `null`
+     * means the prompt is shown.
+     */
+    initialModdable: boolean | null;
     onDone: (result: DecentralizeResult) => void;
 }
 
@@ -106,6 +114,7 @@ export function DecentralizeScreen({
     sessionSigner,
     initialPublishToPlayground,
     initialTag,
+    initialModdable,
     onDone,
 }: DecentralizeScreenProps) {
     // A caller-provided site URL pre-selects the URL flow (vestigial today —
@@ -137,6 +146,8 @@ export function DecentralizeScreen({
     // Category tag (tri-state, mirroring deploy): `undefined` = not asked yet,
     // `null` = explicitly skipped, a string = chosen. Pre-filled from `--tag`.
     const [tag, setTag] = useState<string | null | undefined>(initialTag);
+    const [moddable, setModdable] = useState<boolean | null>(initialModdable);
+    const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
 
     const [stage, setStage] = useState<Stage>(() =>
         pickNextStage({
@@ -148,6 +159,8 @@ export function DecentralizeScreen({
             domainRaw: initialDot,
             publishToPlayground: initialPublishToPlayground,
             tag: initialTag,
+            moddable: initialModdable,
+            repositoryUrl: null,
         }),
     );
 
@@ -161,6 +174,8 @@ export function DecentralizeScreen({
             domainRaw: string | null;
             publishToPlayground: boolean | null;
             tag: string | null;
+            moddable: boolean | null;
+            repositoryUrl: string | null;
         }> = {},
     ) => {
         setStage(
@@ -178,8 +193,19 @@ export function DecentralizeScreen({
                 // `undefined` is a meaningful tag value ("not asked"), so detect
                 // presence with `in` rather than the `!== undefined` sentinel.
                 tag: "tag" in next ? next.tag : tag,
+                moddable: next.moddable !== undefined ? next.moddable : moddable,
+                repositoryUrl:
+                    next.repositoryUrl !== undefined ? next.repositoryUrl : repositoryUrl,
             }),
         );
+    };
+
+    // Single "user declined moddable" transition, shared by the remix prompt's
+    // "no" answer and the setup-error menu's "continue without moddable", so
+    // the two paths can't drift apart. Mirrors deploy's helper of the same name.
+    const declineModdable = () => {
+        setModdable(false);
+        advance({ moddable: false });
     };
 
     // Compose the active signer for downstream stages. Memoised so the
@@ -377,7 +403,7 @@ export function DecentralizeScreen({
                             {
                                 value: true,
                                 label: "yes",
-                                hint: "list the mirrored site in the playground apps tab",
+                                hint: "list the site in the playground apps tab",
                             },
                             {
                                 value: false,
@@ -392,6 +418,33 @@ export function DecentralizeScreen({
                         }}
                     />
                 </Box>
+            )}
+
+            {stage.kind === "prompt-moddable" && (
+                <Select<boolean>
+                    label="let others remix (mod) this app?"
+                    options={[
+                        {
+                            value: true,
+                            label: "yes",
+                            hint: "record my public GitHub repo so others can `playground mod` it",
+                        },
+                        {
+                            value: false,
+                            label: "no",
+                            hint: "keep my source private",
+                        },
+                    ]}
+                    initialIndex={0}
+                    onSelect={(yes) => {
+                        if (yes) {
+                            setModdable(true);
+                            setStage({ kind: "moddable-preflight" });
+                        } else {
+                            declineModdable();
+                        }
+                    }}
+                />
             )}
 
             {stage.kind === "prompt-tags" && (
@@ -414,6 +467,27 @@ export function DecentralizeScreen({
                 </Box>
             )}
 
+            {stage.kind === "moddable-preflight" && (
+                <ModdablePreflightStage
+                    // git resolves `origin` from any subdirectory of the repo,
+                    // so the typed path works even when it's a build output dir.
+                    projectDir={localPath!}
+                    onResolved={(url) => {
+                        setRepositoryUrl(url);
+                        advance({ moddable: true, repositoryUrl: url });
+                    }}
+                    onError={(msg) => setStage({ kind: "moddable-error", message: msg })}
+                />
+            )}
+
+            {stage.kind === "moddable-error" && (
+                <ModdableErrorStage
+                    message={stage.message}
+                    onContinueWithoutModdable={declineModdable}
+                    onExit={() => onDone({ kind: "cancel" })}
+                />
+            )}
+
             {stage.kind === "confirm" && (
                 <ConfirmStage
                     source={source!}
@@ -425,6 +499,7 @@ export function DecentralizeScreen({
                     signerMode={signerMode!}
                     publishToPlayground={publishToPlayground === true}
                     tag={publishToPlayground === true ? (tag ?? null) : null}
+                    repositoryUrl={repositoryUrl}
                     onConfirm={() => setStage({ kind: "running" })}
                     onCancel={() => onDone({ kind: "cancel" })}
                 />
@@ -439,6 +514,7 @@ export function DecentralizeScreen({
                     userSigner={explicitSigner ?? sessionSigner}
                     publishToPlayground={publishToPlayground === true}
                     tag={publishToPlayground === true ? (tag ?? null) : null}
+                    repositoryUrl={repositoryUrl}
                     env={env}
                     onComplete={(outcome) => setStage({ kind: "done", outcome })}
                     onFailed={(message) => setStage({ kind: "error", message })}
@@ -536,6 +612,7 @@ function ConfirmStage({
     signerMode,
     publishToPlayground,
     tag,
+    repositoryUrl,
     onConfirm,
     onCancel,
 }: {
@@ -549,6 +626,8 @@ function ConfirmStage({
     signerMode: SignerMode;
     publishToPlayground: boolean;
     tag: string | null;
+    /** Resolved public GitHub URL when moddable was accepted; null otherwise. */
+    repositoryUrl: string | null;
     onConfirm: () => void;
     onCancel: () => void;
 }) {
@@ -588,6 +667,13 @@ function ConfirmStage({
                     value={publishToPlayground ? "publish to apps tab" : "skip"}
                     tone={publishToPlayground ? "accent" : "muted"}
                 />
+                {source.kind === "path" && publishToPlayground && (
+                    <Row
+                        label="moddable"
+                        value={repositoryUrl ? `yes · ${repositoryUrl}` : "no"}
+                        tone={repositoryUrl ? "accent" : "muted"}
+                    />
+                )}
                 {/* Surface the chosen tag before the irreversible publish, like
                     deploy's confirm summary. Only shown when publishing — the
                     tag is otherwise irrelevant. */}
@@ -643,6 +729,7 @@ function RunningStage({
     userSigner,
     publishToPlayground,
     tag,
+    repositoryUrl,
     env,
     onComplete,
     onFailed,
@@ -654,6 +741,8 @@ function RunningStage({
     userSigner: ResolvedSigner | null;
     publishToPlayground: boolean;
     tag: string | null;
+    /** Preflighted public GitHub URL when moddable was accepted; null otherwise. */
+    repositoryUrl: string | null;
     env: Env;
     onComplete: (outcome: DecentralizeOutcome) => void;
     onFailed: (message: string) => void;
@@ -700,6 +789,7 @@ function RunningStage({
                     userSigner,
                     publishToPlayground,
                     tag,
+                    repositoryUrl,
                     env,
                     onEvent: (event) => {
                         switch (event.kind) {
