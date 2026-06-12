@@ -37,6 +37,7 @@ import {
 } from "@parity/polkadot-app-deploy";
 import { DeployLogParser, type DeployLogEvent } from "./progress.js";
 import { getChainConfig, type Env } from "../../config.js";
+import { isIpfsMigrationError } from "../toolchain.js";
 
 export interface StorageDeployOptions {
     /**
@@ -125,14 +126,11 @@ export const IPFS_MIGRATION_MESSAGE =
     "Your local IPFS repo needs a one-time migration before it can be used for uploads. " +
     "Run `ipfs repo migrate` (or re-run `playground login`), then try the deploy again.";
 
-/** True when an error is Kubo's "repo needs migration" abort surfacing from the deploy. */
-export function isIpfsMigrationError(err: unknown): boolean {
-    return /needs migration/i.test(err instanceof Error ? err.message : String(err));
-}
-
 /**
  * Replace Kubo's cryptic `Command failed: ipfs add … repo needs migration`
  * with an actionable instruction. Non-migration errors pass through unchanged.
+ * The migration marker is classified by `toolchain.ts::isIpfsMigrationError`,
+ * the single source of truth shared with `playground login`'s setup probe.
  */
 function remapIpfsMigrationError(err: unknown): unknown {
     if (!isIpfsMigrationError(err)) return err;

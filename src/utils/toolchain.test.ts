@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hasCargoPvmContract, prependPath, TOOL_STEPS } from "./toolchain.js";
+import { hasCargoPvmContract, isIpfsMigrationError, prependPath, TOOL_STEPS } from "./toolchain.js";
 
 describe("prependPath", () => {
     let originalPath: string | undefined;
@@ -119,5 +119,41 @@ describe("TOOL_STEPS", () => {
         // "repo needs migration"; the manual hint must point at the fix.
         const ipfsStep = TOOL_STEPS.find((entry) => entry.name === "IPFS");
         expect(ipfsStep?.manualHint).toContain("ipfs repo migrate");
+    });
+});
+
+describe("isIpfsMigrationError", () => {
+    it("matches Kubo's full migration notice", () => {
+        expect(
+            isIpfsMigrationError(
+                new Error("Error: ipfs repo needs migration, please run migration tool."),
+            ),
+        ).toBe(true);
+    });
+
+    it("matches regardless of surrounding text (Node's exec prefix, trailing newline)", () => {
+        expect(
+            isIpfsMigrationError(
+                new Error(
+                    "Command failed: ipfs add -Q -r /tmp/x\nError: ipfs repo needs migration, please run …\n",
+                ),
+            ),
+        ).toBe(true);
+    });
+
+    it("matches a bare string, not only Error instances", () => {
+        expect(isIpfsMigrationError("repo needs migration")).toBe(true);
+    });
+
+    it("does not match unrelated failures", () => {
+        expect(isIpfsMigrationError(new Error("AncientBirthBlock: chunk rejected"))).toBe(false);
+        expect(isIpfsMigrationError(new Error("some other failure"))).toBe(false);
+    });
+
+    it("is scoped to the IPFS repo, not any 'needs migration' text", () => {
+        // The marker is "repo needs migration"; a generic database-style
+        // "needs migration" from some other dependency must not be remapped
+        // to the IPFS instruction.
+        expect(isIpfsMigrationError(new Error("database needs migration"))).toBe(false);
     });
 });

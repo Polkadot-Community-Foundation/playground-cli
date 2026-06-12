@@ -88,6 +88,22 @@ function isIpfsInitialized(): boolean {
 }
 
 /**
+ * True when an error is Kubo's "repo needs migration" abort. The exact notice
+ * is "ipfs repo needs migration, please run migration tool."; we match the
+ * stable "repo needs migration" fragment case-insensitively so surrounding
+ * text (Node's `Command failed: …` prefix, a trailing newline) doesn't matter.
+ *
+ * This is the single source of truth for the marker, shared by the login-setup
+ * probe (`ipfsRepoNeedsMigration`) and the deploy-time remap
+ * (`storage.ts::remapIpfsMigrationError`). Scoped to "repo needs migration"
+ * rather than a bare "needs migration" so an unrelated upstream error that
+ * happens to say "needs migration" isn't misattributed to IPFS.
+ */
+export function isIpfsMigrationError(err: unknown): boolean {
+    return /repo needs migration/i.test(err instanceof Error ? err.message : String(err));
+}
+
+/**
  * Detect a stale Kubo repo that the installed `ipfs` binary refuses to use
  * until it's migrated to the current on-disk format. Kubo stamps `~/.ipfs`
  * with a repo version; when the binary is newer than the repo (e.g. the user
@@ -108,7 +124,7 @@ export async function ipfsRepoNeedsMigration(): Promise<boolean> {
     } catch (err) {
         // Node's `exec` appends the child's stderr to the rejection message,
         // which is where Kubo prints the migration notice.
-        return /needs migration/i.test(err instanceof Error ? err.message : String(err));
+        return isIpfsMigrationError(err);
     }
 }
 

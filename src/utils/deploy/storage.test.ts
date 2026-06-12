@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { IPFS_MIGRATION_MESSAGE, isIpfsMigrationError, runStorageDeploy } from "./storage.js";
+import { IPFS_MIGRATION_MESSAGE, runStorageDeploy } from "./storage.js";
 
 const bulletinDeployMock = vi.hoisted(() =>
     vi.fn(async () => ({
@@ -58,20 +58,28 @@ describe("runStorageDeploy", () => {
     });
 
     it("remaps Kubo's 'repo needs migration' abort to an actionable message", async () => {
-        bulletinDeployMock.mockRejectedValueOnce(
-            new Error(
-                "Command failed: ipfs add -Q -r /tmp/x\nError: ipfs repo needs migration, please run migration tool.\n",
-            ),
+        const original = new Error(
+            "Command failed: ipfs add -Q -r /tmp/x\nError: ipfs repo needs migration, please run migration tool.\n",
+        );
+        bulletinDeployMock.mockRejectedValueOnce(original);
+
+        const err = await runStorageDeploy({
+            content: "/tmp/project/dist",
+            domainName: "my-app",
+            auth: {},
+            env: "paseo-next-v2",
+        }).then(
+            () => {
+                throw new Error("expected runStorageDeploy to reject");
+            },
+            (e: unknown) => e,
         );
 
-        await expect(
-            runStorageDeploy({
-                content: "/tmp/project/dist",
-                domainName: "my-app",
-                auth: {},
-                env: "paseo-next-v2",
-            }),
-        ).rejects.toThrow(IPFS_MIGRATION_MESSAGE);
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBe(IPFS_MIGRATION_MESSAGE);
+        // The raw Kubo output must stay reachable for diagnostics — the remap
+        // wraps, never discards, the original error.
+        expect((err as Error).cause).toBe(original);
     });
 
     it("passes non-migration deploy errors through unchanged", async () => {
@@ -86,15 +94,5 @@ describe("runStorageDeploy", () => {
                 env: "paseo-next-v2",
             }),
         ).rejects.toBe(original);
-    });
-});
-
-describe("isIpfsMigrationError", () => {
-    it("matches Kubo's migration notice regardless of surrounding text", () => {
-        expect(
-            isIpfsMigrationError(new Error("…\nError: ipfs repo needs migration, please run …")),
-        ).toBe(true);
-        expect(isIpfsMigrationError(new Error("some other failure"))).toBe(false);
-        expect(isIpfsMigrationError("repo needs migration")).toBe(true);
     });
 });
