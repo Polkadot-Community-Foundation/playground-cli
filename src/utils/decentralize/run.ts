@@ -49,9 +49,23 @@ import { runStorageDeploy } from "../deploy/storage.js";
 import type { ResolvedSigner } from "../signer.js";
 import { mirrorSite } from "./mirror.js";
 
+/**
+ * Emit a "this is a large site" warning once the mirror crosses this many
+ * downloaded files. wget runs with `--no-verbose`, so it prints roughly one
+ * line per saved file — counting `mirror-line` events approximates the file
+ * count without parsing. Pavel (issue #333) mirrored a big site and waited
+ * minutes with no indication it would take a while; this surfaces that the
+ * download is large and reminds the user Ctrl+C cancels.
+ */
+export const LARGE_SITE_FILE_THRESHOLD = 200;
+
 export type DecentralizeLogEvent =
     | { kind: "mirror-start"; url: string }
     | { kind: "mirror-line"; line: string }
+    // Fired once, mid-mirror, when the downloaded-file count crosses
+    // `LARGE_SITE_FILE_THRESHOLD`. Surfaces a "large site, this may take a
+    // while — Ctrl+C to cancel" warning.
+    | { kind: "mirror-large"; fileCount: number }
     | { kind: "mirror-done"; fileCount: number; directory: string }
     | { kind: "storage-start"; fullDomain: string }
     | { kind: "storage-event"; event: DeployLogEvent }
@@ -174,9 +188,20 @@ export async function runDecentralize(
 
     try {
         onEvent?.({ kind: "mirror-start", url: siteUrl });
+        // Count wget output lines (≈ one per saved file under `--no-verbose`)
+        // so we can warn once when the mirror turns out to be large.
+        let mirrorLineCount = 0;
+        let largeSiteWarned = false;
         const mirror = await mirrorSite({
             url: siteUrl,
-            onLine: (line) => onEvent?.({ kind: "mirror-line", line }),
+            onLine: (line) => {
+                onEvent?.({ kind: "mirror-line", line });
+                mirrorLineCount += 1;
+                if (!largeSiteWarned && mirrorLineCount >= LARGE_SITE_FILE_THRESHOLD) {
+                    largeSiteWarned = true;
+                    onEvent?.({ kind: "mirror-large", fileCount: mirrorLineCount });
+                }
+            },
         });
         mirrorDir = mirror.directory;
         onEvent?.({

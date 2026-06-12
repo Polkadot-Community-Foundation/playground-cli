@@ -129,7 +129,9 @@ async function runHeadless({
         // "phone" when we fell back to the session signer (source === "session").
         const mode: SignerMode = signer.source === "session" ? "phone" : "dev";
 
-        process.stdout.write(`\n▸ Mirroring ${opts.site}…\n`);
+        process.stdout.write(
+            `\n▸ Mirroring ${opts.site}… (large sites take a few minutes — press Ctrl+C to cancel)\n`,
+        );
         const outcome = await runDecentralize({
             siteUrl: opts.site!,
             label,
@@ -142,6 +144,11 @@ async function runHeadless({
                 switch (ev.kind) {
                     case "mirror-line":
                         process.stdout.write(`  ${ev.line}\n`);
+                        break;
+                    case "mirror-large":
+                        process.stdout.write(
+                            `  ⚠ large site (${ev.fileCount}+ files) — this may take several minutes; Ctrl+C to cancel\n`,
+                        );
                         break;
                     case "mirror-done":
                         process.stdout.write(

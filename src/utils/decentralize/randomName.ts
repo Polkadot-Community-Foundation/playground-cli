@@ -39,6 +39,19 @@ const FALLBACK_PREFIX = "decent-";
 const MAX_HOST_LEN = 30;
 
 /**
+ * One-line explanation of the random suffix appended to auto-generated names
+ * (e.g. `dominique-io` → `dominique-io-urcn30`). Surfaced inline so users stop
+ * reading the suffix as a bug — it's the deliberate NoStatus label shape (see
+ * the rules above) that lets any signer register the name without a
+ * proof-of-personhood credential. Shared by the headless message in
+ * `domain.ts` and the interactive `DecentralizeScreen` so both read identically.
+ */
+export const FREE_DOMAIN_SUFFIX_NOTE =
+    'Free .dot names get a short unique suffix (e.g. "-urcn30") so anyone can ' +
+    "register them without a proof-of-personhood credential. Pass --dot=<name> " +
+    "(or type a name) to choose your own.";
+
+/**
  * Sanitise a site URL into a domain-safe prefix derived from its hostname.
  * Returns null if no usable base can be extracted; callers fall back to
  * `FALLBACK_PREFIX`.
