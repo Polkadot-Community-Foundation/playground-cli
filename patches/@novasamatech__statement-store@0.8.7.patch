@@ -1,5 +1,5 @@
 diff --git a/dist/adapter/rpc.js b/dist/adapter/rpc.js
-index 8907426e3fe1c3d02a12aac00d31c0bf99aa141d..664b1a761d8542f99c2bc215a095e784b4bf45b3 100644
+index b6574289d0b6300e1d54a686bc747e0487635920..f212b2ca5c88c83c45d3cfd3590f98068b736cf5 100644
 --- a/dist/adapter/rpc.js
 +++ b/dist/adapter/rpc.js
 @@ -69,6 +69,17 @@ export function createPapiStatementStoreAdapter(lazyClient) {

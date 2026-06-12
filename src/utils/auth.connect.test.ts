@@ -205,7 +205,7 @@ describe("multi-session selection", () => {
         // `adapter.sessions.disconnect(stale)`. That submits a `Disconnected`
         // statement to the phone, which echoes it back across EVERY tracked
         // session — including the freshly paired one — and the SDK then filters
-        // each out of `SsoSessionsV2`, leaving an empty session repository the
+        // each out of `SsoSessionsV3`, leaving an empty session repository the
         // moment login finished (secret blobs survive). `pg deploy` then read
         // zero sessions and failed with "No signer available". Selection is
         // handled entirely by `newestSession()`, so login must touch no

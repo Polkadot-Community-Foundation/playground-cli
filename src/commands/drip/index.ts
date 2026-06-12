@@ -18,10 +18,15 @@ import { Command } from "commander";
 import { render } from "ink";
 import { withSpan } from "../../telemetry.js";
 import { runCliCommand } from "../../cli-runtime.js";
+import { getTokenSymbol } from "../../config.js";
 import { DripScreen, type DripOutcome } from "./DripScreen.js";
 
+const TOKEN = getTokenSymbol();
+
 export const dripCommand = new Command("drip")
-    .description("Top up your signed-in account with a little testnet PAS (1 PAS at a time)")
+    .description(
+        `Top up your signed-in account with a little testnet ${TOKEN} (1 ${TOKEN} at a time)`,
+    )
     .action(async () =>
         runCliCommand("drip", {}, async () => {
             console.log();

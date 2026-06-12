@@ -262,7 +262,7 @@ export async function connect(): Promise<ConnectResult> {
     // phone reuses its account; the host account comes from the persisted
     // DeviceIdentity), and a stale phone-sent `Disconnected` statement there —
     // 7-day TTL — is replayed by `createSession.init()` and silently tears the
-    // freshly paired session back out of `SsoSessionsV2`, which is exactly the
+    // freshly paired session back out of `SsoSessionsV3`, which is exactly the
     // "login succeeds but `deploy` says No signer available" failure. See
     // `sessionReset.ts` for the full mechanism. We destroy the probe adapter
     // (it loaded the OLD identity) before deleting the identity, then build a
