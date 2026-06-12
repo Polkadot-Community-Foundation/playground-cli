@@ -72,6 +72,14 @@ vi.mock("../build/index.js", () => ({
     loadDetectInput: loadDetectInputMock,
     detectBuildConfig: detectBuildConfigMock,
 }));
+// These orchestration tests use a fake `/tmp/proj` and mock every I/O boundary;
+// the real skip-build artifacts check (covered by buildDir.test.ts) would trip
+// on the non-existent path, so stub it to a no-op here. Hoisted so the wiring
+// (called with projectDir + buildDir on skip-build) can be asserted.
+const { assertBuildDirExistsMock } = vi.hoisted(() => ({
+    assertBuildDirExistsMock: vi.fn(),
+}));
+vi.mock("./buildDir.js", () => ({ assertBuildDirExists: assertBuildDirExistsMock }));
 vi.mock("../../telemetry.js", () => ({
     withSpan: (...args: unknown[]) =>
         withSpanMock(args[0] as string, args[1] as string, args[2], args[3]),
@@ -135,6 +143,7 @@ beforeEach(() => {
     runStorageDeploy.mockClear();
     publishToPlaygroundMock.mockClear();
     runBuildMock.mockClear();
+    assertBuildDirExistsMock.mockClear();
     withSpanMock.mockClear();
     getBulletinAllowanceSignerMock.mockReset();
     getBulletinAllowanceSignerMock.mockResolvedValue(slotSigner);
@@ -402,6 +411,57 @@ describe("runDeploy", () => {
             onEvent: push,
         });
         expect(runBuildMock).not.toHaveBeenCalled();
+    });
+
+    it("checks the build artifacts exist before deploying when skipping the build", async () => {
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "dist",
+            skipBuild: true,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: null,
+            onEvent: push,
+        });
+        expect(assertBuildDirExistsMock).toHaveBeenCalledWith("/tmp/proj", "dist");
+    });
+
+    it("uploads the build artifacts resolved against projectDir, not the process cwd", async () => {
+        // polkadot-app-deploy resolves a relative `content` against process.cwd()
+        // (deploy.js: `path.resolve(content)`), but the build writes to
+        // `projectDir/<buildDir>`. Passing the raw relative path would make a
+        // `--dir`-from-another-cwd deploy upload the wrong directory. We resolve
+        // against projectDir so storage reads exactly where the build wrote.
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "dist",
+            skipBuild: true,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: null,
+            onEvent: push,
+        });
+        const arg = runStorageDeploy.mock.calls[0][0];
+        expect(arg.content).toBe("/tmp/proj/dist");
+    });
+
+    it("does NOT check build artifacts when a build will produce them", async () => {
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "dist",
+            skipBuild: false,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: null,
+            onEvent: push,
+        });
+        expect(assertBuildDirExistsMock).not.toHaveBeenCalled();
     });
 
     it("emits error event and rethrows when storage fails", async () => {
