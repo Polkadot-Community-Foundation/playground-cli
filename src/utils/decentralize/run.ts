@@ -53,7 +53,7 @@ import { mirrorSite } from "./mirror.js";
  * Emit a "this is a large site" warning once the mirror crosses this many
  * downloaded files. wget runs with `--no-verbose`, so it prints roughly one
  * line per saved file — counting `mirror-line` events approximates the file
- * count without parsing. Pavel (issue #333) mirrored a big site and waited
+ * count without parsing. A user (issue #333) mirrored a big site and waited
  * minutes with no indication it would take a while; this surfaces that the
  * download is large and reminds the user Ctrl+C cancels.
  */

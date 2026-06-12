@@ -407,7 +407,7 @@ function ConfirmStage({
         <Box flexDirection="column">
             <Section title={`decentralizing ${fullDomain}`}>
                 <Row label="site" value={siteUrl} />
-                <Row label="domain" value={fullDomain} />
+                <Row label="domain" value={`${fullDomain}.li`} />
                 <Row
                     label="signer"
                     value={`${signerMode} · ${signer.address}`}

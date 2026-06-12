@@ -97,7 +97,10 @@ export async function resolveDomain(opts: ResolveDomainOptions): Promise<Resolve
             }),
     );
     onMessage?.(`  → ${chosen.availability.fullDomain}`);
-    // Explain the suffix inline so the generated tail isn't read as a bug.
+    // Explain the suffix inline so the generated tail isn't read as a bug. The
+    // headless path RELIES on this emission (its only surface for the note); the
+    // TUI sees it only transiently in the validate stage and re-shows it as a
+    // persistent Hint in ConfirmStage. Don't "deduplicate" it; that breaks headless.
     onMessage?.(`  ${FREE_DOMAIN_SUFFIX_NOTE}`);
     return {
         label: chosen.label,
