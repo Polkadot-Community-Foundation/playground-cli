@@ -11,10 +11,24 @@ ALIAS="pg"
 # saved locally under $CMD, so the old `dot` command name is gone.
 ASSET_PREFIX="dot"
 
-# 1) Detect platform
-OS=$(uname -s); case "$OS" in Linux) OS=linux;; Darwin) OS=darwin;; *) echo "Unsupported OS: $OS"; exit 1;; esac
+# 1) Detect platform. Git Bash / MSYS / Cygwin report MINGW*/MSYS*/CYGWIN* —
+# point Windows users at WSL instead of a bare "Unsupported OS".
+OS=$(uname -s); case "$OS" in Linux) OS=linux;; Darwin) OS=darwin;; MINGW*|MSYS*|CYGWIN*) echo "Windows is not supported natively. Install WSL (https://learn.microsoft.com/windows/wsl/install) and re-run this command inside it."; exit 1;; *) echo "Unsupported OS: $OS"; exit 1;; esac
 ARCH=$(uname -m); case "$ARCH" in x86_64|amd64) ARCH=x64;; arm64|aarch64) ARCH=arm64;; *) echo "Unsupported arch: $ARCH"; exit 1;; esac
 ASSET="$ASSET_PREFIX-$OS-$ARCH"
+
+# 1b) Prerequisite guard (#248). Everything below fetches via curl. Reaching
+# this point without curl means the script was fetched some other way (wget,
+# copy-paste), so fail fast with the exact remedy instead of a cryptic error.
+if ! command -v curl >/dev/null 2>&1; then
+  echo "Error: curl is required but not installed." >&2
+  if [ "$OS" = "linux" ]; then
+    echo "Install prerequisites first: sudo apt update && sudo apt install -y build-essential curl" >&2
+  else
+    echo "Install the Xcode Command Line Tools first: xcode-select --install" >&2
+  fi
+  exit 1
+fi
 
 # 2) Resolve release tag
 #
