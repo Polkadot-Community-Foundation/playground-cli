@@ -17,12 +17,16 @@ import { describe, it, expect } from "vitest";
 
 import {
     assertPublishFlagsConsistent,
+    chooseDeployDispatch,
     classifyDeployDone,
     DEFAULT_GRACEFUL_NUDGE,
     isFullySpecified,
+    NON_TTY_INTERACTIVE_ERROR,
     resolveGracefulNudge,
+    resolveYesDeployOpts,
     shouldResolveUserSigner,
 } from "./index.js";
+import { DEFAULT_BUILD_DIR } from "../../config.js";
 import type { DeployOutcome } from "../../utils/deploy/run.js";
 
 describe("shouldResolveUserSigner", () => {
@@ -61,6 +65,85 @@ describe("isFullySpecified", () => {
 
     it("allows headless deploy when contracts are explicitly skipped", () => {
         expect(isFullySpecified({ ...fullySpecified, contracts: false })).toBe(true);
+    });
+});
+
+describe("resolveYesDeployOpts", () => {
+    it("requires a domain (--yes is non-interactive, the TUI prompt can't run)", () => {
+        expect(() => resolveYesDeployOpts({})).toThrow(/--domain/);
+    });
+
+    it("rejects a blank/whitespace domain", () => {
+        expect(() => resolveYesDeployOpts({ domain: "   " })).toThrow(/--domain/);
+    });
+
+    it("defaults the signer to dev when omitted", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app" }).signer).toBe("dev");
+    });
+
+    it("preserves an explicit signer", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app", signer: "phone" }).signer).toBe("phone");
+    });
+
+    it("defaults the build directory when omitted", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app" }).buildDir).toBe(DEFAULT_BUILD_DIR);
+    });
+
+    it("preserves an explicit build directory", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app", buildDir: "out" }).buildDir).toBe("out");
+    });
+
+    it("passes the domain through and leaves other flags untouched", () => {
+        const resolved = resolveYesDeployOpts({
+            domain: "my-app",
+            playground: true,
+            private: true,
+        });
+        expect(resolved.domain).toBe("my-app");
+        expect(resolved.playground).toBe(true);
+        expect(resolved.private).toBe(true);
+    });
+});
+
+describe("chooseDeployDispatch", () => {
+    const interactiveOpts = { signer: "phone", domain: "my-app" } as const; // not fully specified
+
+    it("runs headless when --yes is set, even without a TTY (the P0 escape hatch)", () => {
+        expect(chooseDeployDispatch({ ...interactiveOpts, yes: true }, false)).toBe("headless");
+    });
+
+    it("runs headless when --yes is set in a TTY (no TUI)", () => {
+        expect(chooseDeployDispatch({ ...interactiveOpts, yes: true }, true)).toBe("headless");
+    });
+
+    it("runs headless when fully specified without --yes", () => {
+        const full = {
+            signer: "phone",
+            domain: "my-app",
+            buildDir: "dist",
+            playground: true,
+            contracts: false,
+        } as const;
+        expect(chooseDeployDispatch(full, true)).toBe("headless");
+    });
+
+    it("renders the interactive TUI when underspecified in a TTY", () => {
+        expect(chooseDeployDispatch(interactiveOpts, true)).toBe("interactive");
+    });
+
+    it("errors (never renders the TUI) when underspecified without a TTY", () => {
+        // This is the P0 guard: a non-TTY interactive deploy must not reach Ink.
+        expect(chooseDeployDispatch(interactiveOpts, false)).toBe("non-tty-error");
+    });
+});
+
+describe("NON_TTY_INTERACTIVE_ERROR", () => {
+    it("tells the user how to run non-interactively", () => {
+        // The P0: this message must replace the opaque Ink "Raw mode is not
+        // supported" crash. It has to name --yes and --domain so an agent/CI
+        // caller knows the escape hatch.
+        expect(NON_TTY_INTERACTIVE_ERROR).toMatch(/--yes/);
+        expect(NON_TTY_INTERACTIVE_ERROR).toMatch(/--domain/);
     });
 });
 
