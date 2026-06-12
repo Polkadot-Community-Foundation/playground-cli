@@ -107,9 +107,36 @@ export async function runStorageDeploy(options: StorageDeployOptions): Promise<D
             attributes: options.attributes,
         };
         return await bulletinDeploy(options.content, options.domainName, deployOptions);
+    } catch (err) {
+        throw remapIpfsMigrationError(err);
     } finally {
         restore();
     }
+}
+
+/**
+ * Actionable message shown when the deploy's internal `ipfs add` aborts because
+ * the local Kubo repo predates the installed binary's format. We don't migrate
+ * mid-deploy (that mutates `~/.ipfs` behind the user's back) — we tell them the
+ * one-time command. `playground login` migrates it automatically on its next
+ * run; see `toolchain.ts::ipfsRepoNeedsMigration`.
+ */
+export const IPFS_MIGRATION_MESSAGE =
+    "Your local IPFS repo needs a one-time migration before it can be used for uploads. " +
+    "Run `ipfs repo migrate` (or re-run `playground login`), then try the deploy again.";
+
+/** True when an error is Kubo's "repo needs migration" abort surfacing from the deploy. */
+export function isIpfsMigrationError(err: unknown): boolean {
+    return /needs migration/i.test(err instanceof Error ? err.message : String(err));
+}
+
+/**
+ * Replace Kubo's cryptic `Command failed: ipfs add … repo needs migration`
+ * with an actionable instruction. Non-migration errors pass through unchanged.
+ */
+function remapIpfsMigrationError(err: unknown): unknown {
+    if (!isIpfsMigrationError(err)) return err;
+    return new Error(IPFS_MIGRATION_MESSAGE, { cause: err });
 }
 
 /**

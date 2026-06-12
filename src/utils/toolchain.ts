@@ -87,6 +87,31 @@ function isIpfsInitialized(): boolean {
     return existsSync(resolve(homedir(), ".ipfs"));
 }
 
+/**
+ * Detect a stale Kubo repo that the installed `ipfs` binary refuses to use
+ * until it's migrated to the current on-disk format. Kubo stamps `~/.ipfs`
+ * with a repo version; when the binary is newer than the repo (e.g. the user
+ * installed ipfs long ago, then `dot login` installed/upgraded Kubo), every
+ * repo-touching command — including the `ipfs add` polkadot-app-deploy runs
+ * during a deploy — fails with "ipfs repo needs migration, please run
+ * migration tool." We probe with a cheap, offline, read-only command and look
+ * for that marker in the error.
+ *
+ * Returns false when there's no repo to migrate (nothing initialized yet) so
+ * the IPFS step's fresh-install path is unaffected.
+ */
+export async function ipfsRepoNeedsMigration(): Promise<boolean> {
+    if (!isIpfsInitialized()) return false;
+    try {
+        await run("ipfs repo stat --offline");
+        return false;
+    } catch (err) {
+        // Node's `exec` appends the child's stderr to the rejection message,
+        // which is where Kubo prints the migration notice.
+        return /needs migration/i.test(err instanceof Error ? err.message : String(err));
+    }
+}
+
 export interface ToolStep {
     name: string;
     check: () => Promise<boolean>;
@@ -217,7 +242,14 @@ export const TOOL_STEPS: ToolStep[] = [
     },
     {
         name: "IPFS",
-        check: async () => (await commandExists("ipfs")) && isIpfsInitialized(),
+        // A stale repo (older on-disk format than the installed Kubo) passes
+        // the binary + init checks but blows up later inside the deploy's
+        // `ipfs add` with "repo needs migration". Treat it as not-ready so the
+        // install step migrates it before any deploy runs.
+        check: async () =>
+            (await commandExists("ipfs")) &&
+            isIpfsInitialized() &&
+            !(await ipfsRepoNeedsMigration()),
         install: async (onData) => {
             if (!(await commandExists("ipfs"))) {
                 if (platform() === "darwin" && (await commandExists("brew"))) {
@@ -233,9 +265,15 @@ export const TOOL_STEPS: ToolStep[] = [
             }
             if (!isIpfsInitialized()) {
                 await runPiped("ipfs init", onData);
+            } else if (await ipfsRepoNeedsMigration()) {
+                // One-time, offline, idempotent: Kubo bundles its fs-repo
+                // migrations since v0.15, so this needs no network and no-ops
+                // when the repo is already current.
+                await runPiped("ipfs repo migrate", onData);
             }
         },
-        manualHint: "https://docs.ipfs.tech/install/ then run: ipfs init",
+        manualHint:
+            "https://docs.ipfs.tech/install/ then run: ipfs init (or `ipfs repo migrate` if it reports a stale repo)",
     },
     {
         // Required by `dot decentralize` (mirrors a live site via `wget --mirror`).

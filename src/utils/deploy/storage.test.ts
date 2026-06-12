@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, expect, it, vi } from "vitest";
-import { runStorageDeploy } from "./storage.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IPFS_MIGRATION_MESSAGE, isIpfsMigrationError, runStorageDeploy } from "./storage.js";
 
 const bulletinDeployMock = vi.hoisted(() =>
     vi.fn(async () => ({
@@ -29,6 +29,15 @@ vi.mock("@parity/polkadot-app-deploy", () => ({
 }));
 
 describe("runStorageDeploy", () => {
+    beforeEach(() => {
+        bulletinDeployMock.mockReset();
+        bulletinDeployMock.mockResolvedValue({
+            cid: "bafyapp",
+            ipfsCid: "bafyapp",
+            carBytes: new Uint8Array(),
+        });
+    });
+
     it("passes the selected env and endpoints to polkadot-app-deploy", async () => {
         await runStorageDeploy({
             content: "/tmp/project/dist",
@@ -46,5 +55,46 @@ describe("runStorageDeploy", () => {
                 assetHubEndpoints: ["wss://paseo-asset-hub-next-rpc.polkadot.io"],
             }),
         );
+    });
+
+    it("remaps Kubo's 'repo needs migration' abort to an actionable message", async () => {
+        bulletinDeployMock.mockRejectedValueOnce(
+            new Error(
+                "Command failed: ipfs add -Q -r /tmp/x\nError: ipfs repo needs migration, please run migration tool.\n",
+            ),
+        );
+
+        await expect(
+            runStorageDeploy({
+                content: "/tmp/project/dist",
+                domainName: "my-app",
+                auth: {},
+                env: "paseo-next-v2",
+            }),
+        ).rejects.toThrow(IPFS_MIGRATION_MESSAGE);
+    });
+
+    it("passes non-migration deploy errors through unchanged", async () => {
+        const original = new Error("AncientBirthBlock: chunk rejected");
+        bulletinDeployMock.mockRejectedValueOnce(original);
+
+        await expect(
+            runStorageDeploy({
+                content: "/tmp/project/dist",
+                domainName: "my-app",
+                auth: {},
+                env: "paseo-next-v2",
+            }),
+        ).rejects.toBe(original);
+    });
+});
+
+describe("isIpfsMigrationError", () => {
+    it("matches Kubo's migration notice regardless of surrounding text", () => {
+        expect(
+            isIpfsMigrationError(new Error("…\nError: ipfs repo needs migration, please run …")),
+        ).toBe(true);
+        expect(isIpfsMigrationError(new Error("some other failure"))).toBe(false);
+        expect(isIpfsMigrationError("repo needs migration")).toBe(true);
     });
 });

@@ -113,4 +113,11 @@ describe("TOOL_STEPS", () => {
         const cargoStep = TOOL_STEPS.find((entry) => entry.name === "cargo-pvm-contract");
         expect(cargoStep?.check).toBe(hasCargoPvmContract);
     });
+
+    it("documents the IPFS repo migration in its manual hint", () => {
+        // A stale Kubo repo crashes the deploy's internal `ipfs add` with
+        // "repo needs migration"; the manual hint must point at the fix.
+        const ipfsStep = TOOL_STEPS.find((entry) => entry.name === "IPFS");
+        expect(ipfsStep?.manualHint).toContain("ipfs repo migrate");
+    });
 });
