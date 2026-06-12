@@ -14,7 +14,8 @@
 // limitations under the License.
 
 /**
- * Pure runner for `dot decentralize` — mirrors a live site, uploads it via
+ * Pure runner for `dot decentralize` — takes a site (mirrored from a live
+ * URL, or an already-built local directory via `--path`), uploads it via
  * `runStorageDeploy` (Bulletin chunked store + DotNS register), and
  * optionally publishes a minimal AppInfo entry to the playground registry.
  *
@@ -47,7 +48,15 @@ import {
 } from "../deploy/signingProxy.js";
 import { runStorageDeploy } from "../deploy/storage.js";
 import type { ResolvedSigner } from "../signer.js";
+import { prepareLocalDirectory } from "./local.js";
 import { mirrorSite } from "./mirror.js";
+
+/**
+ * What the site content comes from: a live URL (mirrored with wget into a
+ * temp dir) or an already-built local directory (`--path`, uploaded in
+ * place — never deleted). Both converge on `runStorageDeploy({ content })`.
+ */
+export type DecentralizeSource = { kind: "url"; url: string } | { kind: "path"; directory: string };
 
 /**
  * Emit a "this is a large site" warning once the mirror crosses this many
@@ -67,6 +76,10 @@ export type DecentralizeLogEvent =
     // while — Ctrl+C to cancel" warning.
     | { kind: "mirror-large"; fileCount: number }
     | { kind: "mirror-done"; fileCount: number; directory: string }
+    // `--path` flow: local directory validated and ready to upload. Mirrors
+    // `mirror-done`'s shape; no start/line/large events precede it (there is
+    // no download to wait for).
+    | { kind: "local-done"; fileCount: number; directory: string }
     | { kind: "storage-start"; fullDomain: string }
     | { kind: "storage-event"; event: DeployLogEvent }
     | { kind: "storage-done"; cid: string }
@@ -96,7 +109,7 @@ export function describeDeployEvent(event: DeployLogEvent): string | null {
 }
 
 export interface RunDecentralizeOptions {
-    siteUrl: string;
+    source: DecentralizeSource;
     label: string;
     fullDomain: string;
     /**
@@ -144,7 +157,7 @@ export interface DecentralizeOutcome {
 export async function runDecentralize(
     options: RunDecentralizeOptions,
 ): Promise<DecentralizeOutcome> {
-    const { siteUrl, label, fullDomain, mode, userSigner, env, onEvent } = options;
+    const { source, label, fullDomain, mode, userSigner, env, onEvent } = options;
     const wantPlayground = options.publishToPlayground === true;
 
     // Compose the storage + publish identities through deploy's single
@@ -190,31 +203,48 @@ export async function runDecentralize(
     // wrap below can't see them.
     const allowancePrompt = createApprovalPrompt(counter, emitSigning);
 
+    // Set ONLY by the url branch — it's the temp dir the `finally` cleanup
+    // deletes. The path branch must leave it null: the upload root there is
+    // the user's own directory.
     let mirrorDir: string | null = null;
 
     try {
-        onEvent?.({ kind: "mirror-start", url: siteUrl });
-        // Count wget output lines (≈ one per saved file under `--no-verbose`)
-        // so we can warn once when the mirror turns out to be large.
-        let mirrorLineCount = 0;
-        let largeSiteWarned = false;
-        const mirror = await mirrorSite({
-            url: siteUrl,
-            onLine: (line) => {
-                onEvent?.({ kind: "mirror-line", line });
-                mirrorLineCount += 1;
-                if (!largeSiteWarned && mirrorLineCount >= LARGE_SITE_FILE_THRESHOLD) {
-                    largeSiteWarned = true;
-                    onEvent?.({ kind: "mirror-large", fileCount: mirrorLineCount });
-                }
-            },
-        });
-        mirrorDir = mirror.directory;
-        onEvent?.({
-            kind: "mirror-done",
-            fileCount: mirror.fileCount,
-            directory: mirror.uploadRoot,
-        });
+        let uploadRoot: string;
+        if (source.kind === "url") {
+            onEvent?.({ kind: "mirror-start", url: source.url });
+            // Count wget output lines (≈ one per saved file under `--no-verbose`)
+            // so we can warn once when the mirror turns out to be large.
+            let mirrorLineCount = 0;
+            let largeSiteWarned = false;
+            const mirror = await mirrorSite({
+                url: source.url,
+                onLine: (line) => {
+                    onEvent?.({ kind: "mirror-line", line });
+                    mirrorLineCount += 1;
+                    if (!largeSiteWarned && mirrorLineCount >= LARGE_SITE_FILE_THRESHOLD) {
+                        largeSiteWarned = true;
+                        onEvent?.({ kind: "mirror-large", fileCount: mirrorLineCount });
+                    }
+                },
+            });
+            mirrorDir = mirror.directory;
+            // Upload from the resolved index.html parent, NOT from
+            // `mirror.directory`. See `findIndexHtmlRoot` in mirror.ts.
+            uploadRoot = mirror.uploadRoot;
+            onEvent?.({
+                kind: "mirror-done",
+                fileCount: mirror.fileCount,
+                directory: mirror.uploadRoot,
+            });
+        } else {
+            const local = prepareLocalDirectory(source.directory);
+            uploadRoot = local.uploadRoot;
+            onEvent?.({
+                kind: "local-done",
+                fileCount: local.fileCount,
+                directory: local.uploadRoot,
+            });
+        }
 
         // Bulletin storage chunks must sign with the local BulletInAllowance
         // slot key, never the phone signer — chunk txs blow the phone's
@@ -228,9 +258,7 @@ export async function runDecentralize(
 
         onEvent?.({ kind: "storage-start", fullDomain });
         const result = await runStorageDeploy({
-            // Upload from the resolved index.html parent, NOT from
-            // `mirror.directory`. See `findIndexHtmlRoot` in mirror.ts.
-            content: mirror.uploadRoot,
+            content: uploadRoot,
             domainName: label,
             // Wrap the DotNS auth signer so each phone tap surfaces a
             // "check your phone" lifecycle event. No-op in dev mode (auth

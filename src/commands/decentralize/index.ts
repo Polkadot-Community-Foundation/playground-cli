@@ -14,19 +14,22 @@
 // limitations under the License.
 
 /**
- * `dot decentralize` — point at a live static site, get back a .dot URL.
+ * `dot decentralize` — point at a live static site (or a local build
+ * directory), get back a .dot URL.
  *
  *   dot decentralize                                          # interactive
  *   dot decentralize --site=shawntabrizi.github.io            # headless
  *   dot decentralize --site=foo.com --dot=bar                 # headless, explicit name
  *   dot decentralize --site=foo.com --suri=//Bob              # headless, dev signer
  *   dot decentralize --site=foo.com --playground              # also publish to playground
+ *   dot decentralize --path=./dist                            # headless, local directory
  *
- * Headless flow runs when `--site` is provided (preserves the existing
- * `dot decentralize --suri=//Bob` demo-service contract). Without `--site`,
- * the command mounts an Ink TUI that prompts for URL → signer → domain →
- * publish? before kicking off the same upload pipeline. The publish-to-
- * playground step delegates to deploy's `publishToPlayground` helper.
+ * Headless flow runs when `--site` or `--path` is provided (preserves the
+ * existing `dot decentralize --suri=//Bob` demo-service contract). Without
+ * either, the command mounts an Ink TUI that prompts for URL → signer →
+ * domain → publish? before kicking off the same upload pipeline (the TUI is
+ * URL-only; `--path` is headless-only). The publish-to-playground step
+ * delegates to deploy's `publishToPlayground` helper.
  */
 
 import { Command, Option } from "commander";
@@ -37,10 +40,12 @@ import { errorMessage, withSpan } from "../../telemetry.js";
 import { DEFAULT_ENV, ENV_FLAG_CHOICES, type Env, resolveLegacyEnv } from "../../config.js";
 import { resolveSigner, type ResolvedSigner, SignerNotAvailableError } from "../../utils/signer.js";
 import { resolveDomain } from "../../utils/decentralize/domain.js";
+import { prepareLocalDirectory } from "../../utils/decentralize/local.js";
 import {
     describeDeployEvent,
     runDecentralize,
     type DecentralizeOutcome,
+    type DecentralizeSource,
 } from "../../utils/decentralize/run.js";
 import { destroyConnection } from "../../utils/connection.js";
 import type { SignerMode } from "../../utils/deploy/signerMode.js";
@@ -49,6 +54,7 @@ import { onProcessShutdown } from "../../utils/process-guard.js";
 
 interface DecentralizeOpts {
     site?: string;
+    path?: string;
     dot?: string;
     env: string;
     suri?: string;
@@ -78,11 +84,18 @@ export function assertTagRequiresPlayground(opts: {
 
 export const decentralizeCommand = new Command("decentralize")
     .description(
-        "Mirror a live static site to Polkadot Bulletin and register a .dot name pointing at it",
+        "Mirror a live static site (or upload a local build directory) to Polkadot Bulletin " +
+            "and register a .dot name pointing at it",
     )
     .option(
         "--site <url>",
         "URL of the static site to clone (http/https). Omit to launch the interactive TUI.",
+    )
+    .addOption(
+        new Option(
+            "--path <dir>",
+            "Local directory containing a built static site (e.g. ./dist). Alternative to --site.",
+        ).conflicts("site"),
     )
     .option(
         "--dot <name>",
@@ -114,7 +127,7 @@ export const decentralizeCommand = new Command("decentralize")
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
-            if (opts.site) {
+            if (opts.site || opts.path) {
                 await runHeadless({ env, opts });
             } else {
                 await runInteractive({ env, opts });
@@ -136,16 +149,28 @@ async function runHeadless({
     let signer: ResolvedSigner | null = null;
 
     try {
+        // Fail fast on a bad --path before any signer/network work —
+        // otherwise the user waits out the domain availability check only to
+        // learn the directory doesn't exist. runDecentralize re-validates
+        // (prepareLocalDirectory is cheap and pure fs).
+        if (opts.path) prepareLocalDirectory(opts.path);
+
         signer = await withSpan("cli.decentralize.signer", "resolve signer", () =>
             resolveSigner({ suri: opts.suri }),
         );
 
         process.stdout.write(`\n▸ Signing as ${signer.address} (${signer.source})\n`);
 
+        // The action gates headless on `opts.site || opts.path` and commander's
+        // `.conflicts()` rejects passing both, so exactly one is set here.
+        const source: DecentralizeSource = opts.path
+            ? { kind: "path", directory: opts.path }
+            : { kind: "url", url: opts.site! };
+
         const { label, fullDomain } = await resolveDomain({
             env,
             providedDot: opts.dot,
-            siteUrl: opts.site!,
+            source,
             signer,
             onMessage: (line) => process.stdout.write(`${line}\n`),
         });
@@ -155,10 +180,12 @@ async function runHeadless({
         const mode: SignerMode = signer.source === "session" ? "phone" : "dev";
 
         process.stdout.write(
-            `\n▸ Mirroring ${opts.site}… (large sites take a few minutes — press Ctrl+C to cancel)\n`,
+            source.kind === "url"
+                ? `\n▸ Mirroring ${source.url}… (large sites take a few minutes — press Ctrl+C to cancel)\n`
+                : `\n▸ Preparing ${source.directory}…\n`,
         );
         const outcome = await runDecentralize({
-            siteUrl: opts.site!,
+            source,
             label,
             fullDomain,
             mode,
@@ -177,6 +204,7 @@ async function runHeadless({
                         );
                         break;
                     case "mirror-done":
+                    case "local-done":
                         process.stdout.write(
                             `  → ${ev.fileCount} files in ${ev.directory}\n` +
                                 `\n▸ Uploading to Bulletin and registering ${fullDomain}…\n`,

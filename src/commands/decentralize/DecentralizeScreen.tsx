@@ -405,7 +405,8 @@ function ValidateDomainStage({
                 const result = await resolveDomain({
                     env,
                     providedDot: raw || null,
-                    siteUrl,
+                    // The TUI only supports the URL flow; `--path` is headless-only.
+                    source: { kind: "url", url: siteUrl },
                     signer,
                     onMessage: (m) => {
                         if (!cancelled) onProgress(m.trim());
@@ -574,7 +575,8 @@ function RunningStage({
         (async () => {
             try {
                 const outcome = await runDecentralize({
-                    siteUrl,
+                    // The TUI only supports the URL flow; `--path` is headless-only.
+                    source: { kind: "url", url: siteUrl },
                     label,
                     fullDomain,
                     mode,

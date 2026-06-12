@@ -18,7 +18,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Heavy underlying pieces mocked — the orchestrator test only cares about
 // which signer reaches the Bulletin storage layer. Same pattern as
 // `../deploy/run.test.ts`.
-const { runStorageDeployMock, mirrorSiteMock, ensureSlotAccountSignerMock } = vi.hoisted(() => ({
+const {
+    runStorageDeployMock,
+    mirrorSiteMock,
+    prepareLocalDirectoryMock,
+    ensureSlotAccountSignerMock,
+} = vi.hoisted(() => ({
     // Explicit arg type so `mock.calls[0][0]` typechecks (an arg-less vi.fn
     // infers Parameters = [] and indexing the empty tuple is a tsc error).
     runStorageDeployMock: vi.fn<
@@ -39,11 +44,16 @@ const { runStorageDeployMock, mirrorSiteMock, ensureSlotAccountSignerMock } = vi
         uploadRoot: "/tmp/playground-cli-test-mirror-does-not-exist",
         fileCount: 3,
     })),
+    prepareLocalDirectoryMock: vi.fn(() => ({
+        uploadRoot: "/tmp/playground-cli-test-local-does-not-exist",
+        fileCount: 5,
+    })),
     ensureSlotAccountSignerMock: vi.fn(),
 }));
 
 vi.mock("../deploy/storage.js", () => ({ runStorageDeploy: runStorageDeployMock }));
 vi.mock("./mirror.js", () => ({ mirrorSite: mirrorSiteMock }));
+vi.mock("./local.js", () => ({ prepareLocalDirectory: prepareLocalDirectoryMock }));
 vi.mock("@parity/product-sdk-terminal/host", () => ({
     createSlotAccountSigner: vi.fn(),
     ensureSlotAccountSigner: ensureSlotAccountSignerMock,
@@ -103,13 +113,14 @@ describe("runDecentralize — Bulletin storage signer", () => {
     beforeEach(() => {
         runStorageDeployMock.mockClear();
         mirrorSiteMock.mockClear();
+        prepareLocalDirectoryMock.mockClear();
         ensureSlotAccountSignerMock.mockReset();
         ensureSlotAccountSignerMock.mockResolvedValue(slotSigner);
     });
 
     it("phone mode threads the slot key as storageSigner — chunks never phone-sign", async () => {
         await runDecentralize({
-            siteUrl: "https://example.com",
+            source: { kind: "url", url: "https://example.com" },
             label: "my-site",
             fullDomain: "my-site.dot",
             mode: "phone",
@@ -135,7 +146,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
 
     it("dev mode pins the dev mnemonic + dev storage signer and never touches the slot key", async () => {
         await runDecentralize({
-            siteUrl: "https://example.com",
+            source: { kind: "url", url: "https://example.com" },
             label: "my-site",
             fullDomain: "my-site.dot",
             mode: "dev",
@@ -153,6 +164,46 @@ describe("runDecentralize — Bulletin storage signer", () => {
         expect(arg.auth.signer).toBeUndefined();
         expect(arg.auth.storageSignerAddress).toBe(DEV_PUBLISH_ADDRESS);
         expect(ensureSlotAccountSignerMock).not.toHaveBeenCalled();
+    });
+
+    it("local path skips the mirror and uploads the prepared directory", async () => {
+        const events: DecentralizeLogEvent[] = [];
+        await runDecentralize({
+            source: { kind: "path", directory: "./dist" },
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "dev",
+            userSigner: null,
+            env: "paseo-next-v2",
+            onEvent: (ev) => events.push(ev),
+        });
+
+        expect(mirrorSiteMock).not.toHaveBeenCalled();
+        expect(prepareLocalDirectoryMock).toHaveBeenCalledWith("./dist");
+        const arg = runStorageDeployMock.mock.calls[0][0] as unknown as { content: string };
+        expect(arg.content).toBe("/tmp/playground-cli-test-local-does-not-exist");
+        // The path branch emits local-done and none of the mirror events.
+        expect(events.some((e) => e.kind === "local-done")).toBe(true);
+        expect(events.some((e) => e.kind.startsWith("mirror-"))).toBe(false);
+    });
+
+    it("local path in phone mode still routes storage through the slot key", async () => {
+        // Signer routing is source-independent: chunks must never phone-sign
+        // regardless of where the site content came from.
+        await runDecentralize({
+            source: { kind: "path", directory: "./dist" },
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "phone",
+            userSigner: sessionSigner,
+            env: "paseo-next-v2",
+        });
+
+        const arg = runStorageDeployMock.mock.calls[0][0] as unknown as {
+            auth: { signerAddress?: string; storageSigner?: unknown };
+        };
+        expect(arg.auth.signerAddress).toBe("5Fake");
+        expect(arg.auth.storageSigner).toBe(slotSigner);
     });
 });
 
@@ -182,7 +233,7 @@ describe("runDecentralize — large-site warning", () => {
         }>);
         const events: DecentralizeLogEvent[] = [];
         return runDecentralize({
-            siteUrl: "https://example.com",
+            source: { kind: "url", url: "https://example.com" },
             label: "my-site",
             fullDomain: "my-site.dot",
             mode: "dev",
