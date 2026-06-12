@@ -1145,7 +1145,7 @@ function RunningStage({
             } catch (err) {
                 if (!cancelled) {
                     const message = err instanceof Error ? err.message : String(err);
-                    if (runningContracts) contractDeployAdapter.signingError ??= message;
+                    if (runningContracts) contractDeployAdapter.setRunError(message);
                     setShowPhoneNotice(false);
                     onError(message);
                 }
