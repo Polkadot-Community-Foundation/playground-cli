@@ -22,8 +22,10 @@
  * off the same events.
  */
 
+import { resolve } from "node:path";
 import { runBuild, loadDetectInput, detectBuildConfig, type BuildConfig } from "../build/index.js";
 import { publishToPlayground, normalizeDomain } from "./playground.js";
+import { assertBuildDirExists } from "./buildDir.js";
 import {
     resolveSignerSetup,
     resolveStorageSignerOptions,
@@ -139,6 +141,16 @@ export interface DeployOutcome {
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
 export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcome> {
+    // Universal preflight backstop for every caller (headless, interactive TUI,
+    // and SDK/RevX consumers): when skipping the build, the artifacts must
+    // already exist, or the storage phase fails opaquely with `Path not found`.
+    // We only check on skip-build — a real build produces `buildDir` itself.
+    // (`--contracts` always forces a rebuild, so skipBuild and contracts can
+    // never both be set; nothing on-chain runs ahead of this check.)
+    if (options.skipBuild) {
+        assertBuildDirExists(options.projectDir, options.buildDir);
+    }
+
     const { label, fullDomain } = normalizeDomain(options.domain);
 
     const setup = resolveSignerSetup({
@@ -159,7 +171,14 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         options.onEvent({ kind: "signing", event }),
     );
 
-    const buildAbs = options.buildDir;
+    // Resolve against projectDir, NOT the process cwd. The build writes to
+    // `projectDir/<buildDir>` (build runs with `cwd: projectDir`), but
+    // polkadot-app-deploy resolves a relative `content` against `process.cwd()`
+    // (`path.resolve(content)`). Passing the raw relative path would make a
+    // `--dir`-from-another-cwd deploy upload the wrong directory (or fail with
+    // `Path not found`). An absolute `buildDir` is unchanged (resolve is a
+    // no-op), so the common `projectDir === cwd` case is byte-for-byte identical.
+    const buildAbs = resolve(options.projectDir, options.buildDir);
 
     // Build first, OUTSIDE any signing gate — tsc+vite is the slow part and must
     // stay parallel across concurrent deploys. Only the on-chain signing phases

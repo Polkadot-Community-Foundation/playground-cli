@@ -51,6 +51,7 @@ import {
     resolveLegacyEnv,
 } from "../../config.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
+import { assertBuildDirExists } from "../../utils/deploy/buildDir.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { NO_SESSION_HEADLESS_ERROR } from "./signerNotice.js";
 
@@ -386,6 +387,14 @@ async function runHeadless(ctx: {
     // Reject metadata-only flags supplied without `--playground` before any
     // network work — they'd otherwise be silently ignored.
     assertPublishFlagsConsistent({ moddable, tag, publishToPlayground });
+
+    // Fail fast on a missing/typo'd `--buildDir` when skipping the build, before
+    // the availability round-trip, the summary block, and any on-chain work.
+    // `runDeploy` re-checks as a universal backstop, but catching it here keeps
+    // CI from wasting a network call and printing a summary it'll never use.
+    if (skipBuild) {
+        assertBuildDirExists(ctx.projectDir, buildDir);
+    }
 
     // Phone signing needs a paired session. Headless has no TUI to fall back
     // into, so reject an explicit `--signer phone` with no session up front
