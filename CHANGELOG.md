@@ -1,5 +1,14 @@
 # playground-cli
 
+## 0.35.5
+
+### Patch Changes
+
+- 9b0ab99: Surface the real cargo-pvm-contract build error during `pg` install instead of a
+  generic "Command failed (set -euo pipefail …)". `runShell` now accepts an optional
+  `description`/`failurePrefix`, and the cargo-pvm-contract toolchain step uses them so
+  failures report a readable label plus the underlying build output.
+
 ## 0.35.4
 
 ### Patch Changes
