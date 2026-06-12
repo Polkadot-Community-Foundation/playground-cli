@@ -91,6 +91,12 @@ export async function runStreamed(opts: RunStreamedOptions): Promise<void> {
  * string rather than a program + args array. Intended for pasting a shell
  * one-liner verbatim (curl | bash installers, chained commands); anything
  * structured should use the arg-array form for safety.
+ *
+ * `opts.description` is the human label interpolated into the spawn + failure
+ * error messages; it defaults to the raw `cmd`. `opts.failurePrefix` is the
+ * prefix on a non-zero-exit error; an omitted value falls through to
+ * `runStreamed`'s "Command failed". Pass both when the verbatim script would be
+ * unreadable in an error (e.g. a multi-line installer).
  */
 export async function runShell(
     cmd: string,

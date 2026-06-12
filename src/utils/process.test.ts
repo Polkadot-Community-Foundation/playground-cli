@@ -158,6 +158,12 @@ describe("runShell", () => {
         await expect(runShell("echo boom >&2; exit 1")).rejects.toThrow(/echo boom >&2; exit 1/);
     });
 
+    it("falls back to the default prefix and raw cmd when opts is omitted", async () => {
+        // Backward-compat lock: a 2-arg failing call must keep the pre-opts
+        // "Command failed (<raw cmd>)" shape.
+        await expect(runShell("exit 1")).rejects.toThrow(/Command failed \(exit 1\)/);
+    });
+
     it("resolves and forwards stdout lines through onData on success", async () => {
         const lines: string[] = [];
         await runShell('printf "x\\ny\\n"', (line) => lines.push(line));
