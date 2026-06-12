@@ -78,6 +78,12 @@ interface DeployOpts {
     env?: Env;
     /** Project root. Hidden — defaults to cwd. */
     dir?: string;
+    /**
+     * Run non-interactively using defaults instead of the Ink TUI. Required for
+     * agent/CI/piped (non-TTY) callers, where the interactive prompts can't read
+     * keystrokes. Needs `--domain`; `--signer` defaults to `dev`.
+     */
+    yes?: boolean;
 }
 
 export const deployCommand = new Command("deploy")
@@ -122,6 +128,10 @@ export const deployCommand = new Command("deploy")
             .default(DEFAULT_ENV),
     )
     .option("--dir <path>", "Project directory", process.cwd())
+    .option(
+        "-y, --yes",
+        "Run non-interactively using defaults (for agents/CI/piped input). Requires --domain; --signer defaults to dev.",
+    )
     .action(async (opts: DeployOpts) =>
         runCliCommand("deploy", { watchdog: true, hardExit: true }, async () => {
             const projectDir = resolve(opts.dir ?? process.cwd());
@@ -147,6 +157,20 @@ export const deployCommand = new Command("deploy")
             })();
             onProcessShutdown(cleanupOnce);
 
+            // `--yes` fills the fields the TUI would prompt for (signer ⇒ dev,
+            // buildDir ⇒ default) and requires --domain. Resolve it BEFORE
+            // preflight so the signer-resolution path sees the dev default and a
+            // missing domain fails fast with a clear message.
+            let effectiveOpts = opts;
+            try {
+                if (opts.yes) effectiveOpts = resolveYesDeployOpts(opts);
+            } catch (err) {
+                process.stderr.write(`\n✖ ${errorMessage(err)}\n`);
+                cleanupOnce();
+                process.exitCode = 1;
+                throw err;
+            }
+
             try {
                 userSigner = await withSpan(
                     "cli.deploy.preflight",
@@ -155,9 +179,9 @@ export const deployCommand = new Command("deploy")
                     () =>
                         preflight({
                             env,
-                            suri: opts.suri,
-                            mode: opts.signer,
-                            publishToPlayground: opts.playground === true,
+                            suri: effectiveOpts.suri,
+                            mode: effectiveOpts.signer,
+                            publishToPlayground: effectiveOpts.playground === true,
                         }),
                 );
             } catch (err) {
@@ -178,12 +202,19 @@ export const deployCommand = new Command("deploy")
             destroyConnection();
 
             try {
-                const nonInteractive = isFullySpecified(opts);
+                const nonInteractive =
+                    effectiveOpts.yes === true || isFullySpecified(effectiveOpts);
 
                 if (nonInteractive) {
-                    await runHeadless({ projectDir, env, userSigner, opts });
+                    await runHeadless({ projectDir, env, userSigner, opts: effectiveOpts });
+                } else if (!process.stdin.isTTY) {
+                    // The interactive Ink TUI calls `useInput`, which throws
+                    // "Raw mode is not supported on the current process.stdin"
+                    // when stdin isn't a TTY (agent/CI/piped). Fail with an
+                    // actionable message pointing at --yes instead of that crash.
+                    throw new Error(NON_TTY_INTERACTIVE_ERROR);
                 } else {
-                    await runInteractive({ projectDir, env, userSigner, opts });
+                    await runInteractive({ projectDir, env, userSigner, opts: effectiveOpts });
                 }
             } catch (err) {
                 process.stderr.write(`\n✖ ${errorMessage(err)}\n`);
@@ -310,6 +341,38 @@ export function isFullySpecified(opts: DeployOpts): boolean {
         typeof opts.playground === "boolean" &&
         typeof opts.contracts === "boolean"
     );
+}
+
+/**
+ * Shown instead of the opaque Ink "Raw mode is not supported on the current
+ * process.stdin" crash when an interactive deploy is attempted without a TTY
+ * (agent/CI/piped stdin) and `--yes` was not passed. Names the two escape
+ * hatches so a non-interactive caller knows how to proceed.
+ */
+export const NON_TTY_INTERACTIVE_ERROR =
+    "playground deploy needs an interactive terminal for its prompts. " +
+    "Re-run with --yes to use defaults (requires --domain; --signer defaults to dev), " +
+    "or pass the flags explicitly (--signer, --domain, --buildDir, --playground, --contracts).";
+
+/**
+ * Resolve the deploy options for a non-interactive (`--yes`) run by filling the
+ * fields the TUI would otherwise prompt for. `--domain` has no safe default and
+ * is required; `--signer` defaults to `dev` and `--buildDir` to
+ * {@link DEFAULT_BUILD_DIR}. Everything else keeps the defaults `runHeadless`
+ * already applies (`playground`/`contracts` ⇒ false, `build` ⇒ true). Pure +
+ * exported so the contract is unit-testable without rendering the TUI.
+ */
+export function resolveYesDeployOpts(opts: DeployOpts): DeployOpts {
+    if (typeof opts.domain !== "string" || opts.domain.trim() === "") {
+        throw new Error(
+            "playground deploy --yes is non-interactive and needs a domain. Pass --domain <name>.",
+        );
+    }
+    return {
+        ...opts,
+        signer: opts.signer ?? "dev",
+        buildDir: opts.buildDir ?? DEFAULT_BUILD_DIR,
+    };
 }
 
 export type DeployDoneDisposition = "success" | "graceful-cancel" | "failure";

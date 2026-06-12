@@ -20,9 +20,12 @@ import {
     classifyDeployDone,
     DEFAULT_GRACEFUL_NUDGE,
     isFullySpecified,
+    NON_TTY_INTERACTIVE_ERROR,
     resolveGracefulNudge,
+    resolveYesDeployOpts,
     shouldResolveUserSigner,
 } from "./index.js";
+import { DEFAULT_BUILD_DIR } from "../../config.js";
 import type { DeployOutcome } from "../../utils/deploy/run.js";
 
 describe("shouldResolveUserSigner", () => {
@@ -61,6 +64,53 @@ describe("isFullySpecified", () => {
 
     it("allows headless deploy when contracts are explicitly skipped", () => {
         expect(isFullySpecified({ ...fullySpecified, contracts: false })).toBe(true);
+    });
+});
+
+describe("resolveYesDeployOpts", () => {
+    it("requires a domain (--yes is non-interactive, the TUI prompt can't run)", () => {
+        expect(() => resolveYesDeployOpts({})).toThrow(/--domain/);
+    });
+
+    it("rejects a blank/whitespace domain", () => {
+        expect(() => resolveYesDeployOpts({ domain: "   " })).toThrow(/--domain/);
+    });
+
+    it("defaults the signer to dev when omitted", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app" }).signer).toBe("dev");
+    });
+
+    it("preserves an explicit signer", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app", signer: "phone" }).signer).toBe("phone");
+    });
+
+    it("defaults the build directory when omitted", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app" }).buildDir).toBe(DEFAULT_BUILD_DIR);
+    });
+
+    it("preserves an explicit build directory", () => {
+        expect(resolveYesDeployOpts({ domain: "my-app", buildDir: "out" }).buildDir).toBe("out");
+    });
+
+    it("passes the domain through and leaves other flags untouched", () => {
+        const resolved = resolveYesDeployOpts({
+            domain: "my-app",
+            playground: true,
+            private: true,
+        });
+        expect(resolved.domain).toBe("my-app");
+        expect(resolved.playground).toBe(true);
+        expect(resolved.private).toBe(true);
+    });
+});
+
+describe("NON_TTY_INTERACTIVE_ERROR", () => {
+    it("tells the user how to run non-interactively", () => {
+        // The P0: this message must replace the opaque Ink "Raw mode is not
+        // supported" crash. It has to name --yes and --domain so an agent/CI
+        // caller knows the escape hatch.
+        expect(NON_TTY_INTERACTIVE_ERROR).toMatch(/--yes/);
+        expect(NON_TTY_INTERACTIVE_ERROR).toMatch(/--domain/);
     });
 });
 
