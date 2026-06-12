@@ -18,7 +18,9 @@ import { describe, it, expect } from "vitest";
 import {
     assertPublishFlagsConsistent,
     classifyDeployDone,
+    DEFAULT_GRACEFUL_NUDGE,
     isFullySpecified,
+    resolveGracefulNudge,
     shouldResolveUserSigner,
 } from "./index.js";
 import type { DeployOutcome } from "../../utils/deploy/run.js";
@@ -80,6 +82,21 @@ describe("classifyDeployDone", () => {
         expect(classifyDeployDone(null)).toBe("failure");
         expect(classifyDeployDone(null, {})).toBe("failure");
         expect(classifyDeployDone(null, { graceful: false })).toBe("failure");
+    });
+});
+
+describe("resolveGracefulNudge", () => {
+    it("falls back to the README nudge when no message is supplied", () => {
+        // The README-acknowledgement exit carries no cause-specific copy.
+        expect(resolveGracefulNudge()).toBe(DEFAULT_GRACEFUL_NUDGE);
+        expect(resolveGracefulNudge(undefined)).toBe(DEFAULT_GRACEFUL_NUDGE);
+    });
+
+    it("uses the stage-supplied message verbatim when present", () => {
+        // The moddable setup menu's exit supplies its own cause-neutral nudge.
+        const moddableNudge =
+            "No problem. Fix the GitHub repository setup and re-run `playground deploy` when ready.";
+        expect(resolveGracefulNudge(moddableNudge)).toBe(moddableNudge);
     });
 });
 

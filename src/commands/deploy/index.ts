@@ -330,6 +330,24 @@ export function classifyDeployDone(
 }
 
 /**
+ * Default nudge printed on a graceful cancel — the README acknowledgement path,
+ * which has no cause-specific message of its own.
+ */
+export const DEFAULT_GRACEFUL_NUDGE =
+    "No problem. Update your README.md and re-run `playground deploy` when ready.";
+
+/**
+ * Picks the friendly nudge printed when a setup screen exits gracefully (exit
+ * 0). Stages that exit for a specific reason (e.g. the moddable setup menu)
+ * supply their own `gracefulMessage`; the README acknowledgement supplies none
+ * and falls back to {@link DEFAULT_GRACEFUL_NUDGE}. Pure + exported so the
+ * fallback is unit-testable without rendering the Ink TUI.
+ */
+export function resolveGracefulNudge(gracefulMessage?: string): string {
+    return gracefulMessage ?? DEFAULT_GRACEFUL_NUDGE;
+}
+
+/**
  * `--moddable` and `--tag` both only affect the playground metadata JSON, which
  * is uploaded ONLY when publishing. Supplying either without `--playground` is a
  * no-op the user almost certainly didn't intend, so headless deploys reject it
@@ -559,9 +577,7 @@ function runInteractive(ctx: {
                                     // A deliberate exit from a setup screen
                                     // (README ack, moddable setup), not a
                                     // failure. Exit 0 with a friendly nudge.
-                                    const nudge =
-                                        doneOpts?.gracefulMessage ??
-                                        "No problem. Update your README.md and re-run `playground deploy` when ready.";
+                                    const nudge = resolveGracefulNudge(doneOpts?.gracefulMessage);
                                     process.stdout.write(`\n${nudge}\n`);
                                     resolvePromise();
                                     break;

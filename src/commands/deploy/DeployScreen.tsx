@@ -525,10 +525,6 @@ export function DeployScreen({
                 <ModdableErrorStage
                     message={stage.message}
                     onContinueWithoutModdable={declineModdable}
-                    onBack={() => {
-                        setModdable(null);
-                        setStage({ kind: "prompt-moddable" });
-                    }}
                     onExit={() =>
                         onDone(null, {
                             graceful: true,
@@ -735,7 +731,7 @@ function ModdablePreflightStage({
     );
 }
 
-type ModdableErrorChoice = "continue" | "back" | "exit";
+type ModdableErrorChoice = "continue" | "exit";
 
 /**
  * Formal warning stage shown when the moddable preflight cannot proceed,
@@ -743,20 +739,16 @@ type ModdableErrorChoice = "continue" | "back" | "exit";
  * Renders the actionable error inside a yellow Callout (matching the
  * "check your phone" banner) so it visually registers as a setup requirement
  * rather than a deploy crash. Must never dead-end (#332): the menu offers
- * continuing as non-moddable, going back to the remix question (answering
- * yes there re-runs the preflight, i.e. a retry), or a graceful exit. Esc
- * also exits, matching the Ack and Confirm stages (and the previous
- * incarnation of this screen).
+ * continuing as non-moddable or a graceful exit. Esc also exits, matching the
+ * Ack and Confirm stages (and the previous incarnation of this screen).
  */
 function ModdableErrorStage({
     message,
     onContinueWithoutModdable,
-    onBack,
     onExit,
 }: {
     message: string;
     onContinueWithoutModdable: () => void;
-    onBack: () => void;
     onExit: () => void;
 }) {
     useInput((_input, key) => {
@@ -777,19 +769,14 @@ function ModdableErrorStage({
                             hint: "publish, but keep my source private",
                         },
                         {
-                            value: "back",
-                            label: "go back",
-                            hint: "re-answer the remix question",
-                        },
-                        {
                             value: "exit",
                             label: "exit",
                             hint: "set up GitHub first, re-run deploy later",
                         },
                     ]}
+                    initialIndex={0}
                     onSelect={(choice) => {
                         if (choice === "continue") onContinueWithoutModdable();
-                        else if (choice === "back") onBack();
                         else onExit();
                     }}
                 />
