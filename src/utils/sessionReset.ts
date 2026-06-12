@@ -40,7 +40,7 @@
  * establishes a new session on the same topic, `createSession.init()` queries
  * the topic history and re-delivers that unresponded `Disconnected`; host-papp's
  * session manager reacts by removing the just-paired session from
- * `SsoSessionsV2` (the secret blobs are left behind). The net effect is an empty
+ * `SsoSessionsV3` (the secret blobs are left behind). The net effect is an empty
  * session repository the instant `playground login` finishes — every later
  * command then fails with "No signer available".
  *
@@ -65,13 +65,18 @@ import { DAPP_ID } from "../config.js";
 /**
  * Storage keys (sans the `${DAPP_ID}_` prefix and `.json` suffix) deleted on a
  * fresh pairing. `DeviceIdentity` rotates the host statement account (the topic
- * key we control); `SsoSessionsV2` is the session list, which must rotate in
+ * key we control); `SsoSessionsV3` is the session list, which must rotate in
  * lockstep with the identity it is bound to. Everything else — `AllowanceKeys`,
  * `LoginStamp`, the per-session `UserSecretsV2_*` / `sso_processed_*` orphans —
  * is left untouched (harmless, and not worth re-acquiring or risking on a
  * transient session-probe miss).
+ *
+ * NOTE: host-papp 0.8.7 (via `@parity/product-sdk-terminal@^0.5.0`) renamed the
+ * session-list storage key `SsoSessionsV2` → `SsoSessionsV3`. The old
+ * `SsoSessionsV2.json` is no longer written or read; it is left orphaned on
+ * disk (harmless) and is NOT rotated here.
  */
-const ROTATE_KEYS: readonly string[] = ["DeviceIdentity", "SsoSessionsV2"];
+const ROTATE_KEYS: readonly string[] = ["DeviceIdentity", "SsoSessionsV3"];
 
 /**
  * Delete the topic-binding local state so the next QR pairing starts on a

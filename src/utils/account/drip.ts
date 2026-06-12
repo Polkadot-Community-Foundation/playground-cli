@@ -42,7 +42,7 @@
 import { Enum } from "polkadot-api";
 import { submitAndWatch } from "@parity/product-sdk-tx";
 import { seedToAccount } from "@parity/product-sdk-keys";
-import { getNetworkLabel } from "../../config.js";
+import { getNetworkLabel, getTokenSymbol } from "../../config.js";
 import type { PaseoClient } from "../connection.js";
 
 /**
@@ -170,15 +170,18 @@ export async function dripToProductAccount(
 }
 
 /**
- * Format a planck amount (12-decimal PAS) as a short human string, e.g.
- * `"3.5 PAS"`. Trims trailing zeros and caps at 4 fractional digits — this is
+ * Format a planck amount (12-decimal) as a short human string, e.g. `"3.5 PAS"`
+ * (or `"3.5 SUM"` on Summit). The token symbol comes from the active env's
+ * `tokenSymbol` (see `getTokenSymbol`), so flipping `ACTIVE_TESTNET_ENV`
+ * re-labels every amount. Trims trailing zeros and caps at 4 fractional digits —
  * display-only, never used for on-chain math.
  */
 export function formatPas(planck: bigint): string {
+    const symbol = getTokenSymbol();
     const base = ONE_PAS;
     const whole = planck / base;
     const frac = planck % base;
-    if (frac === 0n) return `${whole} PAS`;
+    if (frac === 0n) return `${whole} ${symbol}`;
     const fracStr = frac.toString().padStart(12, "0").slice(0, 4).replace(/0+$/, "");
-    return fracStr ? `${whole}.${fracStr} PAS` : `${whole} PAS`;
+    return fracStr ? `${whole}.${fracStr} ${symbol}` : `${whole} ${symbol}`;
 }

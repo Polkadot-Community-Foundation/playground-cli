@@ -44,9 +44,12 @@ describe("resetDeviceIdentityForFreshPairing", () => {
     it("rotates the device identity and session list, preserving everything else", async () => {
         // The poisoned-topic fingerprint: DeviceIdentity + an emptied
         // (0x00) session list, with orphaned secrets and a cached slot key.
+        // A stale SsoSessionsV2 (the pre-0.8.7 storage key) is left untouched —
+        // host-papp 0.8.7 only reads/writes SsoSessionsV3 now.
         await seed({
             [p("DeviceIdentity")]: "0xdeadbeef",
-            [p("SsoSessionsV2")]: "0x00",
+            [p("SsoSessionsV3")]: "0x00",
+            [p("SsoSessionsV2")]: "0xlegacy",
             [p("AllowanceKeys")]: '{"bulletin":"0xkey"}',
             [p("LoginStamp")]: '{"at":1}',
             [p("UserSecretsV2_abc")]: "0xsecret",
@@ -59,6 +62,7 @@ describe("resetDeviceIdentityForFreshPairing", () => {
         // it is bound to are gone, so the next pairing derives a fresh topic.
         expect(await remaining()).toEqual(
             [
+                p("SsoSessionsV2"),
                 p("AllowanceKeys"),
                 p("LoginStamp"),
                 p("UserSecretsV2_abc"),
