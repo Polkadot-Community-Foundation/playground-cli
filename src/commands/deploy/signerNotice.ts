@@ -28,7 +28,20 @@ export const NO_SESSION_NOTICE_TITLE = "Mobile signing unavailable";
 export const NO_SESSION_NOTICE_BODY =
     "You are not logged in, so signing with your phone is not available yet. " +
     'Run "playground login" to pair your phone, then re-run the deploy. ' +
-    "You can continue now with the dev signer.";
+    "You can continue now with the dev signer. Logging in also lets your deploys earn XP.";
+
+/**
+ * Shown above the signer options when phone signing IS available, so the user
+ * spots the trade-off before picking the dev signer. The dev signer publishes
+ * from a shared test account, so XP earned for a deploy cannot accrue to the
+ * user; only signing from their own (phone) account does. Rendered as a yellow
+ * Callout, alongside `SIGNER_HELP`, only on the logged-in path.
+ */
+export const DEV_SIGNER_NO_XP_TITLE = "Dev signer earns no XP";
+
+export const DEV_SIGNER_NO_XP_BODY =
+    "The dev signer publishes from a shared test account, so this deploy earns you no XP. " +
+    "Pick your phone signer to publish from your own account and earn XP.";
 
 /**
  * Hard-error message for an explicit `--signer phone` with no session in a

@@ -64,7 +64,12 @@ import {
 } from "../../utils/deploy/moddable.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
-import { NO_SESSION_NOTICE_TITLE, NO_SESSION_NOTICE_BODY } from "./signerNotice.js";
+import {
+    NO_SESSION_NOTICE_TITLE,
+    NO_SESSION_NOTICE_BODY,
+    DEV_SIGNER_NO_XP_TITLE,
+    DEV_SIGNER_NO_XP_BODY,
+} from "./signerNotice.js";
 import {
     BUILD_HELP,
     CONTRACTS_HELP,
@@ -330,6 +335,16 @@ export function DeployScreen({
                         </Callout>
                     )}
                     <PromptInfo box={SIGNER_HELP} />
+                    {/* Deliberately placed just above the Select (the decision
+                        point), after the neutral SIGNER_HELP info box, so the
+                        "no XP" trade-off is the last thing read before picking.
+                        Only shown with a session, when the phone alternative
+                        actually exists. */}
+                    {hasSession && (
+                        <Callout tone="warning" title={DEV_SIGNER_NO_XP_TITLE}>
+                            <Text>{DEV_SIGNER_NO_XP_BODY}</Text>
+                        </Callout>
+                    )}
                     <Select<SignerMode>
                         label="who signs the upload?"
                         options={[
