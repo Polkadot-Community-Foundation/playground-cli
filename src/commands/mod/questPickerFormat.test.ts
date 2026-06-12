@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import { pad, formatDifficulty } from "./questPickerFormat.js";
+import { pad, formatDifficulty, findStartQuestIndex } from "./questPickerFormat.js";
 
 describe("pad", () => {
     it("right-pads a short string to the requested width", () => {
@@ -46,5 +46,29 @@ describe("formatDifficulty", () => {
         expect(formatDifficulty(undefined)).toBe("—");
         expect(formatDifficulty(0)).toBe("—");
         expect(formatDifficulty(-2)).toBe("—");
+    });
+});
+
+describe("findStartQuestIndex", () => {
+    it("picks the first quest with no dependencies", () => {
+        expect(
+            findStartQuestIndex([
+                { depends_on: [] },
+                { depends_on: ["level-1"] },
+                { depends_on: ["level-2"] },
+            ]),
+        ).toBe(0);
+    });
+
+    it("treats a missing depends_on as dependency-free", () => {
+        expect(findStartQuestIndex([{}, { depends_on: ["a"] }])).toBe(0);
+    });
+
+    it("skips over leading quests that declare dependencies", () => {
+        expect(findStartQuestIndex([{ depends_on: ["x"] }, {}, {}])).toBe(1);
+    });
+
+    it("falls back to the first quest when every entry has dependencies", () => {
+        expect(findStartQuestIndex([{ depends_on: ["x"] }, { depends_on: ["y"] }])).toBe(0);
     });
 });
