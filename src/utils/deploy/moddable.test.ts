@@ -148,4 +148,39 @@ describe("resolveRepositoryUrl", () => {
             /no github origin configured/i,
         );
     });
+
+    it("carries flag-free interactive copy for the no-origin error (#332)", async () => {
+        tmp = mkdtempSync(join(tmpdir(), "pg-moddable-interactive-"));
+        execFileSync("git", ["init"], { cwd: tmp, stdio: "ignore" });
+
+        const err = await resolveRepositoryUrl({ cwd: tmp, fetch: publicFetch }).then(
+            () => null,
+            (e: unknown) => e,
+        );
+        expect(err).toBeInstanceOf(ModdablePreflightError);
+        const preflightErr = err as ModdablePreflightError;
+        // Headless output keeps the flag hint; the TUI copy must not speak in
+        // flags, since the user may have arrived via a prompt, not --moddable.
+        expect(preflightErr.message).toContain("--no-moddable");
+        expect(preflightErr.interactiveMessage).not.toMatch(/--(no-)?moddable/);
+        expect(preflightErr.interactiveMessage).toMatch(/github/i);
+        expect(preflightErr.interactiveMessage).not.toBe(preflightErr.message);
+    });
+
+    it("defaults interactiveMessage to the thrown message for other failures", async () => {
+        tmp = mkdtempSync(join(tmpdir(), "pg-moddable-private-default-"));
+        execFileSync("git", ["init"], { cwd: tmp, stdio: "ignore" });
+        execFileSync("git", ["remote", "add", "origin", "https://github.com/org/secret.git"], {
+            cwd: tmp,
+            stdio: "ignore",
+        });
+
+        const err = await resolveRepositoryUrl({ cwd: tmp, fetch: privateFetch }).then(
+            () => null,
+            (e: unknown) => e,
+        );
+        expect(err).toBeInstanceOf(ModdablePreflightError);
+        const preflightErr = err as ModdablePreflightError;
+        expect(preflightErr.interactiveMessage).toBe(preflightErr.message);
+    });
 });
