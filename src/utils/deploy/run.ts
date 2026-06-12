@@ -81,6 +81,18 @@ export interface RunDeployOptions {
     moddable?: boolean;
     /** Resolved public repository URL to record in metadata (moddable=true) or `null` (moddable=false). */
     repositoryUrl?: string | null;
+    /**
+     * Domain (`<label>.dot`) this deploy was modded from. For SDK/RevX
+     * consumers that perform the clone themselves and therefore never run the
+     * `dot mod` TUI step that writes `moddedFrom` into `dot.json`: pass the
+     * source domain here so the contract credits the right owner. When set
+     * (non-empty) it takes precedence over any (possibly stale) `moddedFrom`
+     * in the project's `dot.json` — see `publishToPlayground` and
+     * playground-app#335. Omit for the normal `dot deploy` path, which reads
+     * the value `dot mod` captured in `dot.json`. Ignored when
+     * `publishToPlayground` is false.
+     */
+    moddedFrom?: string | null;
     /** Single playground tag to record in metadata, or `null`/omitted to publish untagged. Ignored when `publishToPlayground` is false. */
     tag?: string | null;
     /** The logged-in phone signer. Required for `mode === "phone"` or `publishToPlayground`. */
@@ -267,6 +279,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                     repositoryUrl: options.repositoryUrl ?? null,
                     tag: options.tag ?? null,
                     cwd: options.projectDir,
+                    moddedFrom: options.moddedFrom ?? undefined,
                     onLogEvent: (event) => options.onEvent({ kind: "storage-event", event }),
                     onAllowancePrompt: allowancePrompt,
                     env: options.env,

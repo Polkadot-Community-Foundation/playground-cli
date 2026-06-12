@@ -82,6 +82,7 @@ import {
     publishToPlayground,
     buildMetadata,
     normalizeDomain,
+    normalizeModdedFrom,
     readGitBranch,
     readModdedFrom,
     readReadme,
@@ -145,6 +146,27 @@ describe("normalizeDomain", () => {
 
     it("rejects a one-digit suffix", () => {
         expect(() => normalizeDomain("myapp1")).toThrow(/two digits/i);
+    });
+});
+
+describe("normalizeModdedFrom", () => {
+    it("returns null for omitted/empty/whitespace input", () => {
+        expect(normalizeModdedFrom(undefined)).toBeNull();
+        expect(normalizeModdedFrom(null)).toBeNull();
+        expect(normalizeModdedFrom("")).toBeNull();
+        expect(normalizeModdedFrom("   ")).toBeNull();
+    });
+
+    it("canonicalizes to <label>.dot, adding the suffix and trimming", () => {
+        expect(normalizeModdedFrom("original")).toBe("original.dot");
+        expect(normalizeModdedFrom("original.dot")).toBe("original.dot");
+        expect(normalizeModdedFrom("  original.dot  ")).toBe("original.dot");
+    });
+
+    it("returns null for a malformed domain so it can't reach on-chain", () => {
+        expect(normalizeModdedFrom("Not A Domain!")).toBeNull();
+        expect(normalizeModdedFrom("../etc.dot")).toBeNull();
+        expect(normalizeModdedFrom("foo/bar.dot")).toBeNull();
     });
 });
 
@@ -646,6 +668,140 @@ describe("publishToPlayground", () => {
                 false,
                 false,
             );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // playground-app#335: an SDK/RevX consumer that clones the source itself
+    // (skipping the `dot mod` TUI that rewrites `dot.json`) passes the true
+    // immediate parent via the `moddedFrom` option. It MUST win over the stale
+    // value the cloned repo's `dot.json` carried — otherwise a mod-of-a-mod
+    // re-publishes the grandparent and credits the wrong owner.
+    it("prefers an explicit moddedFrom option over a stale dot.json value", async () => {
+        const dir = makeTmpDir();
+        try {
+            // Stale value inherited from the cloned source (e.g. tutorial).
+            writeFileSync(
+                join(dir, "dot.json"),
+                JSON.stringify({ moddedFrom: "playground-tutorial.dot" }),
+            );
+            const result = await publishToPlayground({
+                domain: "my-mod",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: dir,
+                // True immediate parent, known by the caller that did the mod.
+                moddedFrom: "steampunk-lizard-spock01.dot",
+            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-mod.dot",
+                "bafymeta",
+                1,
+                {
+                    isSome: false,
+                    value: "0x0000000000000000000000000000000000000000",
+                },
+                "steampunk-lizard-spock01.dot",
+                false,
+                false,
+            );
+            // The explicit value must ALSO drive the metadata JSON, not just the
+            // on-chain arg — otherwise the badge and the XP edge disagree.
+            expect(result.metadata.moddedFrom).toBe("steampunk-lizard-spock01.dot");
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // The contract matches lineage on the canonical `<label>.dot` string, so a
+    // caller passing a bare label or trailing `.dot`-less value must still land
+    // on the canonical form — same as the `dot.json` path goes through
+    // `normalizeDomain`.
+    it("canonicalizes a non-`.dot` explicit moddedFrom before publishing", async () => {
+        const dir = makeTmpDir();
+        try {
+            const result = await publishToPlayground({
+                domain: "my-mod",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: dir,
+                moddedFrom: "steampunk-lizard-spock01",
+            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-mod.dot",
+                "bafymeta",
+                1,
+                {
+                    isSome: false,
+                    value: "0x0000000000000000000000000000000000000000",
+                },
+                "steampunk-lizard-spock01.dot",
+                false,
+                false,
+            );
+            expect(result.metadata.moddedFrom).toBe("steampunk-lizard-spock01.dot");
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("falls back to dot.json when the explicit moddedFrom is empty/whitespace", async () => {
+        const dir = makeTmpDir();
+        try {
+            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
+            const result = await publishToPlayground({
+                domain: "my-mod",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: dir,
+                moddedFrom: "   ",
+            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-mod.dot",
+                "bafymeta",
+                1,
+                {
+                    isSome: false,
+                    value: "0x0000000000000000000000000000000000000000",
+                },
+                "original.dot",
+                false,
+                false,
+            );
+            expect(result.metadata.moddedFrom).toBe("original.dot");
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // A malformed explicit value is treated as "not provided" (it can't reach
+    // on-chain), so it falls through to the `dot.json` value rather than
+    // recording garbage or wiping the lineage edge.
+    it("falls back to dot.json when the explicit moddedFrom is malformed", async () => {
+        const dir = makeTmpDir();
+        try {
+            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
+            const result = await publishToPlayground({
+                domain: "my-mod",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: dir,
+                moddedFrom: "Not A Domain!",
+            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-mod.dot",
+                "bafymeta",
+                1,
+                {
+                    isSome: false,
+                    value: "0x0000000000000000000000000000000000000000",
+                },
+                "original.dot",
+                false,
+                false,
+            );
+            expect(result.metadata.moddedFrom).toBe("original.dot");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
