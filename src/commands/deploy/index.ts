@@ -202,19 +202,19 @@ export const deployCommand = new Command("deploy")
             destroyConnection();
 
             try {
-                const nonInteractive =
-                    effectiveOpts.yes === true || isFullySpecified(effectiveOpts);
-
-                if (nonInteractive) {
-                    await runHeadless({ projectDir, env, userSigner, opts: effectiveOpts });
-                } else if (!process.stdin.isTTY) {
-                    // The interactive Ink TUI calls `useInput`, which throws
-                    // "Raw mode is not supported on the current process.stdin"
-                    // when stdin isn't a TTY (agent/CI/piped). Fail with an
-                    // actionable message pointing at --yes instead of that crash.
-                    throw new Error(NON_TTY_INTERACTIVE_ERROR);
-                } else {
-                    await runInteractive({ projectDir, env, userSigner, opts: effectiveOpts });
+                switch (chooseDeployDispatch(effectiveOpts, Boolean(process.stdin.isTTY))) {
+                    case "headless":
+                        await runHeadless({ projectDir, env, userSigner, opts: effectiveOpts });
+                        break;
+                    case "non-tty-error":
+                        // The interactive Ink TUI calls `useInput`, which throws
+                        // "Raw mode is not supported on the current process.stdin"
+                        // when stdin isn't a TTY (agent/CI/piped). Fail with an
+                        // actionable message pointing at --yes instead of that crash.
+                        throw new Error(NON_TTY_INTERACTIVE_ERROR);
+                    case "interactive":
+                        await runInteractive({ projectDir, env, userSigner, opts: effectiveOpts });
+                        break;
                 }
             } catch (err) {
                 process.stderr.write(`\n✖ ${errorMessage(err)}\n`);
@@ -353,6 +353,23 @@ export const NON_TTY_INTERACTIVE_ERROR =
     "playground deploy needs an interactive terminal for its prompts. " +
     "Re-run with --yes to use defaults (requires --domain; --signer defaults to dev), " +
     "or pass the flags explicitly (--signer, --domain, --buildDir, --playground, --contracts).";
+
+export type DeployDispatch = "headless" | "non-tty-error" | "interactive";
+
+/**
+ * Decide how a deploy should run. The interactive Ink TUI (`runInteractive`)
+ * calls `useInput`, which enables raw mode on mount and throws when stdin isn't
+ * a TTY — so it must NEVER be chosen without a TTY. Headless wins when `--yes`
+ * is set or every prompt-able flag was supplied; otherwise a TTY gets the TUI
+ * and a non-TTY gets a clear error ({@link NON_TTY_INTERACTIVE_ERROR}) instead
+ * of the raw-mode crash. Pure (takes `isTty` rather than reading
+ * `process.stdin`) so the crash-or-not decision is unit-testable without Ink.
+ */
+export function chooseDeployDispatch(opts: DeployOpts, isTty: boolean): DeployDispatch {
+    if (opts.yes === true || isFullySpecified(opts)) return "headless";
+    if (!isTty) return "non-tty-error";
+    return "interactive";
+}
 
 /**
  * Resolve the deploy options for a non-interactive (`--yes`) run by filling the

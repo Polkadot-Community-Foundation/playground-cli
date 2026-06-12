@@ -17,6 +17,7 @@ import { describe, it, expect } from "vitest";
 
 import {
     assertPublishFlagsConsistent,
+    chooseDeployDispatch,
     classifyDeployDone,
     DEFAULT_GRACEFUL_NUDGE,
     isFullySpecified,
@@ -101,6 +102,38 @@ describe("resolveYesDeployOpts", () => {
         expect(resolved.domain).toBe("my-app");
         expect(resolved.playground).toBe(true);
         expect(resolved.private).toBe(true);
+    });
+});
+
+describe("chooseDeployDispatch", () => {
+    const interactiveOpts = { signer: "phone", domain: "my-app" } as const; // not fully specified
+
+    it("runs headless when --yes is set, even without a TTY (the P0 escape hatch)", () => {
+        expect(chooseDeployDispatch({ ...interactiveOpts, yes: true }, false)).toBe("headless");
+    });
+
+    it("runs headless when --yes is set in a TTY (no TUI)", () => {
+        expect(chooseDeployDispatch({ ...interactiveOpts, yes: true }, true)).toBe("headless");
+    });
+
+    it("runs headless when fully specified without --yes", () => {
+        const full = {
+            signer: "phone",
+            domain: "my-app",
+            buildDir: "dist",
+            playground: true,
+            contracts: false,
+        } as const;
+        expect(chooseDeployDispatch(full, true)).toBe("headless");
+    });
+
+    it("renders the interactive TUI when underspecified in a TTY", () => {
+        expect(chooseDeployDispatch(interactiveOpts, true)).toBe("interactive");
+    });
+
+    it("errors (never renders the TUI) when underspecified without a TTY", () => {
+        // This is the P0 guard: a non-TTY interactive deploy must not reach Ink.
+        expect(chooseDeployDispatch(interactiveOpts, false)).toBe("non-tty-error");
     });
 });
 
