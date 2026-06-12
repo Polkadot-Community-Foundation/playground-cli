@@ -158,9 +158,33 @@ describe("runShell", () => {
         await expect(runShell("echo boom >&2; exit 1")).rejects.toThrow(/echo boom >&2; exit 1/);
     });
 
+    it("falls back to the default prefix and raw cmd when opts is omitted", async () => {
+        // Backward-compat lock: a 2-arg failing call must keep the pre-opts
+        // "Command failed (<raw cmd>)" shape.
+        await expect(runShell("exit 1")).rejects.toThrow(/Command failed \(exit 1\)/);
+    });
+
     it("resolves and forwards stdout lines through onData on success", async () => {
         const lines: string[] = [];
         await runShell('printf "x\\ny\\n"', (line) => lines.push(line));
         expect(lines).toEqual(["x", "y"]);
+    });
+
+    it("uses opts.description and opts.failurePrefix instead of the raw script in failures", async () => {
+        const script = "set -euo pipefail\necho real-cargo-error >&2\nexit 5";
+        await expect(
+            runShell(script, undefined, {
+                description: "cargo install cargo-pvm-contract",
+                failurePrefix: "cargo-pvm-contract build failed",
+            }),
+        ).rejects.toThrow(
+            /cargo-pvm-contract build failed.*cargo install cargo-pvm-contract.*exit code 5[\s\S]*real-cargo-error/,
+        );
+        await expect(
+            runShell(script, undefined, {
+                description: "cargo install cargo-pvm-contract",
+                failurePrefix: "cargo-pvm-contract build failed",
+            }),
+        ).rejects.not.toThrow(/\(set -euo pipefail/);
     });
 });
