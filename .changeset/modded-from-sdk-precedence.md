@@ -12,4 +12,7 @@ the immediate parent's owner (playground-app#335).
 
 `runDeploy` now accepts an explicit `moddedFrom`, and an explicit value takes
 precedence over the (possibly stale) `dot.json` field so callers that just performed
-the mod record the true immediate parent.
+the mod record the true immediate parent. The resolved value drives both the on-chain
+lineage edge and the metadata JSON `moddedFrom` (so the badge and the XP credit can't
+disagree), and is canonicalized to `<label>.dot` — an empty or malformed explicit value
+falls through to `dot.json` rather than recording garbage on-chain.

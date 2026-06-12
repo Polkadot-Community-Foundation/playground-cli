@@ -116,13 +116,16 @@ export interface PublishToPlaygroundOptions {
      * can render a "modded from" badge AND so the contract credits the SOURCE
      * app's owner the mod XP.
      *
-     * When set (non-empty), this is AUTHORITATIVE — it takes precedence over
-     * any `moddedFrom` read from `dot.json`. A caller that just performed the
-     * mod (the `dot mod` TUI captures it in `dot.json`; an SDK consumer like
-     * RevX clones the source itself and passes it here) knows the true
-     * immediate parent, whereas `dot.json`'s field can be a STALE value that
-     * merely rode along in a cloned repo. See the precedence note in
-     * `publishToPlayground` (playground-app#335).
+     * When set to a non-empty, shape-valid domain, this is AUTHORITATIVE — it
+     * takes precedence over any `moddedFrom` read from `dot.json`, and drives
+     * BOTH the metadata JSON field and the on-chain lineage arg. A caller that
+     * just performed the mod (the `dot mod` TUI captures it in `dot.json`; an
+     * SDK consumer like RevX clones the source itself and passes it here) knows
+     * the true immediate parent, whereas `dot.json`'s field can be a STALE value
+     * that merely rode along in a cloned repo. The value is canonicalized via
+     * `normalizeModdedFrom`, so an empty/whitespace/invalid value falls through
+     * to `dot.json` ("not provided", not "no parent"). See the precedence note
+     * in `publishToPlayground` (playground-app#335).
      */
     moddedFrom?: string;
     /**
@@ -252,6 +255,25 @@ export function buildMetadata(input: {
 }
 
 /**
+ * Canonicalizes a caller-supplied `moddedFrom` to `<label>.dot`, or returns
+ * `null` for any unusable value (omitted, empty/whitespace, or a string that
+ * doesn't pass `normalizeDomain`). BOTH the explicit `moddedFrom` option and
+ * the `dot.json` field flow through here so a non-canonical or invalid source
+ * domain can never reach the on-chain lineage edge — the contract matches the
+ * source app by its canonical domain string, so `"foo"` and `"Foo.dot"` would
+ * silently miss the XP credit. See playground-app#335.
+ */
+export function normalizeModdedFrom(value: string | null | undefined): string | null {
+    const trimmed = value?.trim();
+    if (!trimmed) return null;
+    try {
+        return normalizeDomain(trimmed).fullDomain;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Returns the canonical `<label>.dot` form, or `null` for any unusable value
  * (missing file, parse fail, non-string, or a value that doesn't pass
  * `normalizeDomain`). `dot.json` is user-editable, so we shape-validate before
@@ -275,11 +297,7 @@ export function readModdedFrom(cwd: string): string | null {
     if (!parsed || typeof parsed !== "object") return null;
     const value = (parsed as Record<string, unknown>).moddedFrom;
     if (typeof value !== "string") return null;
-    try {
-        return normalizeDomain(value).fullDomain;
-    } catch {
-        return null;
-    }
+    return normalizeModdedFrom(value);
 }
 
 export async function publishToPlayground(
@@ -294,7 +312,16 @@ export async function publishToPlayground(
     // GitHub API call per `dot mod` invocation — see
     // `src/commands/mod/SetupScreen.tsx`.
     const branch = options.cwd && options.repositoryUrl ? readGitBranch(options.cwd) : null;
-    const moddedFrom = options.cwd ? readModdedFrom(options.cwd) : null;
+    // Resolve the mod source ONCE, canonicalized, and use it for BOTH the
+    // metadata JSON and the on-chain arg so the two can never diverge. An
+    // explicit `options.moddedFrom` (the SDK/RevX path, which knows the true
+    // immediate parent) wins over the `dot.json` value when it is a non-empty,
+    // shape-valid domain; an empty/whitespace/invalid explicit value falls
+    // through to `dot.json` ("not provided", not "no parent"). Both sources go
+    // through `normalizeModdedFrom`, so the on-chain lineage edge always lands
+    // on the source app's canonical `<label>.dot` — see playground-app#335.
+    const dotJsonModdedFrom = options.cwd ? readModdedFrom(options.cwd) : null;
+    const moddedFrom = normalizeModdedFrom(options.moddedFrom) ?? dotJsonModdedFrom;
     const metadata = buildMetadata({
         repositoryUrl: options.repositoryUrl,
         branch,
@@ -381,14 +408,11 @@ export async function publishToPlayground(
             for (let attempt = 1; attempt <= MAX_REGISTRY_RETRIES; attempt++) {
                 try {
                     const visibility = options.isPrivate ? 0 : 1;
-                    // Explicit `options.moddedFrom` wins over the `dot.json`
-                    // value (see the option's doc + playground-app#335); an
-                    // empty/whitespace explicit value falls through to
-                    // `dot.json` ("not provided", not "no parent"). The contract
-                    // credits the source owner the mod XP off this argument, so
-                    // an empty string records no lineage edge.
-                    const explicitModdedFrom = options.moddedFrom?.trim();
-                    const moddedFromArg = explicitModdedFrom || moddedFrom || "";
+                    // `moddedFrom` was resolved above (explicit option wins over
+                    // `dot.json`, both canonicalized — see playground-app#335).
+                    // The contract credits the source owner the mod XP off this
+                    // argument, so an empty string records no lineage edge.
+                    const moddedFromArg = moddedFrom ?? "";
                     const isModdable = options.isModdable ?? false;
                     const isDevSigner = options.isDevSigner ?? false;
                     const result = await registry.publish.tx(
