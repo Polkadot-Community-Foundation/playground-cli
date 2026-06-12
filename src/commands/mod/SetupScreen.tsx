@@ -30,6 +30,10 @@ import { assertPublicGitHubRepo, ModdablePreflightError } from "../../utils/depl
 import { runCommand } from "../../utils/git.js";
 import { createOptionalGitBaseline } from "../../utils/mod/git-baseline.js";
 import { downloadGitHubTarball, parseGitHubRepoUrl } from "../../utils/mod/source.js";
+import {
+    findUnsatisfiedPackageManagers,
+    missingPackageManagerMessage,
+} from "../../utils/mod/packageManager.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
@@ -148,8 +152,15 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
             name: "run setup.sh",
             keepLogOnSuccess: true,
             run: async (log) => {
-                if (!existsSync(resolve(targetDir, "setup.sh"))) {
+                const setupPath = resolve(targetDir, "setup.sh");
+                if (!existsSync(setupPath)) {
                     throw new StepWarning("no setup.sh found");
+                }
+                const missing = await findUnsatisfiedPackageManagers(
+                    readFileSync(setupPath, "utf8"),
+                );
+                if (missing.length > 0) {
+                    throw new Error(missingPackageManagerMessage(missing));
                 }
                 await runCommand("bash setup.sh", { cwd: targetDir, log, logFile: setupLogFile });
                 setupRanRef.current = true;
