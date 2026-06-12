@@ -55,7 +55,8 @@ vi.mock("@parity/product-sdk-terminal/host", () => ({
 import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import type { ResolvedSigner } from "../signer.js";
 import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
-import { describeDeployEvent, runDecentralize } from "./run.js";
+import type { DecentralizeLogEvent } from "./run.js";
+import { describeDeployEvent, LARGE_SITE_FILE_THRESHOLD, runDecentralize } from "./run.js";
 
 describe("describeDeployEvent", () => {
     it("renders chunk-progress as a human-readable upload line", () => {
@@ -152,5 +153,54 @@ describe("runDecentralize — Bulletin storage signer", () => {
         expect(arg.auth.signer).toBeUndefined();
         expect(arg.auth.storageSignerAddress).toBe(DEV_PUBLISH_ADDRESS);
         expect(ensureSlotAccountSignerMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("runDecentralize — large-site warning", () => {
+    beforeEach(() => {
+        runStorageDeployMock.mockClear();
+        mirrorSiteMock.mockReset();
+        ensureSlotAccountSignerMock.mockReset();
+        ensureSlotAccountSignerMock.mockResolvedValue({ publicKey: new Uint8Array(32) } as any);
+    });
+
+    function collectEvents(lineCount: number): Promise<DecentralizeLogEvent[]> {
+        // Drive the mock mirror to emit `lineCount` wget output lines so the
+        // line-counting threshold logic in runDecentralize is exercised.
+        // The hoisted mock is typed arg-less; cast so we can read `onLine`.
+        mirrorSiteMock.mockImplementationOnce((async (opts: any) => {
+            for (let i = 0; i < lineCount; i++) opts.onLine?.(`saved file ${i}`);
+            return {
+                directory: "/tmp/playground-cli-test-mirror-does-not-exist",
+                uploadRoot: "/tmp/playground-cli-test-mirror-does-not-exist",
+                fileCount: lineCount,
+            };
+        }) as unknown as () => Promise<{
+            directory: string;
+            uploadRoot: string;
+            fileCount: number;
+        }>);
+        const events: DecentralizeLogEvent[] = [];
+        return runDecentralize({
+            siteUrl: "https://example.com",
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "dev",
+            userSigner: null,
+            env: "paseo-next-v2",
+            onEvent: (ev) => events.push(ev),
+        }).then(() => events);
+    }
+
+    it("fires mirror-large exactly once after crossing the threshold", async () => {
+        const events = await collectEvents(LARGE_SITE_FILE_THRESHOLD + 50);
+        const large = events.filter((e) => e.kind === "mirror-large");
+        expect(large).toHaveLength(1);
+        expect((large[0] as { fileCount: number }).fileCount).toBe(LARGE_SITE_FILE_THRESHOLD);
+    });
+
+    it("does not fire mirror-large for a small site", async () => {
+        const events = await collectEvents(LARGE_SITE_FILE_THRESHOLD - 1);
+        expect(events.some((e) => e.kind === "mirror-large")).toBe(false);
     });
 });
