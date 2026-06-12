@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.36.5
+
+### Patch Changes
+
+- 1e51790: Long status-row messages no longer fuse into their label when they wrap (e.g. "deploy failedNo smart contracts…"). The label and value now live in separate flex boxes so a wrapping value can't swallow the label's trailing space.
+
 ## 0.36.4
 
 ### Patch Changes
