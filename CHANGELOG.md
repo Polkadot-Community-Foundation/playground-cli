@@ -1,5 +1,18 @@
 # playground-cli
 
+## 0.36.3
+
+### Patch Changes
+
+- 7009f4e: `deploy`: warn that the dev signer earns no XP before you pick it.
+
+  - The signer-choice screen now shows a yellow callout above the options, when phone signing is available, explaining that the dev signer publishes from a shared test account and so earns no XP, and that picking your phone signer publishes from your own account and earns XP.
+  - When you are not logged in, the existing "Mobile signing unavailable" notice now also mentions that logging in lets your deploys earn XP.
+
+- 7009f4e: `login`: show that setting a username earns 25 XP.
+
+  - The "set a username?" step at the end of `playground login` now shows a green callout above the choice, telling users that setting a username grants them 25 XP and claims their handle, so the incentive is visible before they decide to skip.
+
 ## 0.36.2
 
 ### Patch Changes
