@@ -21,6 +21,48 @@
  */
 
 import type { AllocatableResource, ApAllocationOutcome } from "@parity/product-sdk-terminal/host";
+import { PLAYGROUND_PRODUCT_ID } from "../../config.js";
+
+/**
+ * Scope a terminal adapter to the PLAYGROUND PRODUCT for RFC-0010 allowance
+ * calls. Every allowance entry point in the CLI must go through this wrapper —
+ * never hand the raw `dot-cli` adapter to `requestResourceAllocation` /
+ * `getCachedAllocation` / `ensureSlotAccountSigner` / `createSlotAccountSigner`.
+ *
+ * Why this is load-bearing: the SDK sends `callingProductId: adapter.appId` on
+ * the wire, and the phone derives every per-product artifact from that id. For
+ * `SmartContractAllowance` the phone MINTS PGAS ON-CHAIN to the soft-derived
+ * `/product/<callingProductId>/<dest>` account (Android
+ * `RealAccountsProtocol.allocate` -> `Pgas.claim_pgas{ target }`). With the raw
+ * adapter id (`dot-cli`, the terminal's storage namespace) the 50-PGAS claim
+ * landed on `dot-cli/0` — a real account, created + auto-mapped by the mint —
+ * while the CLI signs, deploys, and checks mapping as `playground.dot/0`,
+ * which stayed empty and unmapped (root-caused on paseo-next-v2, 2026-06-11:
+ * `dot-cli/0` = 5CB4TWnRyoBe54... holds the PGAS + mapping that belonged to
+ * `playground.dot/0` = 5CwUu5...). Scoping the adapter to the product id makes
+ * the claim land on the account the CLI actually uses, which (PGAS being a
+ * sufficient asset) also creates + auto-maps it — no dev funding needed.
+ *
+ * The SDK reads only `appId` + `storageDir` from the adapter in its host
+ * helpers, and `createTerminalAdapter` returns a plain own-property object, so
+ * a shallow spread view is safe. Side effect: the SDK's allowance cache moves
+ * to `~/.polkadot-apps/playground.dot_AllowanceKeys.json` — semantically right
+ * (RFC-0010 resources belong to products, not host binaries) and safe: the
+ * old shared-`dot-cli`-cache interop with polkadot-app-deploy is explicitly
+ * defused (we always inject explicit signer/storageSigner). Existing sessions
+ * re-grant once on next login: the cache namespace moved, so both resources
+ * re-request in the usual single approval dialog, and the phone re-claims PGAS
+ * to the correct account.
+ *
+ * Mirrors the signing-side split the SDK already acknowledges:
+ * `createSessionSignerForAccount` exists precisely for "a productId different
+ * from the adapter's appId" — the allowance API just lacks the same override,
+ * so we scope the adapter instead. Replace this wrapper with an explicit
+ * `callingProductId` option if `@parity/product-sdk-terminal` ever grows one.
+ */
+export function productScopedAdapter<A extends { appId: string }>(adapter: A): A {
+    return { ...adapter, appId: PLAYGROUND_PRODUCT_ID };
+}
 
 /**
  * The mobile-granted resource set the playground product actually consumes:
