@@ -13,9 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box } from "ink";
+import { Box, Text } from "ink";
 import { useEffect, useState } from "react";
-import { Input, PhoneApprovalCallout, Row, Section, Select } from "../../utils/ui/theme/index.js";
+import {
+    Callout,
+    Input,
+    PhoneApprovalCallout,
+    Row,
+    Section,
+    Select,
+} from "../../utils/ui/theme/index.js";
+import { USERNAME_XP_TITLE, USERNAME_XP_BODY } from "./usernameNotice.js";
 import { getSessionSigner } from "../../utils/auth.js";
 import {
     describeUsernameValidationError,
@@ -118,6 +126,9 @@ export function UsernamePrompt({ addresses, onDone }: UsernamePromptProps) {
     if (phase.kind === "ask") {
         return (
             <Section title="username">
+                <Callout tone="success" title={USERNAME_XP_TITLE}>
+                    <Text>{USERNAME_XP_BODY}</Text>
+                </Callout>
                 <Select<"yes" | "no">
                     label="Set a username for your playground profile?"
                     initialIndex={0}
