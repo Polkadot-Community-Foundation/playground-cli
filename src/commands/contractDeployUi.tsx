@@ -210,6 +210,11 @@ export function ContractDeployStatusView({
                     <Text>{adapter.signingError}</Text>
                 </Callout>
             )}
+            {adapter.runError && (
+                <Callout tone="danger" title="Contract Deploy Failed">
+                    <Text>{adapter.runError}</Text>
+                </Callout>
+            )}
             <DeployTable
                 statuses={adapter.statuses}
                 displayNames={displayNames}

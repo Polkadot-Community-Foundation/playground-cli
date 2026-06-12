@@ -72,8 +72,16 @@ export class ContractPipelineStatusAdapter {
     phase: PhaseInfo | null = null;
     signingPrompt: Extract<SigningEvent, { kind: "sign-request" }> | null = null;
     signingError: string | null = null;
+    // Non-signing failures (e.g. wrong directory, no contracts found, install
+    // errors). Kept separate from signingError so the UI does not mislabel
+    // them as "Signing Failed". First write wins so the root cause is shown.
+    runError: string | null = null;
 
     constructor(private opts: AdapterOptions = {}) {}
+
+    setRunError = (message: string) => {
+        this.runError ??= message;
+    };
 
     handleSigningEvent = (event: SigningEvent) => {
         switch (event.kind) {
