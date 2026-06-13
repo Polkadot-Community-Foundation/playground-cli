@@ -68,6 +68,7 @@ export function loadDetectInput(projectDir: string): DetectInput {
         packageJson,
         lockfiles,
         configFiles,
+        projectDir: root,
     };
 }
 
