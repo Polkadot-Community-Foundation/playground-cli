@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.38.6
+
+### Patch Changes
+
+- fcf2269: When a mistyped command or option is too far off for commander's built-in "Did you mean …?" suggestion, the error now tails with a pointer to `playground --help` (matching git's behavior). Covers the root program and every subcommand, including option typos on `login`, `deploy`, etc.
+
 ## 0.38.5
 
 ### Patch Changes
