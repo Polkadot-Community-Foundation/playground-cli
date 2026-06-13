@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.38.1
+
+### Patch Changes
+
+- 5a6e09b: When deploying without a logged-in session, the `playground deploy` signer picker now shows the phone signer greyed out and unselectable (instead of hiding it), so users can see the option exists. The "mobile signing unavailable" notice moved below the options.
+
 ## 0.38.0
 
 ### Minor Changes
