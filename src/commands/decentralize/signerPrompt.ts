@@ -19,9 +19,12 @@ import type { SelectOption } from "../../utils/ui/theme/Select.js";
 /**
  * Signer options for the interactive `playground decentralize` picker. The
  * phone signer leads, matching `playground deploy`. Unlike deploy, the phone
- * option stays visible without a session (its hint points the user at
- * `playground login`, and selecting it surfaces a login error), so both
- * options are always present here.
+ * option stays selectable without a session (its hint points the user at
+ * `playground login`, and selecting it surfaces a login error), and the cursor
+ * defaults to the dev signer (see {@link decentralizeSignerInitialIndex}).
+ * Deploy instead renders the no-session phone option `disabled` (greyed out,
+ * cursor skips it); we keep the select-to-error behaviour here because it is
+ * the established decentralize UX. Both options are always present.
  */
 export function decentralizeSignerOptions(hasSession: boolean): SelectOption<SignerMode>[] {
     return [

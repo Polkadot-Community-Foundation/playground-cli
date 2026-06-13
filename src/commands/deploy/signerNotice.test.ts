@@ -58,11 +58,19 @@ describe("deploySignerOptions", () => {
         expect(opts.map((o) => o.value)).toEqual(["phone", "dev"]);
         // The default cursor is index 0, so it lands on the phone signer.
         expect(opts[0].value).toBe("phone");
+        // Both are selectable when logged in.
+        expect(opts.every((o) => !o.disabled)).toBe(true);
     });
 
-    it("offers only the dev signer when there is no session", () => {
+    it("shows the phone signer disabled (not hidden) when there is no session", () => {
         const opts = deploySignerOptions(false);
-        expect(opts.map((o) => o.value)).toEqual(["dev"]);
+        // Both options stay visible so the user sees phone signing exists.
+        expect(opts.map((o) => o.value)).toEqual(["phone", "dev"]);
+        const phone = opts.find((o) => o.value === "phone");
+        const dev = opts.find((o) => o.value === "dev");
+        // The phone signer is greyed out and unselectable; dev stays enabled.
+        expect(phone?.disabled).toBe(true);
+        expect(dev?.disabled).toBeFalsy();
     });
 });
 
