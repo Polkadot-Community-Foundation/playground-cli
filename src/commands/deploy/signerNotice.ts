@@ -21,8 +21,8 @@ import type { SelectOption } from "../../utils/ui/theme/Select.js";
  *
  * Mobile (phone) signing needs a paired session from `playground login`; without
  * it the phone path is unavailable, but a dev deploy still works out of the box.
- * The interactive picker renders this as a yellow Callout above the signer
- * options (mirroring the `playground mod` "Community Code" notice); the headless
+ * The interactive picker renders this as a yellow Callout below the signer
+ * options (the phone option itself is shown disabled above); the headless
  * `--signer phone` path surfaces the same intent as a hard error since there's
  * no TUI to fall back into.
  */
@@ -34,7 +34,7 @@ export const NO_SESSION_NOTICE_BODY =
     "You can continue now with the dev signer. Logging in also lets your deploys earn XP.";
 
 /**
- * Shown above the signer options when phone signing IS available, so the user
+ * Shown below the signer options when phone signing IS available, so the user
  * spots the trade-off before picking the dev signer. The dev signer publishes
  * from a shared test account, so XP earned for a deploy cannot accrue to the
  * user; only signing from their own (phone) account does. Rendered as a yellow
@@ -56,22 +56,23 @@ export const NO_SESSION_HEADLESS_ERROR =
 
 /**
  * The signer options for the interactive `playground deploy` picker. The phone
- * signer leads (and so is the default cursor position) when a session exists;
- * without one it isn't offered at all and {@link NO_SESSION_NOTICE_BODY}
- * explains how to enable it.
+ * signer always leads, but without a session it is shown disabled (greyed out,
+ * unselectable) so users can see the option exists; the cursor then defaults to
+ * the dev signer and {@link NO_SESSION_NOTICE_BODY} explains how to unlock it.
  */
 export function deploySignerOptions(hasSession: boolean): SelectOption<SignerMode>[] {
     const phone: SelectOption<SignerMode> = {
         value: "phone",
         label: "your phone signer",
-        hint: "signs with your own account",
+        hint: hasSession ? "signs with your own account" : "requires `playground login` first",
+        disabled: !hasSession,
     };
     const dev: SelectOption<SignerMode> = {
         value: "dev",
         label: "dev signer",
         hint: "fast, no phone needed",
     };
-    return hasSession ? [phone, dev] : [dev];
+    return [phone, dev];
 }
 
 /**

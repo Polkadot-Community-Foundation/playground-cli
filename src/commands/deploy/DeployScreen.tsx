@@ -324,11 +324,6 @@ export function DeployScreen({
 
             {stage.kind === "prompt-signer" && (
                 <Box flexDirection="column">
-                    {!hasSession && (
-                        <Callout tone="warning" title={NO_SESSION_NOTICE_TITLE}>
-                            <Text>{NO_SESSION_NOTICE_BODY}</Text>
-                        </Callout>
-                    )}
                     <PromptInfo box={SIGNER_HELP} />
                     <Select<SignerMode>
                         label="who signs the upload?"
@@ -339,10 +334,15 @@ export function DeployScreen({
                             advance(skipBuild, m);
                         }}
                     />
-                    {/* Placed below the options (mirroring the phone-approval
-                        notices) so the "no XP" trade-off appears right as the
-                        cursor lands on the dev signer and disappears again when
-                        the user moves back to the phone signer. */}
+                    {/* Both notices sit below the options: the phone signer is
+                        shown disabled above, and this explains why and how to
+                        unlock it. The "no XP" trade-off (logged-in path) appears
+                        right as the cursor lands on the dev signer. */}
+                    {!hasSession && (
+                        <Callout tone="warning" title={NO_SESSION_NOTICE_TITLE}>
+                            <Text>{NO_SESSION_NOTICE_BODY}</Text>
+                        </Callout>
+                    )}
                     {shouldShowDevNoXpWarning(hasSession, highlightedSigner) && (
                         <Callout tone="warning" title={DEV_SIGNER_NO_XP_TITLE}>
                             <Text>{DEV_SIGNER_NO_XP_BODY}</Text>
