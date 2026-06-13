@@ -13,42 +13,83 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, it, expect } from "vitest";
-import { pickNextStage, validateDomainInput, validateSiteUrlInput } from "./state.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, it, expect } from "vitest";
+import {
+    pickNextStage,
+    validateDomainInput,
+    validateLocalPathInput,
+    validateSiteUrlInput,
+    type PickStageInput,
+} from "./state.js";
+
+/** All-empty input; tests spread the fields a stage transition depends on. */
+const base: PickStageInput = {
+    sourceKind: null,
+    siteUrl: null,
+    localPath: null,
+    signerMode: null,
+    domainLabel: null,
+    domainRaw: null,
+    publishToPlayground: null,
+    moddable: null,
+    repositoryUrl: null,
+};
+
+/** A url-source flow answered up to (and including) the domain validation. */
+const urlThroughDomain: PickStageInput = {
+    ...base,
+    sourceKind: "url",
+    siteUrl: "https://example.com",
+    signerMode: "dev",
+    domainLabel: "myapp",
+    domainRaw: "myapp",
+};
+
+/** A path-source flow answered up to (and including) the domain validation. */
+const pathThroughDomain: PickStageInput = {
+    ...base,
+    sourceKind: "path",
+    localPath: "./dist",
+    signerMode: "dev",
+    domainLabel: "myapp",
+    domainRaw: "myapp",
+};
 
 describe("pickNextStage", () => {
-    it("starts at prompt-url when nothing has been filled", () => {
-        expect(
-            pickNextStage({
-                siteUrl: null,
-                signerMode: null,
-                domainLabel: null,
-                domainRaw: null,
-                publishToPlayground: null,
-            }),
-        ).toEqual({ kind: "prompt-url" });
+    it("starts at prompt-source when nothing has been filled", () => {
+        expect(pickNextStage(base)).toEqual({ kind: "prompt-source" });
+    });
+
+    it("prompts for the URL once the url source is picked", () => {
+        expect(pickNextStage({ ...base, sourceKind: "url" })).toEqual({ kind: "prompt-url" });
+    });
+
+    it("prompts for the directory once the path source is picked", () => {
+        expect(pickNextStage({ ...base, sourceKind: "path" })).toEqual({ kind: "prompt-path" });
+    });
+
+    it("path flow joins the shared stages at prompt-signer", () => {
+        expect(pickNextStage({ ...base, sourceKind: "path", localPath: "./dist" })).toEqual({
+            kind: "prompt-signer",
+        });
     });
 
     it("advances to prompt-signer once the URL is known", () => {
         expect(
-            pickNextStage({
-                siteUrl: "https://example.com",
-                signerMode: null,
-                domainLabel: null,
-                domainRaw: null,
-                publishToPlayground: null,
-            }),
+            pickNextStage({ ...base, sourceKind: "url", siteUrl: "https://example.com" }),
         ).toEqual({ kind: "prompt-signer" });
     });
 
     it("advances to prompt-domain once URL + signer are picked", () => {
         expect(
             pickNextStage({
+                ...base,
+                sourceKind: "url",
                 siteUrl: "https://example.com",
                 signerMode: "dev",
-                domainLabel: null,
-                domainRaw: null,
-                publishToPlayground: null,
             }),
         ).toEqual({ kind: "prompt-domain" });
     });
@@ -56,67 +97,40 @@ describe("pickNextStage", () => {
     it("advances to validate-domain once domain has been typed but not yet validated", () => {
         expect(
             pickNextStage({
+                ...base,
+                sourceKind: "url",
                 siteUrl: "https://example.com",
                 signerMode: "phone",
-                domainLabel: null,
                 domainRaw: "myapp",
-                publishToPlayground: null,
             }),
         ).toEqual({ kind: "validate-domain", raw: "myapp" });
     });
 
     it("asks the publish question once the domain is validated", () => {
-        expect(
-            pickNextStage({
-                siteUrl: "https://example.com",
-                signerMode: "dev",
-                domainLabel: "myapp",
-                domainRaw: "myapp",
-                publishToPlayground: null,
-            }),
-        ).toEqual({ kind: "prompt-publish" });
+        expect(pickNextStage(urlThroughDomain)).toEqual({ kind: "prompt-publish" });
     });
 
     it("lands on confirm once the publish answer is locked in", () => {
-        expect(
-            pickNextStage({
-                siteUrl: "https://example.com",
-                signerMode: "dev",
-                domainLabel: "myapp",
-                domainRaw: "myapp",
-                publishToPlayground: false,
-            }),
-        ).toEqual({ kind: "confirm" });
+        expect(pickNextStage({ ...urlThroughDomain, publishToPlayground: false })).toEqual({
+            kind: "confirm",
+        });
     });
 
     it("asks for a tag when publishing and no --tag pre-filled it", () => {
-        // publish=true + tag undefined (not asked yet) → the tag picker runs
-        // before confirm, mirroring deploy.
-        expect(
-            pickNextStage({
-                siteUrl: "https://example.com",
-                signerMode: "dev",
-                domainLabel: "myapp",
-                domainRaw: "myapp",
-                publishToPlayground: true,
-            }),
-        ).toEqual({ kind: "prompt-tags" });
+        // url source publishing: moddable is skipped (no git source), so the
+        // tag picker is the only publish-only follow-up before confirm.
+        expect(pickNextStage({ ...urlThroughDomain, publishToPlayground: true })).toEqual({
+            kind: "prompt-tags",
+        });
     });
 
     it("lands on confirm once a tag is chosen (or skipped) when publishing", () => {
         // A resolved tag (a string OR an explicit null "skip") clears the last
         // publish-only prompt.
         for (const tag of ["defi", null] as const) {
-            expect(
-                pickNextStage({
-                    siteUrl: "https://example.com",
-                    signerMode: "dev",
-                    domainLabel: "myapp",
-                    domainRaw: "myapp",
-                    publishToPlayground: true,
-                    tag,
-                }),
-            ).toEqual({ kind: "confirm" });
+            expect(pickNextStage({ ...urlThroughDomain, publishToPlayground: true, tag })).toEqual({
+                kind: "confirm",
+            });
         }
     });
 
@@ -124,13 +138,71 @@ describe("pickNextStage", () => {
         // Mirrors the user submitting a blank domain prompt to opt into auto-naming.
         expect(
             pickNextStage({
+                ...base,
+                sourceKind: "url",
                 siteUrl: "https://example.com",
                 signerMode: "dev",
-                domainLabel: null,
                 domainRaw: "",
-                publishToPlayground: null,
             }),
         ).toEqual({ kind: "validate-domain", raw: "" });
+    });
+
+    // ── Moddable (path + publish only) ───────────────────────────────────────
+
+    it("asks the moddable question before the tag for a publishing path source", () => {
+        // Moddable is the first publish-only follow-up (tag still undefined),
+        // mirroring deploy's moddable → tag ordering.
+        expect(pickNextStage({ ...pathThroughDomain, publishToPlayground: true })).toEqual({
+            kind: "prompt-moddable",
+        });
+    });
+
+    it("never asks moddable for a url source — mirrored sites have no git source", () => {
+        // url + publish jumps straight to the tag prompt: moddable is skipped.
+        expect(pickNextStage({ ...urlThroughDomain, publishToPlayground: true })).toEqual({
+            kind: "prompt-tags",
+        });
+    });
+
+    it("never asks moddable when the path source is not publishing", () => {
+        expect(pickNextStage({ ...pathThroughDomain, publishToPlayground: false })).toEqual({
+            kind: "confirm",
+        });
+    });
+
+    it("declining moddable advances to the tag prompt", () => {
+        expect(
+            pickNextStage({ ...pathThroughDomain, publishToPlayground: true, moddable: false }),
+        ).toEqual({ kind: "prompt-tags" });
+    });
+
+    it("accepting moddable (or pre-answering via --moddable) drives into the preflight", () => {
+        expect(
+            pickNextStage({ ...pathThroughDomain, publishToPlayground: true, moddable: true }),
+        ).toEqual({ kind: "moddable-preflight" });
+    });
+
+    it("advances to the tag prompt once the preflight has resolved the repository URL", () => {
+        expect(
+            pickNextStage({
+                ...pathThroughDomain,
+                publishToPlayground: true,
+                moddable: true,
+                repositoryUrl: "https://github.com/acme/site",
+            }),
+        ).toEqual({ kind: "prompt-tags" });
+    });
+
+    it("lands on confirm once a publishing path source resolves both moddable and tag", () => {
+        expect(
+            pickNextStage({
+                ...pathThroughDomain,
+                publishToPlayground: true,
+                moddable: true,
+                repositoryUrl: "https://github.com/acme/site",
+                tag: null,
+            }),
+        ).toEqual({ kind: "confirm" });
     });
 });
 
@@ -196,5 +268,44 @@ describe("validateDomainInput", () => {
 
     it("rejects a dash before the digit suffix (strips to a trailing-hyphen base)", () => {
         expect(validateDomainInput("my-app-42")).toMatch(/dash/i);
+    });
+});
+
+describe("validateLocalPathInput", () => {
+    const tempDirs: string[] = [];
+
+    function makeTempDir(): string {
+        const dir = mkdtempSync(join(tmpdir(), "dot-state-path-test-"));
+        tempDirs.push(dir);
+        return dir;
+    }
+
+    afterEach(() => {
+        for (const dir of tempDirs.splice(0)) {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("accepts a directory containing an index.html", () => {
+        const dir = makeTempDir();
+        writeFileSync(join(dir, "index.html"), "<html></html>");
+        expect(validateLocalPathInput(dir)).toBeNull();
+    });
+
+    it("rejects empty input", () => {
+        expect(validateLocalPathInput("")).toBe("enter a directory path");
+        expect(validateLocalPathInput("   ")).toBe("enter a directory path");
+    });
+
+    it("rejects a missing directory with prepareLocalDirectory's message", () => {
+        expect(validateLocalPathInput("/tmp/dot-state-path-test-does-not-exist")).toMatch(
+            /directory not found/,
+        );
+    });
+
+    it("states the index.html requirement for a directory without one", () => {
+        const dir = makeTempDir();
+        writeFileSync(join(dir, "main.js"), "console.log(1)");
+        expect(validateLocalPathInput(dir)).toMatch(/no index\.html found.*built static site/);
     });
 });

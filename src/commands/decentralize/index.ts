@@ -14,19 +14,23 @@
 // limitations under the License.
 
 /**
- * `dot decentralize` — point at a live static site, get back a .dot URL.
+ * `dot decentralize` — point at a live static site (or a local build
+ * directory), get back a .dot URL.
  *
  *   dot decentralize                                          # interactive
  *   dot decentralize --site=shawntabrizi.github.io            # headless
  *   dot decentralize --site=foo.com --dot=bar                 # headless, explicit name
  *   dot decentralize --site=foo.com --suri=//Bob              # headless, dev signer
  *   dot decentralize --site=foo.com --playground              # also publish to playground
+ *   dot decentralize --path=./dist                            # headless, local directory
  *
- * Headless flow runs when `--site` is provided (preserves the existing
- * `dot decentralize --suri=//Bob` demo-service contract). Without `--site`,
- * the command mounts an Ink TUI that prompts for URL → signer → domain →
- * publish? before kicking off the same upload pipeline. The publish-to-
- * playground step delegates to deploy's `publishToPlayground` helper.
+ * Headless flow runs when `--site` or `--path` is provided (preserves the
+ * existing `dot decentralize --suri=//Bob` demo-service contract). Without
+ * either, the command mounts an Ink TUI that prompts for source (URL or
+ * local directory) → URL/path → signer → domain → publish? → moddable?
+ * (path mode only) before kicking off the same upload pipeline. The
+ * publish-to-playground step delegates to deploy's `publishToPlayground`
+ * helper.
  */
 
 import { Command, Option } from "commander";
@@ -37,18 +41,26 @@ import { errorMessage, withSpan } from "../../telemetry.js";
 import { DEFAULT_ENV, ENV_FLAG_CHOICES, type Env, resolveLegacyEnv } from "../../config.js";
 import { resolveSigner, type ResolvedSigner, SignerNotAvailableError } from "../../utils/signer.js";
 import { resolveDomain } from "../../utils/decentralize/domain.js";
+import { prepareLocalDirectory } from "../../utils/decentralize/local.js";
 import {
     describeDeployEvent,
     runDecentralize,
     type DecentralizeOutcome,
+    type DecentralizeSource,
 } from "../../utils/decentralize/run.js";
 import { destroyConnection } from "../../utils/connection.js";
+import {
+    ensureGitInstalled,
+    ModdablePreflightError,
+    resolveRepositoryUrl,
+} from "../../utils/deploy/moddable.js";
 import type { SignerMode } from "../../utils/deploy/signerMode.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { onProcessShutdown } from "../../utils/process-guard.js";
 
 interface DecentralizeOpts {
     site?: string;
+    path?: string;
     dot?: string;
     env: string;
     suri?: string;
@@ -60,6 +72,13 @@ interface DecentralizeOpts {
     playground?: boolean;
     /** Playground category tag (from PLAYGROUND_TAGS). Requires --playground. */
     tag?: string;
+    /**
+     * Record the path directory's public GitHub origin in the playground
+     * metadata so others can `playground mod` the app. Path mode only
+     * (`.conflicts("site")` — a mirrored URL has no git source) and requires
+     * `--playground` in headless mode. `undefined` ⇒ ask in the TUI.
+     */
+    moddable?: boolean;
 }
 
 /**
@@ -78,11 +97,18 @@ export function assertTagRequiresPlayground(opts: {
 
 export const decentralizeCommand = new Command("decentralize")
     .description(
-        "Mirror a live static site to Polkadot Bulletin and register a .dot name pointing at it",
+        "Mirror a live static site (or upload a local build directory) to Polkadot Bulletin " +
+            "and register a .dot name pointing at it",
     )
     .option(
         "--site <url>",
         "URL of the static site to clone (http/https). Omit to launch the interactive TUI.",
+    )
+    .addOption(
+        new Option(
+            "--path <dir>",
+            "Local directory containing a built static site (e.g. ./dist). Alternative to --site.",
+        ).conflicts("site"),
     )
     .option(
         "--dot <name>",
@@ -111,10 +137,17 @@ export const decentralizeCommand = new Command("decentralize")
             "Tag the published app so people can filter for it in the playground. Requires --playground.",
         ).choices([...PLAYGROUND_TAGS]),
     )
+    .addOption(
+        new Option(
+            "--moddable",
+            "Record the public GitHub origin of --path's repo so others can " +
+                "`playground mod` it. Requires --path and --playground. Off by default.",
+        ).conflicts("site"),
+    )
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
-            if (opts.site) {
+            if (opts.site || opts.path) {
                 await runHeadless({ env, opts });
             } else {
                 await runInteractive({ env, opts });
@@ -136,16 +169,60 @@ async function runHeadless({
     let signer: ResolvedSigner | null = null;
 
     try {
+        // Fail fast on a bad --path before any signer/network work —
+        // otherwise the user waits out the domain availability check only to
+        // learn the directory doesn't exist. runDecentralize re-validates
+        // (prepareLocalDirectory is cheap and pure fs).
+        if (opts.path) prepareLocalDirectory(opts.path);
+
+        // Moddable preflight, same fail-fast rationale: resolve the public
+        // GitHub origin (git walks up from the --path directory) before any
+        // signer/chain work. `ModdablePreflightError`'s headless message
+        // already names the fix, so it propagates as-is. `--site` is blocked
+        // by commander's `.conflicts()`, so `opts.path` is set here.
+        let repositoryUrl: string | null = null;
+        if (opts.moddable) {
+            if (opts.playground !== true) {
+                throw new Error(
+                    "--moddable requires --playground — the repo URL is recorded in the " +
+                        "playground metadata, which is only published with --playground.",
+                );
+            }
+            await ensureGitInstalled();
+            try {
+                repositoryUrl = await resolveRepositoryUrl({
+                    cwd: opts.path!,
+                    onLog: (line) => process.stdout.write(`  ${line}\n`),
+                });
+            } catch (err) {
+                // The headless message in moddable.ts names deploy's
+                // `--no-moddable` escape hatch, which this command doesn't
+                // have — use the surface-neutral copy + the right remedy.
+                if (err instanceof ModdablePreflightError) {
+                    throw new Error(
+                        `${err.interactiveMessage} Or omit --moddable to publish without source.`,
+                    );
+                }
+                throw err;
+            }
+        }
+
         signer = await withSpan("cli.decentralize.signer", "resolve signer", () =>
             resolveSigner({ suri: opts.suri }),
         );
 
         process.stdout.write(`\n▸ Signing as ${signer.address} (${signer.source})\n`);
 
+        // The action gates headless on `opts.site || opts.path` and commander's
+        // `.conflicts()` rejects passing both, so exactly one is set here.
+        const source: DecentralizeSource = opts.path
+            ? { kind: "path", directory: opts.path }
+            : { kind: "url", url: opts.site! };
+
         const { label, fullDomain } = await resolveDomain({
             env,
             providedDot: opts.dot,
-            siteUrl: opts.site!,
+            source,
             signer,
             onMessage: (line) => process.stdout.write(`${line}\n`),
         });
@@ -155,16 +232,19 @@ async function runHeadless({
         const mode: SignerMode = signer.source === "session" ? "phone" : "dev";
 
         process.stdout.write(
-            `\n▸ Mirroring ${opts.site}… (large sites take a few minutes — press Ctrl+C to cancel)\n`,
+            source.kind === "url"
+                ? `\n▸ Mirroring ${source.url}… (large sites take a few minutes — press Ctrl+C to cancel)\n`
+                : `\n▸ Preparing ${source.directory}…\n`,
         );
         const outcome = await runDecentralize({
-            siteUrl: opts.site!,
+            source,
             label,
             fullDomain,
             mode,
             userSigner: signer,
             publishToPlayground: opts.playground === true,
             tag: opts.tag ?? null,
+            repositoryUrl,
             env,
             onEvent: (ev) => {
                 switch (ev.kind) {
@@ -177,6 +257,7 @@ async function runHeadless({
                         );
                         break;
                     case "mirror-done":
+                    case "local-done":
                         process.stdout.write(
                             `  → ${ev.fileCount} files in ${ev.directory}\n` +
                                 `\n▸ Uploading to Bulletin and registering ${fullDomain}…\n`,
@@ -271,6 +352,7 @@ async function runInteractive({
                     sessionSigner: preflight.sessionSigner,
                     initialPublishToPlayground: opts.playground === true ? true : null,
                     initialTag: opts.tag,
+                    initialModdable: opts.moddable === true ? true : null,
                     onDone: (result) => {
                         if (settled) return;
                         settled = true;
