@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.38.7
+
+### Patch Changes
+
+- bda42ed: The post-mod "Next steps" block now nudges toward the prepopulated `(prompt: "start tutorial")` AI prompt only when modding the `playground-tutorial.dot` app, rather than whenever a quest track was started.
+
 ## 0.38.6
 
 ### Patch Changes
