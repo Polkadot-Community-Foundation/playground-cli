@@ -92,6 +92,30 @@ export const DOMAIN_HELP: PromptBox = {
         "names of 5 or fewer are reserved.",
 };
 
+/**
+ * Warning shown after the user confirms they changed contracts (and we're about
+ * to redeploy them). CDM package names are globally first-deploy-wins: a modded
+ * fork (or any project that edited contracts someone else authored) ships
+ * names the current signer does not own, so the publish fails late, after a
+ * funded, ownership-binding deploy (paritytech/playground-app#320,
+ * paritytech/playground-cli#341). We surface it up front and gate on an explicit
+ * ack so the user can rename first. Kept as plain strings (not a `PromptBox`) so
+ * it renders as a `warning` Callout and isn't bound by the info-box length cap.
+ */
+export const CONTRACTS_RENAME_NOTICE_TITLE = "Check your contract names before redeploying";
+
+export const CONTRACTS_RENAME_NOTICE_BODY =
+    "Each smart-contract package name is claimed on-chain by the first account to " +
+    "deploy it, and only that account can redeploy under it. If you wrote these " +
+    "contracts yourself, you already own the names, so just continue. But if this " +
+    "app is a mod, or you edited contracts that someone else originally wrote, the " +
+    "names in cdm.json still belong to them and your deploy will fail. To publish " +
+    "under your own account, first rename each contract to a name you own: update " +
+    "its package name in cdm.json, in the contract's Cargo.toml, and anywhere your " +
+    "frontend code refers to it.";
+
+export const CONTRACTS_RENAME_NOTICE_HINT = "enter to continue · esc to exit and rename";
+
 /** One-line hints for the trivial text inputs (no bordered box). */
 export const BUILD_DIR_HINT =
     "The folder holding your built site (the files we upload). The default fits most projects.";

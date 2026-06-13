@@ -24,6 +24,9 @@ import {
     DOMAIN_HELP,
     BUILD_DIR_HINT,
     DOMAIN_HINT,
+    CONTRACTS_RENAME_NOTICE_TITLE,
+    CONTRACTS_RENAME_NOTICE_BODY,
+    CONTRACTS_RENAME_NOTICE_HINT,
     type PromptBox,
 } from "./promptHelp.js";
 
@@ -80,6 +83,32 @@ describe("plain-language anchors (the prompts the feedback called out)", () => {
         expect(body).toContain("personhood");
         // Per product wording: say "personhood check", never "identity check".
         expect(body).not.toContain("identity");
+    });
+});
+
+describe("contract-redeploy rename notice", () => {
+    it("has a non-empty title, body, and hint", () => {
+        expect(CONTRACTS_RENAME_NOTICE_TITLE.trim()).not.toBe("");
+        expect(CONTRACTS_RENAME_NOTICE_BODY.trim()).not.toBe("");
+        expect(CONTRACTS_RENAME_NOTICE_HINT.trim()).not.toBe("");
+    });
+
+    it("scopes the warning to mods / others' contracts and points at the files to rename", () => {
+        const body = CONTRACTS_RENAME_NOTICE_BODY.toLowerCase();
+        // The qualifier the user asked for: it only matters for a mod or when
+        // you edited contracts someone else authored.
+        expect(body).toContain("mod");
+        // Concrete remediation: rename, and the files that hold the name.
+        expect(body).toContain("rename");
+        expect(body).toContain("cdm.json");
+        expect(body).toContain("cargo.toml");
+    });
+
+    it("offers enter-to-continue and esc-to-exit on one line", () => {
+        expect(CONTRACTS_RENAME_NOTICE_HINT).not.toContain("\n");
+        const hint = CONTRACTS_RENAME_NOTICE_HINT.toLowerCase();
+        expect(hint).toContain("enter");
+        expect(hint).toContain("esc");
     });
 });
 
