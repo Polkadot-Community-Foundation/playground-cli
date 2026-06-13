@@ -35,14 +35,14 @@ interface Props {
 }
 
 const COL = { id: 16, title: 32, difficulty: 12 };
-// Leading marker column; locked rows get the same width in spaces so the
-// id/title/difficulty columns stay aligned with the START row.
+// Leading marker column; the greyed rows below get the same width in spaces so
+// their id/title/difficulty columns stay aligned with the START row.
 const START_MARKER = "› START: ";
-const LOCKED_INDENT = " ".repeat(START_MARKER.length);
+const LEVEL_INDENT = " ".repeat(START_MARKER.length);
 
 export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
     const { stdout } = useStdout();
-    // Rows available for locked-quest lines (header + summary + hints ≈ 10).
+    // Rows available for the greyed level lines (header + summary + hints ≈ 10).
     const viewH = Math.max((stdout?.rows ?? 24) - 10, 5);
 
     const [manifest, setManifest] = useState<QuestsManifest | null>(null);
@@ -77,9 +77,14 @@ export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
 
     // The start row is the ONLY interactive element: Enter starts the
     // tutorial from anywhere, q quits. There is deliberately no cursor —
-    // locked levels are display-only (grey), so there is nothing to navigate
-    // to. This also removes the previous stale-cursor bug where rapid arrow
-    // keypresses (several events between two renders) were lost.
+    // the other levels are display-only (grey), so there is nothing to
+    // navigate to. This also removes the previous stale-cursor bug where rapid
+    // arrow keypresses (several events between two renders) were lost.
+    //
+    // NOTE: `onDone()` carries no quest id — it just continues the existing
+    // clone-of-`main` flow (same effect the old "Start tutorial" button had).
+    // The level named in the START row is informational; we don't start that
+    // specific level, so don't wire downstream logic to the displayed id.
     useInput((input, key) => {
         if (input === "q") {
             onCancel();
@@ -113,8 +118,10 @@ export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
 
     const startIndex = findStartQuestIndex(quests);
     const startQuest = quests[startIndex];
+    // row() joins id/title/difficulty/notes with three "  " separators (6 cols);
+    // the marker/indent prefix is subtracted separately via START_MARKER.length.
     const notesCol = Math.max(
-        (stdout?.columns ?? 80) - START_MARKER.length - COL.id - COL.title - COL.difficulty - 10,
+        (stdout?.columns ?? 80) - START_MARKER.length - COL.id - COL.title - COL.difficulty - 6,
         10,
     );
 
@@ -127,11 +134,15 @@ export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
         )}  ${pad(notes, notesCol)}`;
     };
 
-    // Locked levels beyond the viewport are summarised in one line instead of
-    // scrolled — there is nothing to select among them anyway.
-    const locked = quests.filter((_, i) => i !== startIndex);
-    const visibleLocked = locked.slice(0, viewH);
-    const hiddenCount = locked.length - visibleLocked.length;
+    // Every quest other than the start row is shown greyed below it. These are
+    // "locked" in the common linear-track case, but a track may declare several
+    // dependency-free quests — only the first becomes the start row, so the
+    // rest are not strictly locked. Keep the displayed copy neutral ("levels").
+    // Rows beyond the viewport are summarised in one line instead of scrolled —
+    // there is nothing to select among them anyway.
+    const otherLevels = quests.filter((_, i) => i !== startIndex);
+    const visibleLevels = otherLevels.slice(0, viewH);
+    const hiddenCount = otherLevels.length - visibleLevels.length;
 
     return (
         <Box flexDirection="column" paddingLeft={2}>
@@ -150,14 +161,14 @@ export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
                 </Text>
             </Box>
 
-            {visibleLocked.map((q) => (
+            {visibleLevels.map((q) => (
                 <Box key={q.id}>
-                    <Text dimColor>{`${LOCKED_INDENT}${row(q)}`}</Text>
+                    <Text dimColor>{`${LEVEL_INDENT}${row(q)}`}</Text>
                 </Box>
             ))}
             {hiddenCount > 0 && (
                 <Box>
-                    <Text dimColor>{`${LOCKED_INDENT}… ${hiddenCount} more locked levels`}</Text>
+                    <Text dimColor>{`${LEVEL_INDENT}… ${hiddenCount} more levels`}</Text>
                 </Box>
             )}
 
