@@ -1,5 +1,15 @@
 # playground-cli
 
+## 0.37.0
+
+### Minor Changes
+
+- 9e380a6: `playground login` now ends with a "Try one of these next" box suggesting the commands to run after signing in (`pg decentralize`, `pg mod`, `pg deploy`), each with a short description, so newly paired users know where to go next.
+
+### Patch Changes
+
+- 2a4e81e: `playground login` no longer prints a "Statement subscription error: … Not connected" stack trace after a successful sign-in. When the login adapter is destroyed, an in-flight statement-store subscription can surface a bare `Error: Not connected` from the just-closed websocket. That benign teardown artifact was already swallowed as an unhandled rejection, but the statement-store package also logs it directly from its subscription error callback; the local patch that silences that log now matches the bare "Not connected" shape in addition to `DestroyedError`, mirroring `isBenignUnsubscriptionError`.
+
 ## 0.36.8
 
 ### Patch Changes
