@@ -1,5 +1,18 @@
 # playground-cli
 
+## 0.37.1
+
+### Patch Changes
+
+- ebc64b5: Sync the `playground decentralize` prompts with `playground deploy`:
+
+  - The signer pickers in both commands list your phone signer first and start the cursor on it (when logged in). The "dev signer earns no XP" warning now appears below the options, only while the dev signer is highlighted, and disappears when you move back to the phone signer.
+  - `playground decentralize` now shows the same magenta help boxes as deploy above its signer, domain, publish, and (new) tags prompts, and its intro box uses the same accent style.
+  - The "publish to the playground registry?" prompt now lists "yes" first and selects it by default.
+  - `playground decentralize` gained a category-tag step and a `--tag` flag (whitelisted to the playground tags, requires `--playground`), matching deploy; the chosen tag is written to the published app metadata and shown in the confirm summary.
+
+- ebc64b5: Clarify the "update available" banner: it now reads `Run pg update to update the CLI.` (previously "playground update to upgrade") so the suggested command matches the wording.
+
 ## 0.37.0
 
 ### Minor Changes
