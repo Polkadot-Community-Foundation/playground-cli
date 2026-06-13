@@ -23,6 +23,10 @@
  * STOP execution, but report `ok: false` with no `error` — for cases the
  * parent wants to present gently (its own Callout) rather than as a red
  * failure row, while still skipping any success-only output.
+ * Silent skips (`isSilentSkip = true`) remove the step's row from the UI
+ * entirely and don't stop execution (`ok` is preserved) — for optional steps
+ * whose absence is a non-event the user shouldn't see (e.g. an app with no
+ * `setup.sh` to run).
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -46,7 +50,7 @@ export interface Step {
     keepLogOnSuccess?: boolean;
 }
 
-type StepStatus = "pending" | "running" | "ok" | "failed" | "warning";
+type StepStatus = "pending" | "running" | "ok" | "failed" | "warning" | "skipped";
 
 interface StepState {
     name: string;
@@ -144,7 +148,14 @@ export function StepRunner({ title, steps, onDone }: Props) {
                     const isWarning = err instanceof Error && (err as any).isWarning === true;
                     const haltAsWarning =
                         err instanceof Error && (err as any).haltAsWarning === true;
+                    const isSilentSkip = err instanceof Error && (err as any).isSilentSkip === true;
 
+                    if (isSilentSkip) {
+                        setStates((prev) =>
+                            prev.map((s, j) => (j === i ? { ...s, status: "skipped" } : s)),
+                        );
+                        continue;
+                    }
                     if (haltAsWarning) {
                         setStates((prev) =>
                             prev.map((s, j) =>
@@ -188,21 +199,26 @@ export function StepRunner({ title, steps, onDone }: Props) {
 
     return (
         <Section title={title}>
-            {states.map((step) => (
-                <Box key={step.name} flexDirection="column">
-                    <Row
-                        mark={toMark(step.status)}
-                        label={step.name}
-                        value={step.message}
-                        tone={step.status === "failed" ? "danger" : "muted"}
-                    />
-                    {step.retainedLog && step.retainedLog.length > 0 && (
-                        <Box marginTop={1} marginBottom={1}>
-                            <LogTail lines={step.retainedLog} height={step.retainedLog.length} />
-                        </Box>
-                    )}
-                </Box>
-            ))}
+            {states
+                .filter((step) => step.status !== "skipped")
+                .map((step) => (
+                    <Box key={step.name} flexDirection="column">
+                        <Row
+                            mark={toMark(step.status)}
+                            label={step.name}
+                            value={step.message}
+                            tone={step.status === "failed" ? "danger" : "muted"}
+                        />
+                        {step.retainedLog && step.retainedLog.length > 0 && (
+                            <Box marginTop={1} marginBottom={1}>
+                                <LogTail
+                                    lines={step.retainedLog}
+                                    height={step.retainedLog.length}
+                                />
+                            </Box>
+                        )}
+                    </Box>
+                ))}
             {running && liveOutput.length > 0 && (
                 <Box marginTop={1}>
                     <LogTail lines={liveOutput} height={LIVE_LOG_LINES} />
