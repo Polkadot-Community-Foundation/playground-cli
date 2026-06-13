@@ -27,6 +27,7 @@ import { defaultRepoName } from "../../utils/git/repoName.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import { parseGitHubRepoUrl, type GitHubRepoRef } from "../../utils/mod/source.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
+import { editWithClaudeStep } from "./nextSteps.js";
 
 interface FetchedAppMetadata {
     name?: string;
@@ -173,14 +174,7 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
         if (ok && !setupRan) {
             console.log("  Next steps:");
             console.log(`  1. cd ${targetDir}`);
-            // For the tutorial, nudge the user toward the prepopulated AI prompt
-            // ("start tutorial") that kicks off the guided quest flow; a plain
-            // mod has no such entry point.
-            console.log(
-                startedTutorial
-                    ? "  2. edit with claude ( prompt: start tutorial )"
-                    : "  2. edit with claude",
-            );
+            console.log(editWithClaudeStep(startedTutorial));
             console.log("  3. playground deploy --playground");
         }
         if (!ok) process.exitCode = 1;
