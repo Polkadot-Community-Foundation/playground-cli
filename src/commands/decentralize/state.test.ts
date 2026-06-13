@@ -89,7 +89,9 @@ describe("pickNextStage", () => {
         ).toEqual({ kind: "confirm" });
     });
 
-    it("also lands on confirm when publish was pre-answered via --playground", () => {
+    it("asks for a tag when publishing and no --tag pre-filled it", () => {
+        // publish=true + tag undefined (not asked yet) → the tag picker runs
+        // before confirm, mirroring deploy.
         expect(
             pickNextStage({
                 siteUrl: "https://example.com",
@@ -98,7 +100,24 @@ describe("pickNextStage", () => {
                 domainRaw: "myapp",
                 publishToPlayground: true,
             }),
-        ).toEqual({ kind: "confirm" });
+        ).toEqual({ kind: "prompt-tags" });
+    });
+
+    it("lands on confirm once a tag is chosen (or skipped) when publishing", () => {
+        // A resolved tag (a string OR an explicit null "skip") clears the last
+        // publish-only prompt.
+        for (const tag of ["defi", null] as const) {
+            expect(
+                pickNextStage({
+                    siteUrl: "https://example.com",
+                    signerMode: "dev",
+                    domainLabel: "myapp",
+                    domainRaw: "myapp",
+                    publishToPlayground: true,
+                    tag,
+                }),
+            ).toEqual({ kind: "confirm" });
+        }
     });
 
     it("treats an empty-string domainRaw as 'asked-already, use auto'", () => {

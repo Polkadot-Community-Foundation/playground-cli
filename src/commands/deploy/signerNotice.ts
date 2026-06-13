@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { SignerMode } from "../../utils/deploy/signerMode.js";
+import type { SelectOption } from "../../utils/ui/theme/Select.js";
+
 /**
  * Shown when a deploy starts without a logged-in mobile session.
  *
@@ -50,3 +53,34 @@ export const DEV_SIGNER_NO_XP_BODY =
 export const NO_SESSION_HEADLESS_ERROR =
     "Mobile (phone) signing needs a logged-in session. " +
     'Run "playground login" to pair your phone, or use "--signer dev" for a dev deploy.';
+
+/**
+ * The signer options for the interactive `playground deploy` picker. The phone
+ * signer leads (and so is the default cursor position) when a session exists;
+ * without one it isn't offered at all and {@link NO_SESSION_NOTICE_BODY}
+ * explains how to enable it.
+ */
+export function deploySignerOptions(hasSession: boolean): SelectOption<SignerMode>[] {
+    const phone: SelectOption<SignerMode> = {
+        value: "phone",
+        label: "your phone signer",
+        hint: "signs with your own account",
+    };
+    const dev: SelectOption<SignerMode> = {
+        value: "dev",
+        label: "dev signer",
+        hint: "fast, no phone needed",
+    };
+    return hasSession ? [phone, dev] : [dev];
+}
+
+/**
+ * Whether to show the {@link DEV_SIGNER_NO_XP_TITLE} warning. The "no XP"
+ * trade-off only matters while the dev option is highlighted AND a phone
+ * alternative actually exists to switch to (i.e. the user is logged in), so the
+ * warning appears as the cursor lands on the dev signer and disappears again on
+ * the way back to the phone signer. Shared by `deploy` and `decentralize`.
+ */
+export function shouldShowDevNoXpWarning(hasSession: boolean, highlighted: SignerMode): boolean {
+    return hasSession && highlighted === "dev";
+}

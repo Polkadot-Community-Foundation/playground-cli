@@ -44,6 +44,7 @@ import {
 } from "../../utils/decentralize/run.js";
 import { destroyConnection } from "../../utils/connection.js";
 import type { SignerMode } from "../../utils/deploy/signerMode.js";
+import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { onProcessShutdown } from "../../utils/process-guard.js";
 
 interface DecentralizeOpts {
@@ -57,6 +58,22 @@ interface DecentralizeOpts {
      * in headless" — i.e. opt-in publish.
      */
     playground?: boolean;
+    /** Playground category tag (from PLAYGROUND_TAGS). Requires --playground. */
+    tag?: string;
+}
+
+/**
+ * A `--tag` is only meaningful alongside `--playground` (no metadata is
+ * published otherwise). Mirrors deploy's `assertPublishFlagsConsistent`.
+ * Exported for unit testing.
+ */
+export function assertTagRequiresPlayground(opts: {
+    tag?: string;
+    playground?: boolean;
+}): void {
+    if (opts.tag && opts.playground !== true) {
+        throw new Error("--tag requires --playground (no metadata is published without it).");
+    }
 }
 
 export const decentralizeCommand = new Command("decentralize")
@@ -88,6 +105,12 @@ export const decentralizeCommand = new Command("decentralize")
         "After upload, also publish a minimal AppInfo entry to the playground registry " +
             "(visible in the playground-app's Apps tab). Off by default.",
     )
+    .addOption(
+        new Option(
+            "--tag <tag>",
+            "Tag the published app so people can filter for it in the playground. Requires --playground.",
+        ).choices([...PLAYGROUND_TAGS]),
+    )
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
@@ -108,6 +131,8 @@ async function runHeadless({
     env: Env;
     opts: DecentralizeOpts;
 }): Promise<void> {
+    assertTagRequiresPlayground(opts);
+
     let signer: ResolvedSigner | null = null;
 
     try {
@@ -139,6 +164,7 @@ async function runHeadless({
             mode,
             userSigner: signer,
             publishToPlayground: opts.playground === true,
+            tag: opts.tag ?? null,
             env,
             onEvent: (ev) => {
                 switch (ev.kind) {
@@ -244,6 +270,7 @@ async function runInteractive({
                     explicitSigner: preflight.explicitSigner,
                     sessionSigner: preflight.sessionSigner,
                     initialPublishToPlayground: opts.playground === true ? true : null,
+                    initialTag: opts.tag,
                     onDone: (result) => {
                         if (settled) return;
                         settled = true;
