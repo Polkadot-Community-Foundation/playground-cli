@@ -119,6 +119,12 @@ export interface RunDecentralizeOptions {
      * GitHub) and `isModdable` is forced to false.
      */
     publishToPlayground?: boolean;
+    /**
+     * Single playground category tag for the listing. `null`/omitted publishes
+     * untagged. Only consulted when `publishToPlayground` is true. Mirrors
+     * deploy's `--tag`; values come from `PLAYGROUND_TAGS`.
+     */
+    tag?: string | null;
     env: Env;
     onEvent?: (event: DecentralizeLogEvent) => void;
 }
@@ -277,6 +283,7 @@ export async function runDecentralize(
                 // Mirrored sites have no git source — `repository` is omitted
                 // from the metadata JSON and `is_moddable` is forced false.
                 repositoryUrl: null,
+                tag: options.tag ?? null,
                 env,
                 isPrivate: false,
                 isModdable: false,

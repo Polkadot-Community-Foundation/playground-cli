@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { COLOR, GLYPH, LAYOUT } from "./tokens.js";
 
@@ -28,11 +28,27 @@ export interface SelectProps<T> {
     options: SelectOption<T>[];
     initialIndex?: number;
     onSelect: (value: T) => void;
+    /** Fires with the highlighted value on mount and whenever the cursor moves
+        (before Enter confirms). Lets callers reveal context for the focused option. */
+    onHighlight?: (value: T) => void;
 }
 
 /** Keyboard picker: ↑/↓ move, Enter confirms. Replaces the ad-hoc SignerPrompt / YesNoPrompt shapes. */
-export function Select<T>({ label, options, initialIndex = 0, onSelect }: SelectProps<T>) {
+export function Select<T>({
+    label,
+    options,
+    initialIndex = 0,
+    onSelect,
+    onHighlight,
+}: SelectProps<T>) {
     const [index, setIndex] = useState(Math.min(Math.max(initialIndex, 0), options.length - 1));
+
+    useEffect(() => {
+        onHighlight?.(options[index].value);
+        // Re-fire only when the highlighted index changes; options/onHighlight
+        // are stable for the lifetime of a given prompt.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [index]);
 
     useInput((_input, key) => {
         if (key.upArrow || key.leftArrow) {

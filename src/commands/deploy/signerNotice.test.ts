@@ -19,6 +19,8 @@ import {
     NO_SESSION_NOTICE_BODY,
     DEV_SIGNER_NO_XP_TITLE,
     DEV_SIGNER_NO_XP_BODY,
+    deploySignerOptions,
+    shouldShowDevNoXpWarning,
 } from "./signerNotice.js";
 
 describe("dev-signer XP notice", () => {
@@ -47,5 +49,34 @@ describe("dev-signer XP notice", () => {
         })) {
             expect(text, name).not.toContain("—");
         }
+    });
+});
+
+describe("deploySignerOptions", () => {
+    it("leads with the phone signer (the default cursor position) when logged in", () => {
+        const opts = deploySignerOptions(true);
+        expect(opts.map((o) => o.value)).toEqual(["phone", "dev"]);
+        // The default cursor is index 0, so it lands on the phone signer.
+        expect(opts[0].value).toBe("phone");
+    });
+
+    it("offers only the dev signer when there is no session", () => {
+        const opts = deploySignerOptions(false);
+        expect(opts.map((o) => o.value)).toEqual(["dev"]);
+    });
+});
+
+describe("shouldShowDevNoXpWarning", () => {
+    it("shows only while the dev option is highlighted with a session present", () => {
+        expect(shouldShowDevNoXpWarning(true, "dev")).toBe(true);
+    });
+
+    it("hides on the phone option (the user moved back off the dev signer)", () => {
+        expect(shouldShowDevNoXpWarning(true, "phone")).toBe(false);
+    });
+
+    it("never shows without a session (no phone alternative to switch to)", () => {
+        expect(shouldShowDevNoXpWarning(false, "dev")).toBe(false);
+        expect(shouldShowDevNoXpWarning(false, "phone")).toBe(false);
     });
 });

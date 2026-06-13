@@ -31,6 +31,7 @@ export type Stage =
     | { kind: "prompt-domain" }
     | { kind: "validate-domain"; raw: string }
     | { kind: "prompt-publish" }
+    | { kind: "prompt-tags" }
     | { kind: "confirm" }
     | { kind: "running" }
     | { kind: "done"; outcome: DecentralizeOutcome }
@@ -55,13 +56,22 @@ export interface PickStageInput {
      * `--playground` so the prompt is skipped.
      */
     publishToPlayground: boolean | null;
+    /**
+     * Category tag for the playground listing (tri-state, mirroring deploy):
+     * `undefined` ⇒ not asked yet (the tag prompt runs when publishing);
+     * `null` ⇒ explicitly skipped (untagged); a string ⇒ a chosen tag. Pre-set
+     * to a string when `--tag` was passed so the prompt is skipped. Only
+     * consulted when publishing — omitted entirely when not.
+     */
+    tag?: string | null;
 }
 
 /**
  * Decide which prompt stage to show next given the inputs collected so far.
- * URL → signer → domain → validate-domain → publish? → confirm. Each missing
- * piece surfaces its prompt; once everything is filled the `confirm` stage
- * gates the actual run.
+ * URL → signer → domain → validate-domain → publish? → tag? → confirm. Each
+ * missing piece surfaces its prompt; once everything is filled the `confirm`
+ * stage gates the actual run. The tag prompt only runs when publishing and no
+ * `--tag` pre-filled it (mirroring deploy).
  *
  * `domainRaw` exists so the screen can distinguish "user hasn't been
  * asked yet" from "user typed input but validation hasn't finished".
@@ -74,6 +84,9 @@ export function pickNextStage(input: PickStageInput): Stage {
         return { kind: "validate-domain", raw: input.domainRaw };
     }
     if (input.publishToPlayground === null) return { kind: "prompt-publish" };
+    // Tag is the last publish-only choice: asked only when publishing and no
+    // `--tag` flag already set it (`undefined` = not asked yet).
+    if (input.publishToPlayground && input.tag === undefined) return { kind: "prompt-tags" };
     return { kind: "confirm" };
 }
 

@@ -25,6 +25,7 @@ import {
     Section,
     Hint,
     Callout,
+    PromptInfo,
     PhoneApprovalCallout,
     Sparkline,
     Select,
@@ -69,6 +70,8 @@ import {
     NO_SESSION_NOTICE_BODY,
     DEV_SIGNER_NO_XP_TITLE,
     DEV_SIGNER_NO_XP_BODY,
+    deploySignerOptions,
+    shouldShowDevNoXpWarning,
 } from "./signerNotice.js";
 import {
     BUILD_HELP,
@@ -80,7 +83,6 @@ import {
     DOMAIN_HELP,
     BUILD_DIR_HINT,
     DOMAIN_HINT,
-    type PromptBox,
 } from "./promptHelp.js";
 import { ContractPipelineStatusAdapter } from "../contractPipelineStatus.js";
 import { ContractDeployStatusView, precomputeContractDeployDisplay } from "../contractDeployUi.js";
@@ -150,14 +152,6 @@ interface Resolved {
  * `promptHelp.ts`. The `accent` tone marks it as informational (distinct from
  * the yellow `warning` notices).
  */
-function PromptInfo({ box }: { box: PromptBox }) {
-    return (
-        <Callout tone="accent" title={box.title}>
-            <Text>{box.body}</Text>
-        </Callout>
-    );
-}
-
 /** One-line dim hint above a trivial text input (domain, build directory). */
 function PromptHint({ text }: { text: string }) {
     return (
@@ -191,6 +185,11 @@ export function DeployScreen({
         !hasSession && initialMode === "phone" ? null : initialMode;
     const effectiveInitialSkipBuild = initialDeployContracts === true ? false : initialSkipBuild;
     const [mode, setMode] = useState<SignerMode | null>(effectiveInitialMode);
+    // Which signer option the cursor is currently on in the prompt-signer Select.
+    // Drives the "dev signer earns no XP" warning, which only matters while the
+    // dev option is highlighted. Defaults to "phone" (the top, default-cursor
+    // option when a session exists) so the warning starts hidden.
+    const [highlightedSigner, setHighlightedSigner] = useState<SignerMode>("phone");
     const [deployContracts, setDeployContracts] = useState<boolean | null>(initialDeployContracts);
     const [buildDir, setBuildDir] = useState<string | null>(initialBuildDir);
     const [domain, setDomain] = useState<string | null>(initialDomain);
@@ -335,42 +334,24 @@ export function DeployScreen({
                         </Callout>
                     )}
                     <PromptInfo box={SIGNER_HELP} />
-                    {/* Deliberately placed just above the Select (the decision
-                        point), after the neutral SIGNER_HELP info box, so the
-                        "no XP" trade-off is the last thing read before picking.
-                        Only shown with a session, when the phone alternative
-                        actually exists. */}
-                    {hasSession && (
-                        <Callout tone="warning" title={DEV_SIGNER_NO_XP_TITLE}>
-                            <Text>{DEV_SIGNER_NO_XP_BODY}</Text>
-                        </Callout>
-                    )}
                     <Select<SignerMode>
                         label="who signs the upload?"
-                        options={[
-                            {
-                                value: "dev" as SignerMode,
-                                label: "dev signer",
-                                hint: "fast, no phone needed",
-                            },
-                            // The phone signer is only offered with a paired
-                            // session; otherwise the notice above explains how
-                            // to enable it.
-                            ...(hasSession
-                                ? [
-                                      {
-                                          value: "phone" as SignerMode,
-                                          label: "your phone signer",
-                                          hint: "signs with your own account",
-                                      },
-                                  ]
-                                : []),
-                        ]}
+                        options={deploySignerOptions(hasSession)}
+                        onHighlight={setHighlightedSigner}
                         onSelect={(m) => {
                             setMode(m);
                             advance(skipBuild, m);
                         }}
                     />
+                    {/* Placed below the options (mirroring the phone-approval
+                        notices) so the "no XP" trade-off appears right as the
+                        cursor lands on the dev signer and disappears again when
+                        the user moves back to the phone signer. */}
+                    {shouldShowDevNoXpWarning(hasSession, highlightedSigner) && (
+                        <Callout tone="warning" title={DEV_SIGNER_NO_XP_TITLE}>
+                            <Text>{DEV_SIGNER_NO_XP_BODY}</Text>
+                        </Callout>
+                    )}
                 </Box>
             )}
 

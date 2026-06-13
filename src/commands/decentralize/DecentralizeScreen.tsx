@@ -27,16 +27,24 @@ import {
     Hint,
     Input,
     type MarkKind,
+    PromptInfo,
     Row,
     Section,
     Select,
-    type SelectOption,
 } from "../../utils/ui/theme/index.js";
 import { PhoneApprovalCallout } from "../../utils/ui/theme/PhoneApprovalCallout.js";
 import { getNetworkLabel, type Env } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
 import { createDevPublishSigner, type SignerMode } from "../../utils/deploy/signerMode.js";
+import {
+    DEV_SIGNER_NO_XP_TITLE,
+    DEV_SIGNER_NO_XP_BODY,
+    shouldShowDevNoXpWarning,
+} from "../deploy/signerNotice.js";
+import { SIGNER_HELP, DOMAIN_HELP, PUBLISH_HELP, TAGS_HELP } from "../deploy/promptHelp.js";
+import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
+import { decentralizeSignerOptions, decentralizeSignerInitialIndex } from "./signerPrompt.js";
 import type { SigningEvent } from "../../utils/deploy/signingProxy.js";
 import { resolveDomain } from "../../utils/decentralize/domain.js";
 import { FREE_DOMAIN_SUFFIX_NOTE } from "../../utils/decentralize/randomName.js";
@@ -72,6 +80,11 @@ export interface DecentralizeScreenProps {
      * publish prompt is shown.
      */
     initialPublishToPlayground: boolean | null;
+    /**
+     * Pre-set to the `--tag` value when passed (skips the tag prompt).
+     * `undefined` means the tag prompt is shown when publishing.
+     */
+    initialTag?: string;
     onDone: (result: DecentralizeResult) => void;
 }
 
@@ -82,11 +95,18 @@ export function DecentralizeScreen({
     explicitSigner,
     sessionSigner,
     initialPublishToPlayground,
+    initialTag,
     onDone,
 }: DecentralizeScreenProps) {
     const [siteUrl, setSiteUrl] = useState<string | null>(initialSiteUrl);
     // If --suri was passed, the user has effectively pre-chosen dev.
     const [signerMode, setSignerMode] = useState<SignerMode | null>(explicitSigner ? "dev" : null);
+    // Which signer option the cursor is on in the prompt-signer Select. Drives
+    // the "dev signer earns no XP" warning (shown only while dev is highlighted
+    // and a session exists). Initialised to match the default cursor position.
+    const [highlightedSigner, setHighlightedSigner] = useState<SignerMode>(
+        sessionSigner ? "phone" : "dev",
+    );
     const [domainRaw, setDomainRaw] = useState<string | null>(initialDot);
     const [domainLabel, setDomainLabel] = useState<string | null>(null);
     const [fullDomain, setFullDomain] = useState<string | null>(null);
@@ -97,6 +117,9 @@ export function DecentralizeScreen({
     const [publishToPlayground, setPublishToPlayground] = useState<boolean | null>(
         initialPublishToPlayground,
     );
+    // Category tag (tri-state, mirroring deploy): `undefined` = not asked yet,
+    // `null` = explicitly skipped, a string = chosen. Pre-filled from `--tag`.
+    const [tag, setTag] = useState<string | null | undefined>(initialTag);
 
     const [stage, setStage] = useState<Stage>(() =>
         pickNextStage({
@@ -105,6 +128,7 @@ export function DecentralizeScreen({
             domainLabel: null,
             domainRaw: initialDot,
             publishToPlayground: initialPublishToPlayground,
+            tag: initialTag,
         }),
     );
 
@@ -115,6 +139,7 @@ export function DecentralizeScreen({
             domainLabel: string | null;
             domainRaw: string | null;
             publishToPlayground: boolean | null;
+            tag: string | null;
         }> = {},
     ) => {
         setStage(
@@ -127,6 +152,9 @@ export function DecentralizeScreen({
                     next.publishToPlayground !== undefined
                         ? next.publishToPlayground
                         : publishToPlayground,
+                // `undefined` is a meaningful tag value ("not asked"), so detect
+                // presence with `in` rather than the `!== undefined` sentinel.
+                tag: "tag" in next ? next.tag : tag,
             }),
         );
     };
@@ -154,7 +182,7 @@ export function DecentralizeScreen({
 
             {stage.kind === "prompt-url" && (
                 <>
-                    <Callout tone="warning" title="About This Command">
+                    <Callout tone="accent" title="About This Command">
                         <Text>
                             Mirrors a live static site (https URL) and republishes it as a .dot
                             site. Large sites can take several minutes to download — press Ctrl+C
@@ -174,37 +202,54 @@ export function DecentralizeScreen({
             )}
 
             {stage.kind === "prompt-signer" && (
-                <Select<SignerMode>
-                    label="signer"
-                    options={signerOptions(sessionSigner)}
-                    onSelect={(mode) => {
-                        if (mode === "phone" && !sessionSigner) {
-                            setStage({
-                                kind: "error",
-                                message:
-                                    'No session found — run "playground login" to log in, then re-run, or pick the dev signer.',
-                            });
-                            return;
-                        }
-                        setSignerMode(mode);
-                        advance({ signerMode: mode });
-                    }}
-                />
+                <Box flexDirection="column">
+                    <PromptInfo box={SIGNER_HELP} />
+                    <Select<SignerMode>
+                        label="signer"
+                        options={decentralizeSignerOptions(sessionSigner != null)}
+                        initialIndex={decentralizeSignerInitialIndex(sessionSigner != null)}
+                        onHighlight={setHighlightedSigner}
+                        onSelect={(mode) => {
+                            if (mode === "phone" && !sessionSigner) {
+                                setStage({
+                                    kind: "error",
+                                    message:
+                                        'No session found — run "playground login" to log in, then re-run, or pick the dev signer.',
+                                });
+                                return;
+                            }
+                            setSignerMode(mode);
+                            advance({ signerMode: mode });
+                        }}
+                    />
+                    {/* Below the options (mirroring the phone-approval notices)
+                        and only while the dev option is highlighted with a
+                        session present, so the "no XP" trade-off shows exactly
+                        when the user is about to pick the dev signer. */}
+                    {shouldShowDevNoXpWarning(sessionSigner != null, highlightedSigner) && (
+                        <Callout tone="warning" title={DEV_SIGNER_NO_XP_TITLE}>
+                            <Text>{DEV_SIGNER_NO_XP_BODY}</Text>
+                        </Callout>
+                    )}
+                </Box>
             )}
 
             {stage.kind === "prompt-domain" && (
-                <Input
-                    label="domain"
-                    placeholder="leave blank to auto-generate from the URL"
-                    prefill={domainRaw ?? ""}
-                    externalError={domainError}
-                    validate={validateDomainInput}
-                    onSubmit={(value) => {
-                        setDomainError(null);
-                        setDomainRaw(value);
-                        advance({ domainRaw: value });
-                    }}
-                />
+                <Box flexDirection="column">
+                    <PromptInfo box={DOMAIN_HELP} />
+                    <Input
+                        label="domain"
+                        placeholder="leave blank to auto-generate from the URL"
+                        prefill={domainRaw ?? ""}
+                        externalError={domainError}
+                        validate={validateDomainInput}
+                        onSubmit={(value) => {
+                            setDomainError(null);
+                            setDomainRaw(value);
+                            advance({ domainRaw: value });
+                        }}
+                    />
+                </Box>
             )}
 
             {stage.kind === "validate-domain" && (
@@ -235,25 +280,49 @@ export function DecentralizeScreen({
             )}
 
             {stage.kind === "prompt-publish" && (
-                <Select<boolean>
-                    label="publish to the playground registry?"
-                    options={[
-                        {
-                            value: false,
-                            label: "no",
-                            hint: "just register the .dot name (DotNS only)",
-                        },
-                        {
-                            value: true,
-                            label: "yes",
-                            hint: "list the mirrored site in the playground apps tab",
-                        },
-                    ]}
-                    onSelect={(choice) => {
-                        setPublishToPlayground(choice);
-                        advance({ publishToPlayground: choice });
-                    }}
-                />
+                <Box flexDirection="column">
+                    <PromptInfo box={PUBLISH_HELP} />
+                    <Select<boolean>
+                        label="publish to the playground registry?"
+                        options={[
+                            {
+                                value: true,
+                                label: "yes",
+                                hint: "list the mirrored site in the playground apps tab",
+                            },
+                            {
+                                value: false,
+                                label: "no",
+                                hint: "just register the .dot name (DotNS only)",
+                            },
+                        ]}
+                        initialIndex={0}
+                        onSelect={(choice) => {
+                            setPublishToPlayground(choice);
+                            advance({ publishToPlayground: choice });
+                        }}
+                    />
+                </Box>
+            )}
+
+            {stage.kind === "prompt-tags" && (
+                <Box flexDirection="column">
+                    <PromptInfo box={TAGS_HELP} />
+                    <Select<string | null>
+                        label="tag this app?"
+                        options={[
+                            ...PLAYGROUND_TAGS.map((t) => ({
+                                value: t as string | null,
+                                label: t,
+                            })),
+                            { value: null, label: "skip", hint: "publish without a tag" },
+                        ]}
+                        onSelect={(t) => {
+                            setTag(t);
+                            advance({ tag: t });
+                        }}
+                    />
+                </Box>
             )}
 
             {stage.kind === "confirm" && (
@@ -265,6 +334,7 @@ export function DecentralizeScreen({
                     signer={activeSigner!}
                     signerMode={signerMode!}
                     publishToPlayground={publishToPlayground === true}
+                    tag={publishToPlayground === true ? (tag ?? null) : null}
                     onConfirm={() => setStage({ kind: "running" })}
                     onCancel={() => onDone({ kind: "cancel" })}
                 />
@@ -278,6 +348,7 @@ export function DecentralizeScreen({
                     mode={signerMode!}
                     userSigner={explicitSigner ?? sessionSigner}
                     publishToPlayground={publishToPlayground === true}
+                    tag={publishToPlayground === true ? (tag ?? null) : null}
                     env={env}
                     onComplete={(outcome) => setStage({ kind: "done", outcome })}
                     onFailed={(message) => setStage({ kind: "error", message })}
@@ -299,23 +370,6 @@ export function DecentralizeScreen({
             )}
         </Box>
     );
-}
-
-function signerOptions(sessionSigner: ResolvedSigner | null): SelectOption<SignerMode>[] {
-    return [
-        {
-            value: "dev",
-            label: "dev signer",
-            hint: "fast, signs locally with the polkadot-app-deploy default account",
-        },
-        {
-            value: "phone",
-            label: "your phone signer",
-            hint: sessionSigner
-                ? "signed with your logged-in account"
-                : "requires `playground login` first",
-        },
-    ];
 }
 
 // ── Validate-domain stage ────────────────────────────────────────────────────
@@ -390,6 +444,7 @@ function ConfirmStage({
     signer,
     signerMode,
     publishToPlayground,
+    tag,
     onConfirm,
     onCancel,
 }: {
@@ -400,6 +455,7 @@ function ConfirmStage({
     signer: ResolvedSigner;
     signerMode: SignerMode;
     publishToPlayground: boolean;
+    tag: string | null;
     onConfirm: () => void;
     onCancel: () => void;
 }) {
@@ -418,6 +474,12 @@ function ConfirmStage({
                     value={publishToPlayground ? "publish to apps tab" : "skip"}
                     tone={publishToPlayground ? "accent" : "muted"}
                 />
+                {/* Surface the chosen tag before the irreversible publish, like
+                    deploy's confirm summary. Only shown when publishing — the
+                    tag is otherwise irrelevant. */}
+                {publishToPlayground && (
+                    <Row label="tag" value={tag ?? "none"} tone={tag ? "accent" : "muted"} />
+                )}
                 {availabilityNote && <Row label="note" value={availabilityNote} tone="warning" />}
             </Section>
             {autoGenerated && <Hint indent={2}>{FREE_DOMAIN_SUFFIX_NOTE}</Hint>}
@@ -461,6 +523,7 @@ function RunningStage({
     mode,
     userSigner,
     publishToPlayground,
+    tag,
     env,
     onComplete,
     onFailed,
@@ -471,6 +534,7 @@ function RunningStage({
     mode: SignerMode;
     userSigner: ResolvedSigner | null;
     publishToPlayground: boolean;
+    tag: string | null;
     env: Env;
     onComplete: (outcome: DecentralizeOutcome) => void;
     onFailed: (message: string) => void;
@@ -516,6 +580,7 @@ function RunningStage({
                     mode,
                     userSigner,
                     publishToPlayground,
+                    tag,
                     env,
                     onEvent: (event) => {
                         switch (event.kind) {
