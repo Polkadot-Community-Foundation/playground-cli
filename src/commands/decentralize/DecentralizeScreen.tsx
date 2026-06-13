@@ -392,8 +392,9 @@ export function DecentralizeScreen({
                     {sourceKind === "path" && (
                         <Callout tone="accent" title="Your app detail page">
                             <Text>
-                                If you publish, the README.md in your directory becomes your app's
-                                detail page on the playground. Make sure it's up to date.
+                                If you publish, your project's README.md becomes your app's detail
+                                page on the playground (found at your repo root, even when --path is
+                                a build dir like ./dist). Make sure it's up to date.
                             </Text>
                         </Callout>
                     )}

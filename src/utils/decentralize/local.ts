@@ -24,8 +24,8 @@
  * surface RevX consumes from a WebContainer.
  */
 
-import { statSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { countFiles, findIndexHtmlRoot } from "./mirror.js";
 
 export class InvalidLocalPathError extends Error {
@@ -73,4 +73,31 @@ export function prepareLocalDirectory(path: string): LocalSiteResult {
     }
 
     return { uploadRoot, fileCount: countFiles(uploadRoot) };
+}
+
+/**
+ * Walk up from `startDir` to the enclosing git repository root (the first
+ * ancestor — or `startDir` itself — containing a `.git` entry). Falls back to
+ * the resolved `startDir` when no `.git` is found.
+ *
+ * `--path` typically points at a build output (`./dist`) whose README.md lives
+ * at the project root, not in the build dir. Resolving the repo root here lets
+ * `publishToPlayground` inline the project's README as the app detail page —
+ * the same anchor the moddable preflight walks up to for the git origin
+ * (`git remote get-url origin` resolves from any subdirectory), so README and
+ * `repository` metadata stay consistent. Matches `deploy`, which passes its
+ * project root (not the build dir) as the README `cwd`.
+ *
+ * `.git` is matched by existence, not type, so linked worktrees (where `.git`
+ * is a file, not a directory) resolve correctly.
+ */
+export function findProjectRoot(startDir: string): string {
+    const root = resolve(startDir);
+    let dir = root;
+    for (;;) {
+        if (existsSync(join(dir, ".git"))) return dir;
+        const parent = dirname(dir);
+        if (parent === dir) return root; // reached the filesystem root, no repo
+        dir = parent;
+    }
 }

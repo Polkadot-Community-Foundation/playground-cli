@@ -22,6 +22,7 @@ const {
     runStorageDeployMock,
     mirrorSiteMock,
     prepareLocalDirectoryMock,
+    findProjectRootMock,
     ensureSlotAccountSignerMock,
     publishToPlaygroundMock,
 } = vi.hoisted(() => ({
@@ -49,6 +50,9 @@ const {
         uploadRoot: "/tmp/playground-cli-test-local-does-not-exist",
         fileCount: 5,
     })),
+    // Stand-in repo root: the runner walks up from the typed --path to the
+    // enclosing git repo so the project README (not the build dir) is inlined.
+    findProjectRootMock: vi.fn((dir: string) => `${dir}/__repo_root__`),
     ensureSlotAccountSignerMock: vi.fn(),
     publishToPlaygroundMock: vi.fn<(arg: unknown) => Promise<{ metadataCid: string }>>(
         async () => ({ metadataCid: "bafymeta" }),
@@ -58,7 +62,10 @@ const {
 vi.mock("../deploy/storage.js", () => ({ runStorageDeploy: runStorageDeployMock }));
 vi.mock("../deploy/playground.js", () => ({ publishToPlayground: publishToPlaygroundMock }));
 vi.mock("./mirror.js", () => ({ mirrorSite: mirrorSiteMock }));
-vi.mock("./local.js", () => ({ prepareLocalDirectory: prepareLocalDirectoryMock }));
+vi.mock("./local.js", () => ({
+    prepareLocalDirectory: prepareLocalDirectoryMock,
+    findProjectRoot: findProjectRootMock,
+}));
 vi.mock("@parity/product-sdk-terminal/host", () => ({
     createSlotAccountSigner: vi.fn(),
     ensureSlotAccountSigner: ensureSlotAccountSignerMock,
@@ -244,9 +251,11 @@ describe("runDecentralize — playground publish metadata", () => {
         const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
         expect(arg.repositoryUrl).toBe("https://github.com/acme/site");
         expect(arg.isModdable).toBe(true);
-        // The typed --path directory is the project root — publishToPlayground
-        // inlines its README.md as the app's playground detail page.
-        expect(arg.cwd).toBe("./dist");
+        // cwd is the resolved git repo root (walked up from the typed --path),
+        // not the build dir — publishToPlayground inlines the *project* README
+        // as the app's detail page, matching how the moddable origin resolves.
+        expect(findProjectRootMock).toHaveBeenCalledWith("./dist");
+        expect(arg.cwd).toBe("./dist/__repo_root__");
         expect(outcome.metadataCid).toBe("bafymeta");
     });
 
@@ -264,7 +273,7 @@ describe("runDecentralize — playground publish metadata", () => {
         const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
         expect(arg.repositoryUrl).toBeNull();
         expect(arg.isModdable).toBe(false);
-        expect(arg.cwd).toBe("./dist");
+        expect(arg.cwd).toBe("./dist/__repo_root__");
     });
 
     it("url source records no repository, no moddable bit, and no project root", async () => {

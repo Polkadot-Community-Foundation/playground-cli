@@ -13,11 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { InvalidLocalPathError, prepareLocalDirectory } from "./local.js";
+import { findProjectRoot, InvalidLocalPathError, prepareLocalDirectory } from "./local.js";
 
 describe("prepareLocalDirectory", () => {
     const tempDirs: string[] = [];
@@ -96,5 +96,52 @@ describe("prepareLocalDirectory", () => {
         } finally {
             process.chdir(previousCwd);
         }
+    });
+});
+
+describe("findProjectRoot", () => {
+    const tempDirs: string[] = [];
+
+    function makeTempDir(): string {
+        // realpathSync collapses the macOS /var → /private/var symlink so the
+        // returned root matches `findProjectRoot`'s `resolve()`-based output.
+        const dir = realpathSync(mkdtempSync(join(tmpdir(), "dot-projroot-test-")));
+        tempDirs.push(dir);
+        return dir;
+    }
+
+    afterEach(() => {
+        for (const dir of tempDirs.splice(0)) {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("returns the directory itself when it contains a .git", () => {
+        const dir = makeTempDir();
+        mkdirSync(join(dir, ".git"));
+        expect(findProjectRoot(dir)).toBe(dir);
+    });
+
+    it("walks up to the repo root from a build subdirectory (e.g. ./dist)", () => {
+        // The common case: --path points at the build output, the README and
+        // .git live one level up at the project root.
+        const root = makeTempDir();
+        mkdirSync(join(root, ".git"));
+        const dist = join(root, "dist");
+        mkdirSync(dist);
+        expect(findProjectRoot(dist)).toBe(root);
+    });
+
+    it("treats a .git FILE (linked worktree) as a repo root", () => {
+        const dir = makeTempDir();
+        writeFileSync(join(dir, ".git"), "gitdir: /elsewhere/.git/worktrees/x");
+        expect(findProjectRoot(dir)).toBe(dir);
+    });
+
+    it("falls back to the resolved directory when no .git ancestor exists", () => {
+        const dir = makeTempDir();
+        const nested = join(dir, "a", "b");
+        mkdirSync(nested, { recursive: true });
+        expect(findProjectRoot(nested)).toBe(nested);
     });
 });

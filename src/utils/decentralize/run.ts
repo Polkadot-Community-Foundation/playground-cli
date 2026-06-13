@@ -48,7 +48,7 @@ import {
 } from "../deploy/signingProxy.js";
 import { runStorageDeploy } from "../deploy/storage.js";
 import type { ResolvedSigner } from "../signer.js";
-import { prepareLocalDirectory } from "./local.js";
+import { findProjectRoot, prepareLocalDirectory } from "./local.js";
 import { mirrorSite } from "./mirror.js";
 
 /**
@@ -324,9 +324,12 @@ export async function runDecentralize(
                 repositoryUrl,
                 tag: options.tag ?? null,
                 // Path sources have a real project root — its README.md (if
-                // any) becomes the app's playground detail page. URL sources
-                // upload a temp mirror with no project root.
-                cwd: source.kind === "path" ? source.directory : undefined,
+                // any) becomes the app's playground detail page. Resolve the
+                // repo root from the typed dir (which is usually a build output
+                // like ./dist whose README sits one level up), so the README
+                // and the moddable `repository` metadata share one anchor. URL
+                // sources upload a temp mirror with no project root.
+                cwd: source.kind === "path" ? findProjectRoot(source.directory) : undefined,
                 env,
                 isPrivate: false,
                 isModdable: repositoryUrl !== null,
