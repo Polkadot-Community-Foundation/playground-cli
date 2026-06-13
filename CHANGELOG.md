@@ -1,5 +1,13 @@
 # playground-cli
 
+## 0.38.0
+
+### Minor Changes
+
+- 116964a: `playground decentralize --path` can now publish moddable apps: the interactive flow asks "let others remix (mod) this app?" when publishing a local directory to the playground (with the same git-origin preflight and recovery menu as `playground deploy`), and headless mode accepts a `--moddable` flag. Publishing a local directory also inlines the project's README.md as the app's playground detail page — resolved from the enclosing git repo root, so it's found even when `--path` points at a build dir like `./dist` (the same anchor the moddable git-origin preflight walks up to) — and the TUI now says so up front at the publish prompt. Mirrored URL sites are unchanged (no git source — never moddable, no README).
+- 7319eb6: Interactive `playground decentralize` can now deploy a local directory: a new first prompt asks whether to mirror a live URL or upload an already-built static site (e.g. `./dist`), then both flows share the same signer/domain/publish steps. The confirm screen shows the resolved upload root and file count for local directories.
+- 78b8fee: `playground decentralize --path <dir>` deploys a local static directory (e.g. `./dist`) to Bulletin + DotNS without mirroring a URL. Mutually exclusive with `--site`; auto-generated `.dot` names derive from the directory basename.
+
 ## 0.37.2
 
 ### Patch Changes
