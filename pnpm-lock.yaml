@@ -11,7 +11,7 @@ overrides:
 
 patchedDependencies:
   '@novasamatech/sdk-statement@0.6.0': 8c3ebcafda8bbcab4b31fddc74f035a5a1724c0f72eac32a0b46f51a5771e334
-  '@novasamatech/statement-store@0.8.7': 358590dbf3a34d270ca50463bb1a5c5ea665c539c70806c05f4daac390436fd3
+  '@novasamatech/statement-store@0.8.7': 214e0c2859afdec395fa98c68c3e5a05e01f2a4ddca8164b8f780b22cccded8d
 
 importers:
 
@@ -6137,7 +6137,7 @@ snapshots:
       '@noble/hashes': 2.2.0
       '@novasamatech/host-api': 0.8.7
       '@novasamatech/scale': 0.8.7
-      '@novasamatech/statement-store': 0.8.7(patch_hash=358590dbf3a34d270ca50463bb1a5c5ea665c539c70806c05f4daac390436fd3)(esbuild@0.27.7)(rxjs@7.8.2)
+      '@novasamatech/statement-store': 0.8.7(patch_hash=214e0c2859afdec395fa98c68c3e5a05e01f2a4ddca8164b8f780b22cccded8d)(esbuild@0.27.7)(rxjs@7.8.2)
       '@novasamatech/storage-adapter': 0.8.7
       '@polkadot-api/utils': 0.4.0
       '@polkadot-labs/hdkd-helpers': 0.0.30
@@ -6170,7 +6170,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@novasamatech/statement-store@0.8.7(patch_hash=358590dbf3a34d270ca50463bb1a5c5ea665c539c70806c05f4daac390436fd3)(esbuild@0.27.7)(rxjs@7.8.2)':
+  '@novasamatech/statement-store@0.8.7(patch_hash=214e0c2859afdec395fa98c68c3e5a05e01f2a4ddca8164b8f780b22cccded8d)(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
       '@noble/ciphers': 2.2.0
       '@noble/hashes': 2.2.0
@@ -6929,7 +6929,7 @@ snapshots:
       '@noble/curves': 2.2.0
       '@noble/hashes': 2.2.0
       '@novasamatech/host-papp': 0.8.7(esbuild@0.27.7)
-      '@novasamatech/statement-store': 0.8.7(patch_hash=358590dbf3a34d270ca50463bb1a5c5ea665c539c70806c05f4daac390436fd3)(esbuild@0.27.7)(rxjs@7.8.2)
+      '@novasamatech/statement-store': 0.8.7(patch_hash=214e0c2859afdec395fa98c68c3e5a05e01f2a4ddca8164b8f780b22cccded8d)(esbuild@0.27.7)(rxjs@7.8.2)
       '@novasamatech/storage-adapter': 0.8.7
       '@parity/product-sdk-logger': 0.1.1
       '@polkadot-api/substrate-bindings': 0.20.3
@@ -6954,7 +6954,7 @@ snapshots:
       '@noble/curves': 2.2.0
       '@noble/hashes': 2.2.0
       '@novasamatech/host-papp': 0.8.7(esbuild@0.27.7)
-      '@novasamatech/statement-store': 0.8.7(patch_hash=358590dbf3a34d270ca50463bb1a5c5ea665c539c70806c05f4daac390436fd3)(esbuild@0.27.7)(rxjs@7.8.2)
+      '@novasamatech/statement-store': 0.8.7(patch_hash=214e0c2859afdec395fa98c68c3e5a05e01f2a4ddca8164b8f780b22cccded8d)(esbuild@0.27.7)(rxjs@7.8.2)
       '@novasamatech/storage-adapter': 0.8.7
       '@parity/product-sdk-logger': 0.1.1
       '@polkadot-api/substrate-bindings': 0.20.3

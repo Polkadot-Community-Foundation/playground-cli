@@ -21,6 +21,7 @@ import { IdentityLines } from "./IdentityLines.js";
 import { QrLogin } from "./QrLogin.js";
 import { AccountSetup } from "./AccountSetup.js";
 import { UsernamePrompt } from "./UsernamePrompt.js";
+import { NextSteps } from "./NextStepsCallout.js";
 import { computeAllDone } from "./completion.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
@@ -120,6 +121,8 @@ export function LoginScreen({
                     />
                 </Section>
             )}
+
+            {allDone && <NextSteps />}
         </Box>
     );
 }

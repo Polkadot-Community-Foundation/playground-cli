@@ -1,21 +1,30 @@
 diff --git a/dist/adapter/rpc.js b/dist/adapter/rpc.js
-index b6574289d0b6300e1d54a686bc747e0487635920..f212b2ca5c88c83c45d3cfd3590f98068b736cf5 100644
+index b6574289d0b6300e1d54a686bc747e0487635920..7c937441d90b7ec9a921874368db6f74e742b9b3 100644
 --- a/dist/adapter/rpc.js
 +++ b/dist/adapter/rpc.js
-@@ -69,6 +69,17 @@ export function createPapiStatementStoreAdapter(lazyClient) {
+@@ -69,6 +69,26 @@ export function createPapiStatementStoreAdapter(lazyClient) {
                          setTimeout(flush, 0);
                      }
                  }, error => {
-+                    // PATCH(playground-cli): a DestroyedError here is the
-+                    // expected artifact of destroying the websocket client
-+                    // while subscriptions are live — not a real subscription
-+                    // failure. Logging it prints a scary stack right after
-+                    // successful commands. Real errors still log. The match
-+                    // mirrors process-guard's isBenignUnsubscriptionError
-+                    // (name AND message) so the two filters stay consistent.
-+                    // Remove when upstream gates its logging.
++                    // PATCH(playground-cli): a DestroyedError, or a bare
++                    // Error("Not connected"), here is the expected artifact of
++                    // destroying the websocket client while subscriptions are
++                    // live, not a real subscription failure. Logging it prints
++                    // a scary stack right after successful commands (observed on
++                    // `pg login`: setup completes, the login adapter's destroy
++                    // races an in-flight statement-store call, the raw client
++                    // throws "Not connected", and this callback logged it). Real
++                    // errors still log. The match mirrors process-guard's
++                    // isBenignUnsubscriptionError (name AND message, sections 1
++                    // and 3: the bare-"Not connected" message must match exactly so a
++                    // contextual mid-work failure still escalates) so the two
++                    // filters stay consistent. Remove when upstream gates its
++                    // logging.
 +                    if (error?.name === 'DestroyedError' &&
 +                        /client destroyed/i.test(error?.message ?? ''))
++                        return;
++                    if (error?.name === 'Error' &&
++                        /^not connected$/i.test((error?.message ?? '').trim()))
 +                        return;
                      console.error('Statement subscription error:', error);
                  });
