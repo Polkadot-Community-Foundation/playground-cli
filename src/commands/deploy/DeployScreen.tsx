@@ -79,6 +79,9 @@ import {
     DOMAIN_HELP,
     BUILD_DIR_HINT,
     DOMAIN_HINT,
+    CONTRACTS_RENAME_NOTICE_TITLE,
+    CONTRACTS_RENAME_NOTICE_BODY,
+    CONTRACTS_RENAME_NOTICE_HINT,
 } from "./promptHelp.js";
 import { ContractPipelineStatusAdapter } from "../contractPipelineStatus.js";
 import { ContractDeployStatusView, precomputeContractDeployDisplay } from "../contractDeployUi.js";
@@ -117,6 +120,7 @@ export type Stage =
     | { kind: "prompt-build" }
     | { kind: "prompt-signer" }
     | { kind: "prompt-contracts" }
+    | { kind: "prompt-contracts-notice" }
     | { kind: "prompt-buildDir" }
     | { kind: "prompt-domain" }
     | { kind: "validate-domain"; domain: string }
@@ -367,12 +371,25 @@ export function DeployScreen({
                         initialIndex={0}
                         onSelect={(yes) => {
                             setDeployContracts(yes);
-                            const nextSkipBuild = yes ? false : skipBuild;
                             if (yes) setSkipBuild(false);
-                            advance(nextSkipBuild, mode, yes);
+                            // Redeploying contracts is when the CDM-name ownership
+                            // footgun bites (a mod ships names the signer doesn't
+                            // own). Gate "yes" on an explicit rename ack; "no"
+                            // skips straight ahead. The notice lives outside
+                            // pickNextStage, so the headless --contracts path
+                            // never hits it.
+                            if (yes) setStage({ kind: "prompt-contracts-notice" });
+                            else advance(skipBuild, mode, false);
                         }}
                     />
                 </Box>
+            )}
+
+            {stage.kind === "prompt-contracts-notice" && (
+                <ContractsRenameNotice
+                    onContinue={() => advance(false, mode, true)}
+                    onExit={() => onDone(null, { graceful: true })}
+                />
             )}
 
             {stage.kind === "prompt-buildDir" && (
@@ -665,6 +682,35 @@ function AckStage({ onContinue, onExit }: { onContinue: () => void; onExit: () =
             </Callout>
             <Box marginTop={1}>
                 <Hint>{"enter to continue · esc to exit and edit"}</Hint>
+            </Box>
+        </Box>
+    );
+}
+
+/**
+ * Interstitial shown when the user opts to redeploy contracts. Warns that CDM
+ * package names are owned by their first deployer, so a mod (or any project that
+ * edited someone else's contracts) must rename before publishing or the deploy
+ * fails late. Enter continues; Esc exits the flow gracefully so they can rename.
+ */
+function ContractsRenameNotice({
+    onContinue,
+    onExit,
+}: {
+    onContinue: () => void;
+    onExit: () => void;
+}) {
+    useInput((_input, key) => {
+        if (key.return) onContinue();
+        else if (key.escape) onExit();
+    });
+    return (
+        <Box flexDirection="column">
+            <Callout tone="warning" title={CONTRACTS_RENAME_NOTICE_TITLE}>
+                <Text>{CONTRACTS_RENAME_NOTICE_BODY}</Text>
+            </Callout>
+            <Box marginTop={1}>
+                <Hint>{CONTRACTS_RENAME_NOTICE_HINT}</Hint>
             </Box>
         </Box>
     );
