@@ -126,17 +126,19 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
                 }
             }
         }
+        let startedTutorial = false;
         if (repoRef) {
             // Capture into a const so the value type-narrows inside the closure
             // (a `let` would widen back to `GitHubRepoRef | null`).
             const ref = repoRef;
-            const continued = await withSpan("cli.mod.quest-picker", "browse quests", () =>
+            const result = await withSpan("cli.mod.quest-picker", "browse quests", () =>
                 pickQuest(ref, questBranch),
             );
-            if (!continued) {
+            if (!result.continued) {
                 process.exitCode = 0;
                 return;
             }
+            startedTutorial = result.startedTutorial;
         }
 
         const targetDir = await withSpan("cli.mod.resolve-target", "resolve target directory", () =>
@@ -171,7 +173,14 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
         if (ok && !setupRan) {
             console.log("  Next steps:");
             console.log(`  1. cd ${targetDir}`);
-            console.log("  2. edit with claude");
+            // For the tutorial, nudge the user toward the prepopulated AI prompt
+            // ("start tutorial") that kicks off the guided quest flow; a plain
+            // mod has no such entry point.
+            console.log(
+                startedTutorial
+                    ? "  2. edit with claude ( prompt: start tutorial )"
+                    : "  2. edit with claude",
+            );
             console.log("  3. playground deploy --playground");
         }
         if (!ok) process.exitCode = 1;
@@ -202,41 +211,67 @@ async function fetchAppMetadata(registry: any, domain: string): Promise<FetchedA
     return await fetchBulletinJson<FetchedAppMetadata>(cid, getBulletinGateway());
 }
 
-function pickQuest(repoRef: GitHubRepoRef, branch?: string): Promise<boolean> {
+interface QuestPickResult {
+    /** False only when the user quit the picker (abort the whole mod). */
+    continued: boolean;
+    /** True only when the user pressed "Start tutorial" on a real quest track. */
+    startedTutorial: boolean;
+}
+
+function pickQuest(repoRef: GitHubRepoRef, branch?: string): Promise<QuestPickResult> {
     return new Promise((resolve) => {
+        let result: QuestPickResult = { continued: false, startedTutorial: false };
         const app = render(
             React.createElement(QuestPicker, {
                 repoRef,
                 branch,
-                onDone: () => {
+                onDone: (startedTutorial: boolean) => {
+                    result = { continued: true, startedTutorial };
+                    // Erase the frame and fully tear the picker down BEFORE the
+                    // next screen mounts — see browseAndPick for why a clean exit
+                    // matters when two Ink instances would otherwise overlap.
+                    app.clear();
                     app.unmount();
-                    resolve(true);
                 },
                 onCancel: () => {
+                    result = { continued: false, startedTutorial: false };
+                    app.clear();
                     app.unmount();
-                    resolve(false);
                 },
             }),
         );
+        // Resolve only once Ink has fully exited, so the previous screen's
+        // raw-mode stdin handlers are gone before the caller mounts the next.
+        void app.waitUntilExit().then(() => resolve(result));
     });
 }
 
 function browseAndPick(registry: any): Promise<AppEntry | null> {
     return new Promise((resolve) => {
+        let picked: AppEntry | null = null;
         const app = render(
             React.createElement(AppBrowser, {
                 registry,
                 moddableOnly: true,
                 onSelect: (selected: AppEntry) => {
+                    picked = selected;
+                    // Erase the picker's frame and fully tear it down before the
+                    // next screen mounts. Two live Ink instances share raw-mode
+                    // stdin: a half-unmounted AppBrowser (left in its `checking`
+                    // state, whose useInput swallows Enter) would otherwise eat
+                    // the next picker's keystrokes, and its retained frame would
+                    // render on top of the new one.
+                    app.clear();
                     app.unmount();
-                    resolve(selected);
                 },
                 onCancel: () => {
+                    picked = null;
+                    app.clear();
                     app.unmount();
-                    resolve(null);
                 },
             }),
         );
+        void app.waitUntilExit().then(() => resolve(picked));
     });
 }
 

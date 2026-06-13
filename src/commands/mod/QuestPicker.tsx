@@ -28,8 +28,13 @@ interface Props {
     repoRef: GitHubRepoRef;
     /** Branch to read `quests.json` from (defaults to `main`). */
     branch?: string;
-    /** Resolves once the user starts the tutorial (or the picker auto-skips). */
-    onDone: () => void;
+    /**
+     * Resolves once the user is done with the picker. `startedTutorial` is true
+     * only when the user explicitly pressed "Start tutorial" on a real quest
+     * track; it is false when the picker auto-skips (no `quests.json` / empty
+     * manifest / parse error), so the caller can tailor the post-clone hint.
+     */
+    onDone: (startedTutorial: boolean) => void;
     /** User cancelled the whole flow. */
     onCancel: () => void;
 }
@@ -57,13 +62,13 @@ export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
             // like the absent one; rendering a quest-less picker would dead-end
             // the whole `mod` (no start row, only `q` to quit).
             if (!m || m.quests.length === 0) {
-                onDone();
+                onDone(false);
                 return;
             }
             setManifest(m);
         } catch {
             // Malformed manifest or transient error — same fall-through.
-            onDone();
+            onDone(false);
         } finally {
             setFetching(false);
         }
@@ -91,7 +96,7 @@ export function QuestPicker({ repoRef, branch, onDone, onCancel }: Props) {
             return;
         }
         if (fetching || !manifest) return;
-        if (key.return && quests.length > 0) onDone();
+        if (key.return && quests.length > 0) onDone(true);
     });
 
     if (fetching) {
