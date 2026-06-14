@@ -22,6 +22,7 @@ import "./bootstrap.js";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { loginCommand } from "./commands/login/index.js";
+import { dripCommand } from "./commands/drip/index.js";
 import { modCommand } from "./commands/mod/index.js";
 import { buildCommand } from "./commands/build.js";
 import { contractCommand } from "./commands/contract.js";
@@ -35,6 +36,7 @@ import {
     onProcessShutdown,
     setProcessGuardWarningHandler,
 } from "./utils/process-guard.js";
+import { installHelpHint } from "./utils/help-hint.js";
 import { clearWindowTitle } from "./utils/ui/theme/window-title.js";
 import { startVersionCheck } from "./utils/version-check.js";
 
@@ -129,6 +131,7 @@ const program = new Command()
     .version(pkg.version);
 
 program.addCommand(loginCommand);
+program.addCommand(dripCommand);
 program.addCommand(modCommand);
 program.addCommand(buildCommand);
 program.addCommand(contractCommand);
@@ -137,6 +140,13 @@ program.addCommand(deployAllCommand);
 program.addCommand(decentralizeCommand);
 program.addCommand(logoutCommand);
 program.addCommand(updateCommand);
+
+// Commander already suggests "Did you mean …?" for near-miss typos. When the
+// typo is too far for a suggestion it emits a bare "unknown command/option"
+// error; tail it with a pointer to `--help` (git does the same). Must run AFTER
+// the addCommand calls above so the walk reaches every subcommand — commander
+// does not propagate the root output config to addCommand'd children.
+installHelpHint(program);
 
 // Kick off the "is there a newer dot release?" check immediately so the
 // jsDelivr fetch races the command rather than tacking onto its tail. The

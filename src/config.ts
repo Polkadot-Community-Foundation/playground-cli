@@ -87,6 +87,13 @@ export interface ChainConfig {
     env: Env;
     /** Underlying network (testnet/mainnet) for cosmetics + gates. */
     network: "testnet" | "mainnet";
+    /**
+     * Native token symbol for display only (balances, drip amounts) — never used
+     * for on-chain math. Read it via `getTokenSymbol()` / threaded through
+     * `formatPas` so flipping `ACTIVE_TESTNET_ENV` re-labels the whole CLI in one
+     * place. All wired envs use 12-decimal planck regardless of symbol.
+     */
+    tokenSymbol: string;
     /** Relay chain RPC (mostly informational; product-sdk talks to system chains directly). */
     relayRpc: string;
     /** Asset Hub RPC — Revive contracts (registry, DotNS) live here. */
@@ -127,6 +134,7 @@ export interface ChainConfig {
 const PASEO_NEXT_V2: ChainConfig = {
     env: "paseo-next-v2",
     network: "testnet",
+    tokenSymbol: "PAS",
     relayRpc: "wss://paseo-rpc.n.dwellir.com",
     assetHubRpc: "wss://paseo-asset-hub-next-rpc.polkadot.io",
     bulletinRpc: "wss://paseo-bulletin-next-rpc.polkadot.io",
@@ -146,6 +154,7 @@ const PASEO_NEXT_V2: ChainConfig = {
 const SUMMIT: ChainConfig = {
     env: "summit",
     network: "testnet",
+    tokenSymbol: "SUM",
     relayRpc: "wss://summit-rpc.polkadot.io",
     assetHubRpc: "wss://summit-asset-hub-rpc.polkadot.io",
     bulletinRpc: "wss://summit-bulletin-rpc.polkadot.io",
@@ -226,6 +235,15 @@ export function getNetworkLabel(env: Env = getActiveEnv()): string {
         case "kusama":
             return "kusama";
     }
+}
+
+/**
+ * Native token symbol for the given env (defaults to the active env). Display
+ * only — drives balance/drip labels via `formatPas`. Flipping
+ * `ACTIVE_TESTNET_ENV` (e.g. to `"summit"`) re-labels everything from here.
+ */
+export function getTokenSymbol(env: Env = DEFAULT_ENV): string {
+    return getChainConfig(env).tokenSymbol;
 }
 
 /** Identifier the terminal adapter reports during SSO. Kept stable so mobile pairings persist across releases. */

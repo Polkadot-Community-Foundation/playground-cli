@@ -30,6 +30,10 @@ import { assertPublicGitHubRepo, ModdablePreflightError } from "../../utils/depl
 import { runCommand } from "../../utils/git.js";
 import { createOptionalGitBaseline } from "../../utils/mod/git-baseline.js";
 import { downloadGitHubTarball, parseGitHubRepoUrl } from "../../utils/mod/source.js";
+import {
+    findUnsatisfiedPackageManagers,
+    missingPackageManagerMessage,
+} from "../../utils/mod/packageManager.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
@@ -148,8 +152,19 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
             name: "run setup.sh",
             keepLogOnSuccess: true,
             run: async (log) => {
-                if (!existsSync(resolve(targetDir, "setup.sh"))) {
-                    throw new StepWarning("no setup.sh found");
+                const setupPath = resolve(targetDir, "setup.sh");
+                if (!existsSync(setupPath)) {
+                    // Most moddable apps have no setup.sh, and that's normal —
+                    // surfacing it as a warning row alarmed users. Skip the step
+                    // silently so nothing is shown; the parent still prints the
+                    // generic "Next steps" footer because `setupRan` stays false.
+                    throw new SilentSkip("no setup.sh found");
+                }
+                const missing = await findUnsatisfiedPackageManagers(
+                    readFileSync(setupPath, "utf8"),
+                );
+                if (missing.length > 0) {
+                    throw new Error(missingPackageManagerMessage(missing));
                 }
                 await runCommand("bash setup.sh", { cwd: targetDir, log, logFile: setupLogFile });
                 setupRanRef.current = true;
@@ -205,10 +220,17 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
     );
 }
 
-class StepWarning extends Error {
-    isWarning = true;
+/**
+ * Thrown inside a StepRunner step to remove its row from the UI entirely
+ * (StepRunner duck-types the `isSilentSkip` flag). Execution continues and the
+ * run still reports `ok: true`. Used when an optional step has nothing to do
+ * and its absence is a non-event the user shouldn't see.
+ */
+class SilentSkip extends Error {
+    readonly isSilentSkip = true;
     constructor(message: string) {
         super(message);
+        this.name = "SilentSkip";
     }
 }
 

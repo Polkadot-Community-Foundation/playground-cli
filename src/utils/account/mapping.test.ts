@@ -20,27 +20,23 @@
  * via `ReviveApi.address`, then query `Revive.OriginalAccount[H160]` —
  * non-null iff the binding exists.
  *
+ * Load-bearing read-path details pinned here:
+ *   - reads pass `{ at: "best" }` — paseo-next-v2 finalization lags ~80 s
+ *     behind the best head the phone's in-block claim confirmation refers to,
+ *     so a finalized-head read right after a grant falsely reported "NOT
+ *     mapped" (shipped 2026-06-11), and
+ *   - reads go through `raw.assetHub.getUnsafeApi()` as defence-in-depth so
+ *     the check can't break if bundled descriptors ever lag a runtime
+ *     upgrade (typed reads verified working at descriptors@0.6.0 — there is
+ *     no actual drift today).
+ *
  * RPC failures resolve to `false` (treated as "not mapped" so the caller can
- * fall back to `ensureMapped` rather than surfacing an opaque error to the
- * user during login).
+ * surface a retry-later message rather than an opaque error during login).
  */
 
 import { describe, it, expect, vi } from "vitest";
 
-const mockEnsureAccountMapped =
-    vi.fn<(address: string, signer: unknown, sdk: unknown, client: unknown) => Promise<unknown>>();
-const mockCreateInkSdk = vi.fn();
-
-vi.mock("@polkadot-api/sdk-ink", () => ({
-    createInkSdk: (...args: unknown[]) => mockCreateInkSdk(...args),
-}));
-
-vi.mock("@parity/product-sdk-tx", () => ({
-    ensureAccountMapped: (...args: unknown[]) =>
-        mockEnsureAccountMapped(...(args as [string, unknown, unknown, unknown])),
-}));
-
-const { checkMapping, ensureMapped } = await import("./mapping.js");
+const { checkMapping } = await import("./mapping.js");
 
 const FAKE_H160 = new Uint8Array(20);
 
@@ -51,27 +47,26 @@ function makeClient(opts: {
     const addressApi = typeof opts.address === "function" ? opts.address : async () => opts.address;
     const originalApi =
         typeof opts.original === "function" ? opts.original : async () => opts.original;
-    return {
-        raw: { assetHub: { __raw: true } },
-        assetHub: {
-            apis: {
-                ReviveApi: {
-                    address: vi.fn(addressApi),
-                },
-            },
-            query: {
-                Revive: {
-                    OriginalAccount: {
-                        getValue: vi.fn(originalApi),
-                    },
-                },
+    // checkMapping reads through raw.assetHub.getUnsafeApi() (metadata-driven,
+    // robust to bundled-descriptor staleness). The same fn instances are also
+    // exposed on the typed-looking `assetHub` surface purely so assertions can
+    // reference them with a short path.
+    const apis = {
+        ReviveApi: {
+            address: vi.fn(addressApi),
+        },
+    };
+    const query = {
+        Revive: {
+            OriginalAccount: {
+                getValue: vi.fn(originalApi),
             },
         },
+    };
+    return {
+        raw: { assetHub: { __raw: true, getUnsafeApi: () => ({ apis, query }) } },
+        assetHub: { apis, query },
     } as any;
-}
-
-function makeSigner() {
-    return { __signer: true } as any;
 }
 
 describe("checkMapping", () => {
@@ -80,9 +75,12 @@ describe("checkMapping", () => {
         const result = await checkMapping(client, "5GrwvaEF...");
 
         expect(result).toBe(true);
-        expect(client.assetHub.apis.ReviveApi.address).toHaveBeenCalledWith("5GrwvaEF...");
+        expect(client.assetHub.apis.ReviveApi.address).toHaveBeenCalledWith("5GrwvaEF...", {
+            at: "best",
+        });
         expect(client.assetHub.query.Revive.OriginalAccount.getValue).toHaveBeenCalledWith(
             FAKE_H160,
+            { at: "best" },
         );
     });
 
@@ -92,7 +90,7 @@ describe("checkMapping", () => {
         expect(result).toBe(false);
     });
 
-    it("treats OriginalAccount RPC errors as 'not mapped' so login can fall through to map_account", async () => {
+    it("treats OriginalAccount RPC errors as 'not mapped' so login can surface a retry-later hint", async () => {
         const client = makeClient({
             address: FAKE_H160,
             original: async () => {
@@ -111,37 +109,36 @@ describe("checkMapping", () => {
         });
         await expect(checkMapping(client, "5F...")).resolves.toBe(false);
     });
-});
 
-describe("ensureMapped", () => {
-    it("forwards client, signer, and sdk into ensureAccountMapped", async () => {
-        mockCreateInkSdk.mockClear();
-        mockEnsureAccountMapped.mockClear();
+    it("retries until the binding appears (claim block propagating across RPC nodes)", async () => {
+        let calls = 0;
+        const client = makeClient({
+            address: FAKE_H160,
+            original: async () => (++calls >= 3 ? "5Gmapped…" : null),
+        });
+        const sleep = vi.fn().mockResolvedValue(undefined);
 
-        const fakeSdk = { addressIsMapped: vi.fn().mockResolvedValue(false) };
-        mockCreateInkSdk.mockReturnValue(fakeSdk);
-        mockEnsureAccountMapped.mockResolvedValue(undefined);
+        const result = await checkMapping(client, "5F...", {
+            attempts: 6,
+            delayMs: 2000,
+            sleep,
+        });
 
-        const client = makeClient({ address: FAKE_H160, original: null });
-        const signer = makeSigner();
-        await ensureMapped(client, "5FAlice...", signer);
-
-        expect(mockEnsureAccountMapped).toHaveBeenCalledTimes(1);
-        const callArgs = mockEnsureAccountMapped.mock.calls[0];
-        expect(callArgs[0]).toBe("5FAlice...");
-        expect(callArgs[1]).toBe(signer);
-        expect(callArgs[2]).toBe(fakeSdk);
-        expect(callArgs[3]).toBe(client.assetHub);
+        expect(result).toBe(true);
+        expect(calls).toBe(3);
+        expect(sleep).toHaveBeenCalledTimes(2);
+        expect(sleep).toHaveBeenCalledWith(2000);
     });
 
-    it("bubbles up signing errors (e.g. user rejected on phone)", async () => {
-        mockCreateInkSdk.mockReturnValue({ addressIsMapped: vi.fn() });
-        mockEnsureAccountMapped.mockRejectedValue(
-            new Error("Mobile signing failed: user rejected"),
-        );
+    it("gives up after the configured attempts and reports not mapped", async () => {
+        const client = makeClient({ address: FAKE_H160, original: null });
+        const sleep = vi.fn().mockResolvedValue(undefined);
 
-        await expect(
-            ensureMapped(makeClient({ address: FAKE_H160, original: null }), "5F...", makeSigner()),
-        ).rejects.toThrow(/Mobile signing failed/);
+        const result = await checkMapping(client, "5F...", { attempts: 3, sleep });
+
+        expect(result).toBe(false);
+        expect(client.assetHub.query.Revive.OriginalAccount.getValue).toHaveBeenCalledTimes(3);
+        // no trailing sleep after the final attempt
+        expect(sleep).toHaveBeenCalledTimes(2);
     });
 });

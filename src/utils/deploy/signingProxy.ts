@@ -98,8 +98,8 @@ export function wrapSignerWithEvents(inner: PolkadotSigner, options: WrapOptions
 
 /**
  * Prompt factory for phone taps that are NOT signer calls: RFC-0010
- * resource-allocation requests (Bulletin allowance grant on first use, quota
- * Increase). They ride the statement store outside any `PolkadotSigner`, so
+ * resource-allocation requests (the first-use Bulletin allowance grant). They
+ * ride the statement store outside any `PolkadotSigner`, so
  * `wrapSignerWithEvents` never sees them — until this existed the phone
  * showed an approval dialog while the deploy TUI sat silent.
  *

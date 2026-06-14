@@ -72,6 +72,14 @@ vi.mock("../build/index.js", () => ({
     loadDetectInput: loadDetectInputMock,
     detectBuildConfig: detectBuildConfigMock,
 }));
+// These orchestration tests use a fake `/tmp/proj` and mock every I/O boundary;
+// the real skip-build artifacts check (covered by buildDir.test.ts) would trip
+// on the non-existent path, so stub it to a no-op here. Hoisted so the wiring
+// (called with projectDir + buildDir on skip-build) can be asserted.
+const { assertBuildDirExistsMock } = vi.hoisted(() => ({
+    assertBuildDirExistsMock: vi.fn(),
+}));
+vi.mock("./buildDir.js", () => ({ assertBuildDirExists: assertBuildDirExistsMock }));
 vi.mock("../../telemetry.js", () => ({
     withSpan: (...args: unknown[]) =>
         withSpanMock(args[0] as string, args[1] as string, args[2], args[3]),
@@ -84,19 +92,19 @@ vi.mock("../../telemetry.js", () => ({
 // session signer's so assertions can prove which key was threaded through.
 const SLOT_PUBLIC_KEY = new Uint8Array(32).fill(7);
 const slotSigner = { publicKey: SLOT_PUBLIC_KEY } as any;
-const { getBulletinAllowanceSignerMock, createStorageQuotaContextMock, quotaDestroyMock } =
+const { getBulletinAllowanceSignerMock, createBulletinAuthContextMock, authDestroyMock } =
     vi.hoisted(() => ({
         getBulletinAllowanceSignerMock: vi.fn(),
-        createStorageQuotaContextMock: vi.fn(),
-        quotaDestroyMock: vi.fn(),
+        createBulletinAuthContextMock: vi.fn(),
+        authDestroyMock: vi.fn(),
     }));
 vi.mock("../allowances/bulletin.js", () => ({
     getBulletinAllowanceSigner: getBulletinAllowanceSignerMock,
 }));
-vi.mock("./storageQuota.js", () => ({
-    createStorageQuotaContext: createStorageQuotaContextMock,
+vi.mock("./bulletinAuthContext.js", () => ({
+    createBulletinAuthContext: createBulletinAuthContextMock,
 }));
-const quotaApi = { marker: "bulletin-api" } as any;
+const bulletinApi = { marker: "bulletin-api" } as any;
 
 import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { runDeploy, type DeployEvent } from "./run.js";
@@ -135,15 +143,15 @@ beforeEach(() => {
     runStorageDeploy.mockClear();
     publishToPlaygroundMock.mockClear();
     runBuildMock.mockClear();
+    assertBuildDirExistsMock.mockClear();
     withSpanMock.mockClear();
     getBulletinAllowanceSignerMock.mockReset();
     getBulletinAllowanceSignerMock.mockResolvedValue(slotSigner);
-    createStorageQuotaContextMock.mockReset();
-    quotaDestroyMock.mockClear();
-    createStorageQuotaContextMock.mockReturnValue({
-        bulletinApi: quotaApi,
-        requiredBytes: 1234,
-        destroy: quotaDestroyMock,
+    createBulletinAuthContextMock.mockReset();
+    authDestroyMock.mockClear();
+    createBulletinAuthContextMock.mockReturnValue({
+        bulletinApi,
+        destroy: authDestroyMock,
     });
 });
 
@@ -177,9 +185,9 @@ describe("runDeploy", () => {
         expect(arg.auth.storageSignerAddress).toBe(DEV_PUBLISH_ADDRESS);
         expect(arg.domainName).toBe("my-app");
 
-        // Dev mode never opens a Bulletin client for quota checks — no slot
-        // signer is used, so there is nothing to check.
-        expect(createStorageQuotaContextMock).not.toHaveBeenCalled();
+        // Dev mode never opens a Bulletin client for the authorization check —
+        // no slot signer is used, so there is nothing to verify.
+        expect(createBulletinAuthContextMock).not.toHaveBeenCalled();
     });
 
     it("dev mode with playground: ZERO planned approvals AND user H160 is claimed as owner", async () => {
@@ -318,21 +326,21 @@ describe("runDeploy", () => {
         expect(arg.auth.storageSignerAddress).toBeDefined();
         expect(arg.auth.storageSignerAddress).not.toBe("5Fake");
 
-        // The quota context flows into the allowance resolution so an
-        // undersized slot grant triggers the Increase flow BEFORE the upload
-        // starts (mid-upload Payment failures never fall back to the pool),
-        // and the dedicated WS client is always torn down.
-        expect(createStorageQuotaContextMock).toHaveBeenCalledWith(undefined, "/tmp/proj/dist");
+        // The Bulletin client flows into the allowance resolution so the
+        // slot's authorization is verified (existence + non-expiry) BEFORE the
+        // upload starts (mid-upload Payment failures never fall back to the
+        // pool), and the dedicated WS client is always torn down. No quota /
+        // requiredBytes is passed — Bulletin `store` treats those as soft limits.
+        expect(createBulletinAuthContextMock).toHaveBeenCalledWith(undefined);
         expect(getBulletinAllowanceSignerMock).toHaveBeenCalledWith({
             publishSigner: fakeUserSigner,
-            bulletinApi: quotaApi,
-            requiredBytes: 1234,
+            bulletinApi,
             // The deploy threads a "check your phone" prompt into the
             // allowance resolution — allocation taps happen outside any
             // PolkadotSigner, so this hook is their only TUI surface.
             onPrompt: expect.any(Function),
         });
-        expect(quotaDestroyMock).toHaveBeenCalledTimes(1);
+        expect(authDestroyMock).toHaveBeenCalledTimes(1);
 
         const plan = events.find((e) => e.kind === "plan");
         if (plan?.kind === "plan") {
@@ -403,6 +411,57 @@ describe("runDeploy", () => {
             onEvent: push,
         });
         expect(runBuildMock).not.toHaveBeenCalled();
+    });
+
+    it("checks the build artifacts exist before deploying when skipping the build", async () => {
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "dist",
+            skipBuild: true,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: null,
+            onEvent: push,
+        });
+        expect(assertBuildDirExistsMock).toHaveBeenCalledWith("/tmp/proj", "dist");
+    });
+
+    it("uploads the build artifacts resolved against projectDir, not the process cwd", async () => {
+        // polkadot-app-deploy resolves a relative `content` against process.cwd()
+        // (deploy.js: `path.resolve(content)`), but the build writes to
+        // `projectDir/<buildDir>`. Passing the raw relative path would make a
+        // `--dir`-from-another-cwd deploy upload the wrong directory. We resolve
+        // against projectDir so storage reads exactly where the build wrote.
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "dist",
+            skipBuild: true,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: null,
+            onEvent: push,
+        });
+        const arg = runStorageDeploy.mock.calls[0][0];
+        expect(arg.content).toBe("/tmp/proj/dist");
+    });
+
+    it("does NOT check build artifacts when a build will produce them", async () => {
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "dist",
+            skipBuild: false,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: null,
+            onEvent: push,
+        });
+        expect(assertBuildDirExistsMock).not.toHaveBeenCalled();
     });
 
     it("emits error event and rethrows when storage fails", async () => {

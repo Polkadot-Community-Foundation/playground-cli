@@ -52,6 +52,7 @@ import {
     setActiveEnv,
 } from "../../config.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
+import { assertBuildDirExists } from "../../utils/deploy/buildDir.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { NO_SESSION_HEADLESS_ERROR } from "./signerNotice.js";
 
@@ -78,6 +79,12 @@ interface DeployOpts {
     env?: Env;
     /** Project root. Hidden — defaults to cwd. */
     dir?: string;
+    /**
+     * Run non-interactively using defaults instead of the Ink TUI. Required for
+     * agent/CI/piped (non-TTY) callers, where the interactive prompts can't read
+     * keystrokes. Needs `--domain`; `--signer` defaults to `dev`.
+     */
+    yes?: boolean;
 }
 
 export const deployCommand = new Command("deploy")
@@ -122,6 +129,10 @@ export const deployCommand = new Command("deploy")
             .default(DEFAULT_ENV),
     )
     .option("--dir <path>", "Project directory", process.cwd())
+    .option(
+        "-y, --yes",
+        "Run non-interactively using defaults (for agents/CI/piped input). Requires --domain; --signer defaults to dev.",
+    )
     .action(async (opts: DeployOpts) =>
         runCliCommand("deploy", { watchdog: true, hardExit: true }, async () => {
             const projectDir = resolve(opts.dir ?? process.cwd());
@@ -151,6 +162,20 @@ export const deployCommand = new Command("deploy")
             })();
             onProcessShutdown(cleanupOnce);
 
+            // `--yes` fills the fields the TUI would prompt for (signer ⇒ dev,
+            // buildDir ⇒ default) and requires --domain. Resolve it BEFORE
+            // preflight so the signer-resolution path sees the dev default and a
+            // missing domain fails fast with a clear message.
+            let effectiveOpts = opts;
+            try {
+                if (opts.yes) effectiveOpts = resolveYesDeployOpts(opts);
+            } catch (err) {
+                process.stderr.write(`\n✖ ${errorMessage(err)}\n`);
+                cleanupOnce();
+                process.exitCode = 1;
+                throw err;
+            }
+
             try {
                 userSigner = await withSpan(
                     "cli.deploy.preflight",
@@ -159,9 +184,9 @@ export const deployCommand = new Command("deploy")
                     () =>
                         preflight({
                             env,
-                            suri: opts.suri,
-                            mode: opts.signer,
-                            publishToPlayground: opts.playground === true,
+                            suri: effectiveOpts.suri,
+                            mode: effectiveOpts.signer,
+                            publishToPlayground: effectiveOpts.playground === true,
                         }),
                 );
             } catch (err) {
@@ -182,12 +207,19 @@ export const deployCommand = new Command("deploy")
             destroyConnection();
 
             try {
-                const nonInteractive = isFullySpecified(opts);
-
-                if (nonInteractive) {
-                    await runHeadless({ projectDir, env, userSigner, opts });
-                } else {
-                    await runInteractive({ projectDir, env, userSigner, opts });
+                switch (chooseDeployDispatch(effectiveOpts, Boolean(process.stdin.isTTY))) {
+                    case "headless":
+                        await runHeadless({ projectDir, env, userSigner, opts: effectiveOpts });
+                        break;
+                    case "non-tty-error":
+                        // The interactive Ink TUI calls `useInput`, which throws
+                        // "Raw mode is not supported on the current process.stdin"
+                        // when stdin isn't a TTY (agent/CI/piped). Fail with an
+                        // actionable message pointing at --yes instead of that crash.
+                        throw new Error(NON_TTY_INTERACTIVE_ERROR);
+                    case "interactive":
+                        await runInteractive({ projectDir, env, userSigner, opts: effectiveOpts });
+                        break;
                 }
             } catch (err) {
                 process.stderr.write(`\n✖ ${errorMessage(err)}\n`);
@@ -316,15 +348,64 @@ export function isFullySpecified(opts: DeployOpts): boolean {
     );
 }
 
+/**
+ * Shown instead of the opaque Ink "Raw mode is not supported on the current
+ * process.stdin" crash when an interactive deploy is attempted without a TTY
+ * (agent/CI/piped stdin) and `--yes` was not passed. Names the two escape
+ * hatches so a non-interactive caller knows how to proceed.
+ */
+export const NON_TTY_INTERACTIVE_ERROR =
+    "playground deploy needs an interactive terminal for its prompts. " +
+    "Re-run with --yes to use defaults (requires --domain; --signer defaults to dev), " +
+    "or pass the flags explicitly (--signer, --domain, --buildDir, --playground, --contracts).";
+
+export type DeployDispatch = "headless" | "non-tty-error" | "interactive";
+
+/**
+ * Decide how a deploy should run. The interactive Ink TUI (`runInteractive`)
+ * calls `useInput`, which enables raw mode on mount and throws when stdin isn't
+ * a TTY — so it must NEVER be chosen without a TTY. Headless wins when `--yes`
+ * is set or every prompt-able flag was supplied; otherwise a TTY gets the TUI
+ * and a non-TTY gets a clear error ({@link NON_TTY_INTERACTIVE_ERROR}) instead
+ * of the raw-mode crash. Pure (takes `isTty` rather than reading
+ * `process.stdin`) so the crash-or-not decision is unit-testable without Ink.
+ */
+export function chooseDeployDispatch(opts: DeployOpts, isTty: boolean): DeployDispatch {
+    if (opts.yes === true || isFullySpecified(opts)) return "headless";
+    if (!isTty) return "non-tty-error";
+    return "interactive";
+}
+
+/**
+ * Resolve the deploy options for a non-interactive (`--yes`) run by filling the
+ * fields the TUI would otherwise prompt for. `--domain` has no safe default and
+ * is required; `--signer` defaults to `dev` and `--buildDir` to
+ * {@link DEFAULT_BUILD_DIR}. Everything else keeps the defaults `runHeadless`
+ * already applies (`playground`/`contracts` ⇒ false, `build` ⇒ true). Pure +
+ * exported so the contract is unit-testable without rendering the TUI.
+ */
+export function resolveYesDeployOpts(opts: DeployOpts): DeployOpts {
+    if (typeof opts.domain !== "string" || opts.domain.trim() === "") {
+        throw new Error(
+            "playground deploy --yes is non-interactive and needs a domain. Pass --domain <name>.",
+        );
+    }
+    return {
+        ...opts,
+        signer: opts.signer ?? "dev",
+        buildDir: opts.buildDir ?? DEFAULT_BUILD_DIR,
+    };
+}
+
 export type DeployDoneDisposition = "success" | "graceful-cancel" | "failure";
 
 /**
  * Maps a `DeployScreen` `onDone` callback into the outcome the interactive
  * runner should produce. A non-null outcome is a success; a null outcome is a
- * failure (exit 1) UNLESS it was a graceful cancel — the user pressing Esc on
- * the README acknowledgement to go edit it, which exits 0 with a friendly
- * nudge. Extracted as a pure function so this branch is unit-testable without
- * rendering the Ink TUI.
+ * failure (exit 1) UNLESS it was a graceful cancel: a deliberate exit from a
+ * setup screen (the README acknowledgement, or the moddable setup menu),
+ * which exits 0 with a friendly nudge. Extracted as a pure function so this
+ * branch is unit-testable without rendering the Ink TUI.
  */
 export function classifyDeployDone(
     outcome: DeployOutcome | null,
@@ -332,6 +413,24 @@ export function classifyDeployDone(
 ): DeployDoneDisposition {
     if (outcome !== null) return "success";
     return opts?.graceful ? "graceful-cancel" : "failure";
+}
+
+/**
+ * Default nudge printed on a graceful cancel — the README acknowledgement path,
+ * which has no cause-specific message of its own.
+ */
+export const DEFAULT_GRACEFUL_NUDGE =
+    "No problem. Update your README.md and re-run `playground deploy` when ready.";
+
+/**
+ * Picks the friendly nudge printed when a setup screen exits gracefully (exit
+ * 0). Stages that exit for a specific reason (e.g. the moddable setup menu)
+ * supply their own `gracefulMessage`; the README acknowledgement supplies none
+ * and falls back to {@link DEFAULT_GRACEFUL_NUDGE}. Pure + exported so the
+ * fallback is unit-testable without rendering the Ink TUI.
+ */
+export function resolveGracefulNudge(gracefulMessage?: string): string {
+    return gracefulMessage ?? DEFAULT_GRACEFUL_NUDGE;
 }
 
 /**
@@ -373,6 +472,14 @@ async function runHeadless(ctx: {
     // Reject metadata-only flags supplied without `--playground` before any
     // network work — they'd otherwise be silently ignored.
     assertPublishFlagsConsistent({ moddable, tag, publishToPlayground });
+
+    // Fail fast on a missing/typo'd `--buildDir` when skipping the build, before
+    // the availability round-trip, the summary block, and any on-chain work.
+    // `runDeploy` re-checks as a universal backstop, but catching it here keeps
+    // CI from wasting a network call and printing a summary it'll never use.
+    if (skipBuild) {
+        assertBuildDirExists(ctx.projectDir, buildDir);
+    }
 
     // Phone signing needs a paired session. Headless has no TUI to fall back
     // into, so reject an explicit `--signer phone` with no session up front
@@ -554,21 +661,21 @@ function runInteractive(ctx: {
                         userSigner: ctx.userSigner,
                         onDone: (
                             outcome: DeployOutcome | null,
-                            doneOpts?: { graceful?: boolean },
+                            doneOpts?: { graceful?: boolean; gracefulMessage?: string },
                         ) => {
                             if (settled) return;
                             settled = true;
                             app?.unmount();
                             switch (classifyDeployDone(outcome, doneOpts)) {
-                                case "graceful-cancel":
-                                    // The user pressed Esc on the README
-                                    // acknowledgement to go edit it — not a
+                                case "graceful-cancel": {
+                                    // A deliberate exit from a setup screen
+                                    // (README ack, moddable setup), not a
                                     // failure. Exit 0 with a friendly nudge.
-                                    process.stdout.write(
-                                        "\nNo problem. Update your README.md and re-run `playground deploy` when ready.\n",
-                                    );
+                                    const nudge = resolveGracefulNudge(doneOpts?.gracefulMessage);
+                                    process.stdout.write(`\n${nudge}\n`);
                                     resolvePromise();
                                     break;
+                                }
                                 case "failure":
                                     process.exitCode = 1;
                                     rejectPromise(new Error("Deploy was cancelled or failed."));

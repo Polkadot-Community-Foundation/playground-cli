@@ -36,12 +36,6 @@ import { PLAYGROUND_PRODUCT_ID } from "../../config.js";
  * separately — same key, two encodings — which read as "two accounts"
  * to users. Collapsed here.
  *
- * The user's registry username is intentionally NOT rendered here — it
- * lives in the top breadcrumb (see `Header`'s `username` prop) so it
- * stays visible across every screen in the command. `UsernamePrompt`
- * owns the read + write path; this component is purely the address
- * pair now.
- *
  * The SS58 + H160 are taken straight off the auth-derived pair so
  * they never drift — the bug we had previously was running
  * `deriveProductAccountPublicKey` again on the already-derived SS58

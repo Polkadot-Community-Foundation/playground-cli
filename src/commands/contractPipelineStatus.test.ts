@@ -150,4 +150,24 @@ describe("ContractPipelineStatusAdapter", () => {
             error: "Mobile signing failed: unsupported payload",
         });
     });
+
+    it("records a non-signing run error separately from signing errors", () => {
+        const adapter = new ContractPipelineStatusAdapter();
+
+        adapter.setRunError("Contract deploy was requested but no contracts were found in /app.");
+
+        expect(adapter.runError).toBe(
+            "Contract deploy was requested but no contracts were found in /app.",
+        );
+        expect(adapter.signingError).toBeNull();
+    });
+
+    it("keeps the first run error and does not overwrite it", () => {
+        const adapter = new ContractPipelineStatusAdapter();
+
+        adapter.setRunError("first failure");
+        adapter.setRunError("second failure");
+
+        expect(adapter.runError).toBe("first failure");
+    });
 });

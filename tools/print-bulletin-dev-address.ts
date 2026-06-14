@@ -15,13 +15,13 @@
 // limitations under the License.
 
 /**
- * One-shot operator helper: print the SS58 address `bulletinTopUp.ts`
- * derives (under both prefix 0 / prefix 42 encodings of the same key) so an
+ * One-shot operator helper: print the SS58 address polkadot-app-deploy’s
+ * dev funder derives (under both prefix 0 / prefix 42 encodings) so an
  * operator can faucet-fund / teleport PAS to it. Run via:
  *   bun run tools/print-bulletin-dev-address.ts
  *
- * Mnemonic and derivation must stay in sync with
- * `src/utils/account/bulletinTopUp.ts::BULLETIN_DEV_MNEMONIC`. The companion
+ * Mnemonic and derivation must stay in sync with polkadot-app-deploy’s
+ * `DEFAULT_MNEMONIC` bare-root dev funder. The companion
  * `tools/check-bulletin-funder.ts` queries this address's balance.
  */
 

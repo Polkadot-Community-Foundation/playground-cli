@@ -25,6 +25,7 @@ import {
     Section,
     Hint,
     Callout,
+    PromptInfo,
     PhoneApprovalCallout,
     Sparkline,
     Select,
@@ -57,10 +58,17 @@ import {
 import type { ResolvedSigner } from "../../utils/signer.js";
 import { DEFAULT_BUILD_DIR, getChainConfig, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
-import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
+import { ModdableErrorStage, ModdablePreflightStage } from "./ModdableStages.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
-import { NO_SESSION_NOTICE_TITLE, NO_SESSION_NOTICE_BODY } from "./signerNotice.js";
+import {
+    NO_SESSION_NOTICE_TITLE,
+    NO_SESSION_NOTICE_BODY,
+    DEV_SIGNER_NO_XP_TITLE,
+    DEV_SIGNER_NO_XP_BODY,
+    deploySignerOptions,
+    shouldShowDevNoXpWarning,
+} from "./signerNotice.js";
 import {
     BUILD_HELP,
     CONTRACTS_HELP,
@@ -71,7 +79,9 @@ import {
     DOMAIN_HELP,
     BUILD_DIR_HINT,
     DOMAIN_HINT,
-    type PromptBox,
+    CONTRACTS_RENAME_NOTICE_TITLE,
+    CONTRACTS_RENAME_NOTICE_BODY,
+    CONTRACTS_RENAME_NOTICE_HINT,
 } from "./promptHelp.js";
 import { ContractPipelineStatusAdapter } from "../contractPipelineStatus.js";
 import { ContractDeployStatusView, precomputeContractDeployDisplay } from "../contractDeployUi.js";
@@ -99,7 +109,10 @@ export interface DeployScreenInputs {
      */
     tag?: string;
     userSigner: ResolvedSigner | null;
-    onDone: (outcome: DeployOutcome | null, opts?: { graceful?: boolean }) => void;
+    onDone: (
+        outcome: DeployOutcome | null,
+        opts?: { graceful?: boolean; gracefulMessage?: string },
+    ) => void;
 }
 
 export type Stage =
@@ -107,6 +120,7 @@ export type Stage =
     | { kind: "prompt-build" }
     | { kind: "prompt-signer" }
     | { kind: "prompt-contracts" }
+    | { kind: "prompt-contracts-notice" }
     | { kind: "prompt-buildDir" }
     | { kind: "prompt-domain" }
     | { kind: "validate-domain"; domain: string }
@@ -138,14 +152,6 @@ interface Resolved {
  * `promptHelp.ts`. The `accent` tone marks it as informational (distinct from
  * the yellow `warning` notices).
  */
-function PromptInfo({ box }: { box: PromptBox }) {
-    return (
-        <Callout tone="accent" title={box.title}>
-            <Text>{box.body}</Text>
-        </Callout>
-    );
-}
-
 /** One-line dim hint above a trivial text input (domain, build directory). */
 function PromptHint({ text }: { text: string }) {
     return (
@@ -179,6 +185,11 @@ export function DeployScreen({
         !hasSession && initialMode === "phone" ? null : initialMode;
     const effectiveInitialSkipBuild = initialDeployContracts === true ? false : initialSkipBuild;
     const [mode, setMode] = useState<SignerMode | null>(effectiveInitialMode);
+    // Which signer option the cursor is currently on in the prompt-signer Select.
+    // Drives the "dev signer earns no XP" warning, which only matters while the
+    // dev option is highlighted. Defaults to "phone" (the top, default-cursor
+    // option when a session exists) so the warning starts hidden.
+    const [highlightedSigner, setHighlightedSigner] = useState<SignerMode>("phone");
     const [deployContracts, setDeployContracts] = useState<boolean | null>(initialDeployContracts);
     const [buildDir, setBuildDir] = useState<string | null>(initialBuildDir);
     const [domain, setDomain] = useState<string | null>(initialDomain);
@@ -229,6 +240,14 @@ export function DeployScreen({
             nextTag,
         );
         setStage(s);
+    };
+
+    // Single "user declined moddable" transition, shared by the remix prompt's
+    // "no" answer and the setup-error menu's "continue without moddable", so
+    // the two paths can't drift apart.
+    const declineModdable = () => {
+        setModdable(false);
+        advance(skipBuild, mode, deployContracts, buildDir, domain, publishToPlayground, false);
     };
 
     const resolved = useMemo<Resolved | null>(() => {
@@ -309,38 +328,30 @@ export function DeployScreen({
 
             {stage.kind === "prompt-signer" && (
                 <Box flexDirection="column">
-                    {!hasSession && (
-                        <Callout tone="warning" title={NO_SESSION_NOTICE_TITLE}>
-                            <Text>{NO_SESSION_NOTICE_BODY}</Text>
-                        </Callout>
-                    )}
                     <PromptInfo box={SIGNER_HELP} />
                     <Select<SignerMode>
                         label="who signs the upload?"
-                        options={[
-                            {
-                                value: "dev" as SignerMode,
-                                label: "dev signer",
-                                hint: "fast, no phone needed",
-                            },
-                            // The phone signer is only offered with a paired
-                            // session; otherwise the notice above explains how
-                            // to enable it.
-                            ...(hasSession
-                                ? [
-                                      {
-                                          value: "phone" as SignerMode,
-                                          label: "your phone signer",
-                                          hint: "signs with your own account",
-                                      },
-                                  ]
-                                : []),
-                        ]}
+                        options={deploySignerOptions(hasSession)}
+                        onHighlight={setHighlightedSigner}
                         onSelect={(m) => {
                             setMode(m);
                             advance(skipBuild, m);
                         }}
                     />
+                    {/* Both notices sit below the options: the phone signer is
+                        shown disabled above, and this explains why and how to
+                        unlock it. The "no XP" trade-off (logged-in path) appears
+                        right as the cursor lands on the dev signer. */}
+                    {!hasSession && (
+                        <Callout tone="warning" title={NO_SESSION_NOTICE_TITLE}>
+                            <Text>{NO_SESSION_NOTICE_BODY}</Text>
+                        </Callout>
+                    )}
+                    {shouldShowDevNoXpWarning(hasSession, highlightedSigner) && (
+                        <Callout tone="warning" title={DEV_SIGNER_NO_XP_TITLE}>
+                            <Text>{DEV_SIGNER_NO_XP_BODY}</Text>
+                        </Callout>
+                    )}
                 </Box>
             )}
 
@@ -360,12 +371,25 @@ export function DeployScreen({
                         initialIndex={0}
                         onSelect={(yes) => {
                             setDeployContracts(yes);
-                            const nextSkipBuild = yes ? false : skipBuild;
                             if (yes) setSkipBuild(false);
-                            advance(nextSkipBuild, mode, yes);
+                            // Redeploying contracts is when the CDM-name ownership
+                            // footgun bites (a mod ships names the signer doesn't
+                            // own). Gate "yes" on an explicit rename ack; "no"
+                            // skips straight ahead. The notice lives outside
+                            // pickNextStage, so the headless --contracts path
+                            // never hits it.
+                            if (yes) setStage({ kind: "prompt-contracts-notice" });
+                            else advance(skipBuild, mode, false);
                         }}
                     />
                 </Box>
+            )}
+
+            {stage.kind === "prompt-contracts-notice" && (
+                <ContractsRenameNotice
+                    onContinue={() => advance(false, mode, true)}
+                    onExit={() => onDone(null, { graceful: true })}
+                />
             )}
 
             {stage.kind === "prompt-buildDir" && (
@@ -473,19 +497,11 @@ export function DeployScreen({
                         ]}
                         initialIndex={0}
                         onSelect={(yes) => {
-                            setModdable(yes);
                             if (yes) {
+                                setModdable(true);
                                 setStage({ kind: "moddable-preflight" });
                             } else {
-                                advance(
-                                    skipBuild,
-                                    mode,
-                                    deployContracts,
-                                    buildDir,
-                                    domain,
-                                    publishToPlayground,
-                                    false,
-                                );
+                                declineModdable();
                             }
                         }}
                     />
@@ -515,7 +531,20 @@ export function DeployScreen({
             )}
 
             {stage.kind === "moddable-error" && (
-                <ModdableErrorStage message={stage.message} onExit={() => onDone(null)} />
+                <ModdableErrorStage
+                    message={stage.message}
+                    onContinueWithoutModdable={declineModdable}
+                    onExit={() =>
+                        onDone(null, {
+                            graceful: true,
+                            // Cause-neutral: this stage is reached for a missing
+                            // origin, a private repo, or a non-GitHub origin, and
+                            // the Callout above already named the specific problem.
+                            gracefulMessage:
+                                "No problem. Fix the GitHub repository setup and re-run `playground deploy` when ready.",
+                        })
+                    }
+                />
             )}
 
             {stage.kind === "prompt-tags" && (
@@ -658,71 +687,30 @@ function AckStage({ onContinue, onExit }: { onContinue: () => void; onExit: () =
     );
 }
 
-// ── Moddable preflight ────────────────────────────────────────────────────────
-
-function ModdablePreflightStage({
-    projectDir,
-    onResolved,
-    onError,
-}: {
-    projectDir: string;
-    onResolved: (url: string) => void;
-    onError: (message: string) => void;
-}) {
-    const [status, setStatus] = useState<string>("checking git…");
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                setStatus("ensuring git is installed…");
-                await ensureGitInstalled();
-                if (cancelled) return;
-
-                setStatus("resolving repository…");
-                const url = await resolveRepositoryUrl({
-                    cwd: projectDir,
-                    onLog: (line) => {
-                        if (!cancelled) setStatus(line);
-                    },
-                });
-                if (cancelled) return;
-                onResolved(url);
-            } catch (err) {
-                if (cancelled) return;
-                onError(err instanceof Error ? err.message : String(err));
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [projectDir]);
-
-    return (
-        <Section>
-            <Row mark="run" label={status} tone="muted" />
-        </Section>
-    );
-}
-
 /**
- * Formal warning stage shown when the moddable preflight cannot proceed —
- * almost always because the user hasn't set up a public GitHub `origin` yet.
- * Renders the actionable error inside a yellow Callout (matching the
- * "check your phone" banner) so it visually registers as a setup requirement
- * rather than a deploy crash. Pressing Enter or Esc exits the deploy.
+ * Interstitial shown when the user opts to redeploy contracts. Warns that CDM
+ * package names are owned by their first deployer, so a mod (or any project that
+ * edited someone else's contracts) must rename before publishing or the deploy
+ * fails late. Enter continues; Esc exits the flow gracefully so they can rename.
  */
-function ModdableErrorStage({ message, onExit }: { message: string; onExit: () => void }) {
+function ContractsRenameNotice({
+    onContinue,
+    onExit,
+}: {
+    onContinue: () => void;
+    onExit: () => void;
+}) {
     useInput((_input, key) => {
-        if (key.return || key.escape) onExit();
+        if (key.return) onContinue();
+        else if (key.escape) onExit();
     });
     return (
         <Box flexDirection="column">
-            <Callout tone="warning" title="Moddable Setup Needed">
-                <Text>{message}</Text>
+            <Callout tone="warning" title={CONTRACTS_RENAME_NOTICE_TITLE}>
+                <Text>{CONTRACTS_RENAME_NOTICE_BODY}</Text>
             </Callout>
             <Box marginTop={1}>
-                <Hint>{"enter or esc to exit"}</Hint>
+                <Hint>{CONTRACTS_RENAME_NOTICE_HINT}</Hint>
             </Box>
         </Box>
     );
@@ -1073,7 +1061,7 @@ function RunningStage({
             } catch (err) {
                 if (!cancelled) {
                     const message = err instanceof Error ? err.message : String(err);
-                    if (runningContracts) contractDeployAdapter.signingError ??= message;
+                    if (runningContracts) contractDeployAdapter.setRunError(message);
                     setShowPhoneNotice(false);
                     onError(message);
                 }

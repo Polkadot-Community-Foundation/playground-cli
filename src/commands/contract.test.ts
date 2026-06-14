@@ -22,11 +22,30 @@ import {
     assertSupportedCdmJson,
     findForeignOwnedCdmPackages,
     formatCdmPackageOwnershipConflicts,
+    installRequestsFromArgs,
     parseContractInstallLibraryArg,
     resolveContractDeployTarget,
     resolveContractInstallTarget,
     resolveContractSignerOptions,
 } from "./contract.js";
+
+describe("installRequestsFromArgs", () => {
+    it("maps cdm.json dependencies when no libraries are passed", () => {
+        expect(
+            installRequestsFromArgs(
+                [],
+                { dependencies: { "@a/b": "latest" }, contracts: {} },
+                "/p",
+            ),
+        ).toEqual([{ library: "@a/b", requestedVersion: "latest" }]);
+    });
+
+    it("throws an actionable error naming the location when there is nothing to install", () => {
+        expect(() =>
+            installRequestsFromArgs([], { dependencies: {}, contracts: {} }, "/proj/cdm.json"),
+        ).toThrow(/\/proj\/cdm\.json/);
+    });
+});
 
 describe("parseContractInstallLibraryArg", () => {
     it("defaults to latest", () => {

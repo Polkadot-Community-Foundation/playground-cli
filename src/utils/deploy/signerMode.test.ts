@@ -234,25 +234,24 @@ describe("resolveStorageSignerOptions", () => {
         expect(getBulletinAllowanceSignerMock).toHaveBeenCalledWith({
             publishSigner: user,
             bulletinApi: undefined,
-            requiredBytes: undefined,
+            onPrompt: undefined,
         });
     });
 
-    it("forwards the quota context so an undersized allowance triggers the Increase flow", async () => {
+    it("forwards the bulletin API so the slot's authorization is verified (existence + non-expiry)", async () => {
         getBulletinAllowanceSignerMock.mockResolvedValue(SLOT_SIGNER);
         const user = sessionSignerWithHost();
         const bulletinApi = { marker: true } as any;
 
-        await resolveStorageSignerOptions("phone", user, {
-            bulletinApi,
-            requiredBytes: 14_000_000,
-        });
+        await resolveStorageSignerOptions("phone", user, bulletinApi);
 
         expect(getBulletinAllowanceSignerMock).toHaveBeenCalledWith({
             publishSigner: user,
             bulletinApi,
-            requiredBytes: 14_000_000,
+            onPrompt: undefined,
         });
+        // No quota arg exists any more — a single resolution, no Increase pass.
+        expect(getBulletinAllowanceSignerMock).toHaveBeenCalledTimes(1);
     });
 
     it("dev mode pins storage to the dev publish account — never the user's slot key, no phone prompt", async () => {
@@ -299,51 +298,20 @@ describe("resolveStorageSignerOptions", () => {
         );
     });
 
-    it("quota shortfall downgrades to warn-and-proceed: slot signer still used", async () => {
-        // Whether the chain actually enforces the authorization extent at
-        // store() time is unconfirmed (upstream guidance: "the authorization
-        // is what counts"). Blocking a deploy on possibly-decorative numbers
-        // would be worse than letting polkadot-app-deploy report per-chunk truth,
-        // so a quota failure retries WITHOUT the quota check and proceeds.
-        const SLOT_PUBLIC_KEY2 = new Uint8Array(32).fill(8);
-        const fallbackSigner = { publicKey: SLOT_PUBLIC_KEY2 } as any;
-        getBulletinAllowanceSignerMock
-            .mockRejectedValueOnce(
-                new Error(
-                    "Bulletin allowance for 5Slot is live but does not have enough quota. Re-run `playground login` and approve on your phone.",
-                ),
-            )
-            .mockResolvedValueOnce(fallbackSigner);
-        const warnings: string[] = [];
-        const user = sessionSignerWithHost();
-
-        const result = await resolveStorageSignerOptions("phone", user, {
-            bulletinApi: { marker: true } as any,
-            requiredBytes: 14_000_000,
-            onWarning: (msg) => warnings.push(msg),
-        });
-
-        expect(result.storageSigner).toBe(fallbackSigner);
-        expect(result.storageSignerAddress).toBe(ss58Encode(SLOT_PUBLIC_KEY2));
-        // Second call drops the quota context (no bulletinApi).
-        expect(getBulletinAllowanceSignerMock).toHaveBeenNthCalledWith(2, {
-            publishSigner: user,
-            bulletinApi: undefined,
-            requiredBytes: undefined,
-        });
-        expect(warnings.join(" ")).toMatch(/quota/i);
-    });
-
-    it("quota shortfall without a fallback signer still fails with the actionable error", async () => {
-        getBulletinAllowanceSignerMock
-            .mockRejectedValueOnce(new Error("does not have enough quota"))
-            .mockRejectedValueOnce(new Error("user declined"));
+    it("a missing/expired authorization aborts with the actionable error (no quota retry)", async () => {
+        // The quota two-pass warn-and-proceed is gone: there is nothing left to
+        // downgrade to, because we no longer gate on quota at all. A genuine
+        // existence/expiry failure is terminal and surfaces the fix-it hint.
+        getBulletinAllowanceSignerMock.mockRejectedValue(
+            new Error(
+                "Bulletin allowance for 5Slot has expired. Re-run `playground login` and approve on your phone.",
+            ),
+        );
         await expect(
-            resolveStorageSignerOptions("phone", sessionSignerWithHost(), {
-                bulletinApi: {} as any,
-                requiredBytes: 1,
-            }),
+            resolveStorageSignerOptions("phone", sessionSignerWithHost(), { marker: true } as any),
         ).rejects.toThrow(/playground login/);
+        // One resolution attempt only — no second quota-free retry.
+        expect(getBulletinAllowanceSignerMock).toHaveBeenCalledTimes(1);
     });
 
     it("session missing host wiring throws the login hint", async () => {

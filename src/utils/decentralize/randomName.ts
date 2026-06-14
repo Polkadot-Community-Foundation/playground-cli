@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { randomBytes } from "node:crypto";
+import { basename, resolve } from "node:path";
 import { checkDomainAvailability, type AvailabilityResult } from "../deploy/availability.js";
 import type { Env } from "../../config.js";
 
@@ -37,6 +38,19 @@ const MIN_LETTERS = 4;
 const FALLBACK_PREFIX = "decent-";
 /** Cap the derived host segment so the final label stays well under DNS's 63-char ceiling. */
 const MAX_HOST_LEN = 30;
+
+/**
+ * One-line explanation of the random suffix appended to auto-generated names
+ * (e.g. `dominique-io` → `dominique-io-urcn30`). Surfaced inline so users stop
+ * reading the suffix as a bug — it's the deliberate NoStatus label shape (see
+ * the rules above) that lets any signer register the name without a
+ * proof-of-personhood credential. Shared by the headless message in
+ * `domain.ts` and the interactive `DecentralizeScreen` so both read identically.
+ */
+export const FREE_DOMAIN_SUFFIX_NOTE =
+    'Free .dot names get a short unique suffix (e.g. "-urcn30") so anyone can ' +
+    "register them without a proof-of-personhood credential. Pass --dot=<name> " +
+    "(or type a name) to choose your own.";
 
 /**
  * Sanitise a site URL into a domain-safe prefix derived from its hostname.
@@ -68,7 +82,22 @@ function deriveBase(siteUrl: string): string | null {
         }
     }
 
-    let s = parsed.hostname
+    return sanitizeBase(parsed.hostname);
+}
+
+/**
+ * Sanitise a local directory path into a domain-safe prefix derived from its
+ * basename. Same transliteration pipeline as `deriveBase` so `--path ./dist`
+ * yields `dist-abcd42`-style names and `--path ~/sites/my.portfolio/build`
+ * yields `build-…`. Returns null when nothing usable remains (e.g. `--path /`
+ * or an all-symbol directory name); callers fall back to `FALLBACK_PREFIX`.
+ */
+export function deriveBaseFromPath(localPath: string): string | null {
+    return sanitizeBase(basename(resolve(localPath)));
+}
+
+function sanitizeBase(raw: string): string | null {
+    let s = raw
         .toLowerCase()
         .replace(/\./g, "-")
         .replace(/[^a-z0-9-]/g, "");
@@ -89,10 +118,16 @@ function deriveBase(siteUrl: string): string | null {
  *
  *   generateLabel("https://shawntabrizi.com")  →  "shawntabrizi-com-abcd42"
  *   generateLabel("https://x.com")              →  "x-com-abcd42"
+ *   generateLabel(undefined, "./dist")          →  "dist-abcd42"
  *   generateLabel(undefined)                    →  "decent-abcd42"
+ *
+ * `siteUrl` and `localPath` are mutually exclusive in practice (`--site` vs
+ * `--path`); when both are somehow present the URL wins.
  */
-export function generateLabel(siteUrl?: string): string {
-    const base = siteUrl ? deriveBase(siteUrl) : null;
+export function generateLabel(siteUrl?: string, localPath?: string): string {
+    const base =
+        (siteUrl ? deriveBase(siteUrl) : null) ??
+        (localPath ? deriveBaseFromPath(localPath) : null);
     const prefix = base ? `${base}-` : FALLBACK_PREFIX;
 
     // Pad with lowercase letters so prefix + letters >= MIN_BASE_LEN.
@@ -116,6 +151,12 @@ export interface FindAvailableNameOptions {
      * recognisability of the resulting `.dot.li` URL.
      */
     siteUrl?: string;
+    /**
+     * Local directory being decentralized (`--path` flow). Candidates start
+     * with the sanitised directory basename (e.g. `dist-abcd42`). Ignored
+     * when `siteUrl` is also set.
+     */
+    localPath?: string;
     /** Cap on attempts; defaults to 20. */
     maxAttempts?: number;
 }
@@ -136,7 +177,7 @@ export async function findAvailableRandomName(
     let lastFailure: AvailabilityResult | null = null;
 
     for (let i = 0; i < maxAttempts; i++) {
-        const candidate = generateLabel(options.siteUrl);
+        const candidate = generateLabel(options.siteUrl, options.localPath);
         const result = await checkDomainAvailability(candidate, {
             env: options.env,
             ownerSs58Address: options.ownerSs58Address,

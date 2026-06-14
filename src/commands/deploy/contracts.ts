@@ -75,8 +75,18 @@ export async function runContractsBeforeFrontend({
         throw new Error(formatContractErrors("Contract deploy failed", deploy.summary));
     }
 
+    if (deploy.summary.contracts.length === 0) {
+        throw new Error(
+            `Contract deploy was requested but no contracts were found in ${projectDir}. ` +
+                "Run from the directory containing your contract crates (Cargo.toml) or " +
+                "Solidity sources, or drop --contracts for a frontend-only deploy.",
+        );
+    }
+
+    // Reaching here guarantees contracts.length > 0 (the zero case threw above),
+    // so an empty installedLibraries means contracts deployed without CDM names.
     const installedLibraries = installLibrariesFromDeploySummary(deploy.summary);
-    if (deploy.summary.contracts.length > 0 && installedLibraries.length === 0) {
+    if (installedLibraries.length === 0) {
         throw new Error(
             "Contract deploy completed, but no CDM package names were registered. " +
                 'Add [package.metadata.cdm] package = "@org/name" to each deployable Cargo.toml.',

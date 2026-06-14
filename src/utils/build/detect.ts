@@ -61,6 +61,12 @@ export interface DetectInput {
     lockfiles: Set<string>;
     /** Set of additional config-file basenames (e.g. vite.config.ts). */
     configFiles: Set<string>;
+    /**
+     * Absolute project root the snapshot was taken from, used only to name the
+     * directory in the missing-package.json error. Optional so unit tests can
+     * build inputs without a real path.
+     */
+    projectDir?: string;
 }
 
 export class BuildDetectError extends Error {
@@ -195,6 +201,19 @@ export function detectBuildConfig(input: DetectInput): BuildConfig {
                 defaultOutputDir: hint.defaultOutputDir,
             };
         }
+    }
+
+    // No package.json at all almost always means the user is a level above
+    // their project (e.g. ran `dot mod`, then `dot build` from the parent dir).
+    // Point them at the directory rather than at editing a package.json that
+    // isn't there — the generic "add a build script" message sends them to the
+    // wrong fix.
+    if (!input.packageJson) {
+        const where = input.projectDir ? ` in ${input.projectDir}` : "";
+        throw new BuildDetectError(
+            `No package.json found${where}. Are you in your project directory? ` +
+                "cd into it first, or point the command at it with --dir <path>.",
+        );
     }
 
     throw new BuildDetectError(

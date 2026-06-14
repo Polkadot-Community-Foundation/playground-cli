@@ -22,8 +22,10 @@
  * off the same events.
  */
 
+import { resolve } from "node:path";
 import { runBuild, loadDetectInput, detectBuildConfig, type BuildConfig } from "../build/index.js";
 import { publishToPlayground, normalizeDomain } from "./playground.js";
+import { assertBuildDirExists } from "./buildDir.js";
 import {
     resolveSignerSetup,
     resolveStorageSignerOptions,
@@ -38,7 +40,7 @@ import {
     type SigningEvent,
 } from "./signingProxy.js";
 import type { DeployLogEvent } from "./progress.js";
-import { createStorageQuotaContext } from "./storageQuota.js";
+import { createBulletinAuthContext } from "./bulletinAuthContext.js";
 import { withDeployPhase } from "./phase.js";
 import type { ResolvedSigner } from "../signer.js";
 import type { Env } from "../../config.js";
@@ -81,6 +83,18 @@ export interface RunDeployOptions {
     moddable?: boolean;
     /** Resolved public repository URL to record in metadata (moddable=true) or `null` (moddable=false). */
     repositoryUrl?: string | null;
+    /**
+     * Domain (`<label>.dot`) this deploy was modded from. For SDK/RevX
+     * consumers that perform the clone themselves and therefore never run the
+     * `dot mod` TUI step that writes `moddedFrom` into `dot.json`: pass the
+     * source domain here so the contract credits the right owner. When set
+     * (non-empty) it takes precedence over any (possibly stale) `moddedFrom`
+     * in the project's `dot.json` — see `publishToPlayground` and
+     * playground-app#335. Omit for the normal `dot deploy` path, which reads
+     * the value `dot mod` captured in `dot.json`. Ignored when
+     * `publishToPlayground` is false.
+     */
+    moddedFrom?: string | null;
     /** Single playground tag to record in metadata, or `null`/omitted to publish untagged. Ignored when `publishToPlayground` is false. */
     tag?: string | null;
     /** The logged-in phone signer. Required for `mode === "phone"` or `publishToPlayground`. */
@@ -127,6 +141,16 @@ export interface DeployOutcome {
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
 export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcome> {
+    // Universal preflight backstop for every caller (headless, interactive TUI,
+    // and SDK/RevX consumers): when skipping the build, the artifacts must
+    // already exist, or the storage phase fails opaquely with `Path not found`.
+    // We only check on skip-build — a real build produces `buildDir` itself.
+    // (`--contracts` always forces a rebuild, so skipBuild and contracts can
+    // never both be set; nothing on-chain runs ahead of this check.)
+    if (options.skipBuild) {
+        assertBuildDirExists(options.projectDir, options.buildDir);
+    }
+
     const { label, fullDomain } = normalizeDomain(options.domain);
 
     const setup = resolveSignerSetup({
@@ -139,15 +163,22 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
     options.onEvent({ kind: "plan", approvals: setup.approvals });
 
     const counter = createSigningCounter();
-    // "Check your phone" surface for RFC-0010 allocation taps (Bulletin slot
-    // grant / quota Increase). These ride the statement store outside any
+    // "Check your phone" surface for RFC-0010 allocation taps (the first-use
+    // Bulletin slot grant). These ride the statement store outside any
     // PolkadotSigner, so the signing proxy below can't see them — without
     // this the phone shows an approval dialog the TUI never mentions.
     const allowancePrompt = createApprovalPrompt(counter, (event) =>
         options.onEvent({ kind: "signing", event }),
     );
 
-    const buildAbs = options.buildDir;
+    // Resolve against projectDir, NOT the process cwd. The build writes to
+    // `projectDir/<buildDir>` (build runs with `cwd: projectDir`), but
+    // polkadot-app-deploy resolves a relative `content` against `process.cwd()`
+    // (`path.resolve(content)`). Passing the raw relative path would make a
+    // `--dir`-from-another-cwd deploy upload the wrong directory (or fail with
+    // `Path not found`). An absolute `buildDir` is unchanged (resolve is a
+    // no-op), so the common `projectDir === cwd` case is byte-for-byte identical.
+    const buildAbs = resolve(options.projectDir, options.buildDir);
 
     // Build first, OUTSIDE any signing gate — tsc+vite is the slow part and must
     // stay parallel across concurrent deploys. Only the on-chain signing phases
@@ -183,35 +214,27 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         // statement-store message cap. Resolved AFTER the wrap so the slot
         // signer never goes through the phone-approval event proxy.
         //
-        // The quota context (size estimate + dedicated Bulletin client) lets
-        // the slot's on-chain extent be verified BEFORE the upload starts; an
-        // undersized grant triggers one Increase tap on the phone instead of
-        // the upload dying mid-flight with Payment errors. Best-effort: a null
-        // context just skips the check. Built only for phone-mode sessions —
-        // dev mode never uses the slot key.
-        const quota =
+        // A dedicated Bulletin client lets the slot's on-chain authorization
+        // be verified BEFORE the upload starts: a missing/expired grant fails
+        // fast with a "re-run login" message instead of the upload dying
+        // mid-flight. We do NOT gate on tx/byte quota — Bulletin `store` treats
+        // those as soft limits. Best-effort: a null context just skips the
+        // check. Built only for phone-mode sessions — dev mode never uses the
+        // slot key.
+        const authContext =
             options.mode === "phone" && options.userSigner?.source === "session"
-                ? createStorageQuotaContext(options.env, buildAbs)
+                ? createBulletinAuthContext(options.env)
                 : null;
         let storageSignerOptions: Awaited<ReturnType<typeof resolveStorageSignerOptions>>;
         try {
             storageSignerOptions = await resolveStorageSignerOptions(
                 options.mode,
                 options.userSigner,
-                quota
-                    ? {
-                          ...quota,
-                          onWarning: (message) =>
-                              options.onEvent({
-                                  kind: "storage-event",
-                                  event: { kind: "info", message },
-                              }),
-                      }
-                    : undefined,
+                authContext?.bulletinApi,
                 allowancePrompt,
             );
         } finally {
-            quota?.destroy();
+            authContext?.destroy();
         }
         const storage = await withDeployPhase(
             "storage-and-dotns",
@@ -275,6 +298,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                     repositoryUrl: options.repositoryUrl ?? null,
                     tag: options.tag ?? null,
                     cwd: options.projectDir,
+                    moddedFrom: options.moddedFrom ?? undefined,
                     onLogEvent: (event) => options.onEvent({ kind: "storage-event", event }),
                     onAllowancePrompt: allowancePrompt,
                     env: options.env,

@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, expect, it, vi } from "vitest";
-import { runStorageDeploy } from "./storage.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IPFS_MIGRATION_MESSAGE, runStorageDeploy } from "./storage.js";
 
 const bulletinDeployMock = vi.hoisted(() =>
     vi.fn(async () => ({
@@ -29,6 +29,15 @@ vi.mock("@parity/polkadot-app-deploy", () => ({
 }));
 
 describe("runStorageDeploy", () => {
+    beforeEach(() => {
+        bulletinDeployMock.mockReset();
+        bulletinDeployMock.mockResolvedValue({
+            cid: "bafyapp",
+            ipfsCid: "bafyapp",
+            carBytes: new Uint8Array(),
+        });
+    });
+
     it("passes the selected env and endpoints to polkadot-app-deploy", async () => {
         await runStorageDeploy({
             content: "/tmp/project/dist",
@@ -46,5 +55,44 @@ describe("runStorageDeploy", () => {
                 assetHubEndpoints: ["wss://paseo-asset-hub-next-rpc.polkadot.io"],
             }),
         );
+    });
+
+    it("remaps Kubo's 'repo needs migration' abort to an actionable message", async () => {
+        const original = new Error(
+            "Command failed: ipfs add -Q -r /tmp/x\nError: ipfs repo needs migration, please run migration tool.\n",
+        );
+        bulletinDeployMock.mockRejectedValueOnce(original);
+
+        const err = await runStorageDeploy({
+            content: "/tmp/project/dist",
+            domainName: "my-app",
+            auth: {},
+            env: "paseo-next-v2",
+        }).then(
+            () => {
+                throw new Error("expected runStorageDeploy to reject");
+            },
+            (e: unknown) => e,
+        );
+
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBe(IPFS_MIGRATION_MESSAGE);
+        // The raw Kubo output must stay reachable for diagnostics — the remap
+        // wraps, never discards, the original error.
+        expect((err as Error).cause).toBe(original);
+    });
+
+    it("passes non-migration deploy errors through unchanged", async () => {
+        const original = new Error("AncientBirthBlock: chunk rejected");
+        bulletinDeployMock.mockRejectedValueOnce(original);
+
+        await expect(
+            runStorageDeploy({
+                content: "/tmp/project/dist",
+                domainName: "my-app",
+                auth: {},
+                env: "paseo-next-v2",
+            }),
+        ).rejects.toBe(original);
     });
 });

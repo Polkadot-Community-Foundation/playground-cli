@@ -62,11 +62,10 @@ const QR_TIMEOUT_MS = 60_000;
  * - `rootAddress` — SS58 of `session.rootAccountId`. This is the
  *   `rootUserAccountId` the mobile app sent over the SSO handshake. On
  *   current mobile builds this is the bare-mnemonic sr25519 root (no
- *   junction). It is what `Resources.Consumers` on the People parachain
- *   is keyed by, so it's the right input for `lookupUsername`. It is
- *   NOT the same address the phone shows as "Wallet account" on its
- *   debug screen — that uses the hard-junction `//wallet` path which
- *   the host cannot reproduce from a public key alone.
+ *   junction). It is NOT the same address the phone shows as "Wallet
+ *   account" on its debug screen — that uses the hard-junction
+ *   `//wallet` path which the host cannot reproduce from a public key
+ *   alone.
  * - `productAddress` — SS58 of the playground product account derived
  *   via `product/playground.dot/0` from `rootAccountId`. This is what
  *   actually signs on-chain transactions from the CLI.
@@ -262,7 +261,7 @@ export async function connect(): Promise<ConnectResult> {
     // phone reuses its account; the host account comes from the persisted
     // DeviceIdentity), and a stale phone-sent `Disconnected` statement there —
     // 7-day TTL — is replayed by `createSession.init()` and silently tears the
-    // freshly paired session back out of `SsoSessionsV2`, which is exactly the
+    // freshly paired session back out of `SsoSessionsV3`, which is exactly the
     // "login succeeds but `deploy` says No signer available" failure. See
     // `sessionReset.ts` for the full mechanism. We destroy the probe adapter
     // (it loaded the OLD identity) before deleting the identity, then build a

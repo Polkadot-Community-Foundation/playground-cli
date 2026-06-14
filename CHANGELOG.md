@@ -1,5 +1,243 @@
 # playground-cli
 
+## 0.38.8
+
+### Patch Changes
+
+- 3a4b9e2: Remove the username step from `playground login`. The flow no longer prompts you to claim a registry handle and no longer displays a username in the header.
+
+## 0.38.7
+
+### Patch Changes
+
+- bda42ed: The post-mod "Next steps" block now nudges toward the prepopulated `(prompt: "start tutorial")` AI prompt only when modding the `playground-tutorial.dot` app, rather than whenever a quest track was started.
+
+## 0.38.6
+
+### Patch Changes
+
+- fcf2269: When a mistyped command or option is too far off for commander's built-in "Did you mean …?" suggestion, the error now tails with a pointer to `playground --help` (matching git's behavior). Covers the root program and every subcommand, including option typos on `login`, `deploy`, etc.
+
+## 0.38.5
+
+### Patch Changes
+
+- ed098be: Distinguish a wrong working directory from a genuinely unrecognised project in `dot build` / `dot deploy`. When no `package.json` is found, the error now points at the current directory ("Are you in your project directory? cd into it first, or point the command at it with --dir <path>.") instead of the misleading "No build strategy detected" message that suggested editing a package.json that isn't there.
+
+## 0.38.4
+
+### Patch Changes
+
+- 8026977: `playground mod`: stop showing a warning when an app has no `setup.sh`. Apps without a setup script are the common case, and surfacing it as a yellow warning row alarmed users. The step is now skipped silently and the usual "Next steps" footer is printed as before.
+
+## 0.38.3
+
+### Patch Changes
+
+- 942f045: deploy: warn before redeploying contracts that CDM package names are owned by their first deployer. When you choose "yes, I changed contracts", `playground deploy` now shows an acknowledgement explaining that if the app is a mod (or you edited contracts someone else authored), the names in `cdm.json` belong to the original author and the deploy will fail unless you rename them first. Press Enter to continue or Esc to exit and rename.
+
+## 0.38.2
+
+### Patch Changes
+
+- 8ba2804: `playground mod` now nudges users toward the guided tutorial: when a quest track is started from the picker, the post-clone "Next steps" hint reads `edit with claude (prompt: "start tutorial")` instead of the plain `edit with claude`. The quest and app pickers also tear down their Ink instance fully before the next screen mounts, so a half-unmounted picker can no longer swallow the following screen's keystrokes or leave a stale frame on top of it.
+
+## 0.38.1
+
+### Patch Changes
+
+- 5a6e09b: When deploying without a logged-in session, the `playground deploy` signer picker now shows the phone signer greyed out and unselectable (instead of hiding it), so users can see the option exists. The "mobile signing unavailable" notice moved below the options.
+
+## 0.38.0
+
+### Minor Changes
+
+- 116964a: `playground decentralize --path` can now publish moddable apps: the interactive flow asks "let others remix (mod) this app?" when publishing a local directory to the playground (with the same git-origin preflight and recovery menu as `playground deploy`), and headless mode accepts a `--moddable` flag. Publishing a local directory also inlines the project's README.md as the app's playground detail page — resolved from the enclosing git repo root, so it's found even when `--path` points at a build dir like `./dist` (the same anchor the moddable git-origin preflight walks up to) — and the TUI now says so up front at the publish prompt. Mirrored URL sites are unchanged (no git source — never moddable, no README).
+- 7319eb6: Interactive `playground decentralize` can now deploy a local directory: a new first prompt asks whether to mirror a live URL or upload an already-built static site (e.g. `./dist`), then both flows share the same signer/domain/publish steps. The confirm screen shows the resolved upload root and file count for local directories.
+- 78b8fee: `playground decentralize --path <dir>` deploys a local static directory (e.g. `./dist`) to Bulletin + DotNS without mirroring a URL. Mutually exclusive with `--site`; auto-generated `.dot` names derive from the directory basename.
+
+## 0.37.2
+
+### Patch Changes
+
+- 86ac724: Rework the `playground mod` quest picker so the start action is the first row ("START:" + the first unlocked level) and locked levels render greyed out below it, instead of a read-only level list with a separate Start button underneath. Enter now starts the tutorial immediately; removing cursor navigation also fixes rapid arrow keypresses getting lost.
+
+## 0.37.1
+
+### Patch Changes
+
+- ebc64b5: Sync the `playground decentralize` prompts with `playground deploy`:
+
+  - The signer pickers in both commands list your phone signer first and start the cursor on it (when logged in). The "dev signer earns no XP" warning now appears below the options, only while the dev signer is highlighted, and disappears when you move back to the phone signer.
+  - `playground decentralize` now shows the same magenta help boxes as deploy above its signer, domain, publish, and (new) tags prompts, and its intro box uses the same accent style.
+  - The "publish to the playground registry?" prompt now lists "yes" first and selects it by default.
+  - `playground decentralize` gained a category-tag step and a `--tag` flag (whitelisted to the playground tags, requires `--playground`), matching deploy; the chosen tag is written to the published app metadata and shown in the confirm summary.
+
+- ebc64b5: Clarify the "update available" banner: it now reads `Run pg update to update the CLI.` (previously "playground update to upgrade") so the suggested command matches the wording.
+
+## 0.37.0
+
+### Minor Changes
+
+- 9e380a6: `playground login` now ends with a "Try one of these next" box suggesting the commands to run after signing in (`pg decentralize`, `pg mod`, `pg deploy`), each with a short description, so newly paired users know where to go next.
+
+### Patch Changes
+
+- 2a4e81e: `playground login` no longer prints a "Statement subscription error: … Not connected" stack trace after a successful sign-in. When the login adapter is destroyed, an in-flight statement-store subscription can surface a bare `Error: Not connected` from the just-closed websocket. That benign teardown artifact was already swallowed as an unhandled rejection, but the statement-store package also logs it directly from its subscription error callback; the local patch that silences that log now matches the bare "Not connected" shape in addition to `DestroyedError`, mirroring `isBenignUnsubscriptionError`.
+
+## 0.36.8
+
+### Patch Changes
+
+- eab0a33: `install.sh` no longer shadows an existing `~/.profile` (or `~/.bash_login`) for bash users. The installer creates a `~/.bash_profile` bridge so the `~/.bashrc` PATH entry loads in login shells (every macOS terminal tab). Previously, creating that file from scratch silently took precedence over a pre-existing `~/.profile`/`~/.bash_login` — which login bash reads only as the first existing of `~/.bash_profile` → `~/.bash_login` → `~/.profile` — so the user's login-shell config stopped loading. When the installer now has to create `~/.bash_profile`, it first carries forward a sourcing line for the file bash would otherwise have read. An already-existing `~/.bash_profile` is left untouched apart from appending the `~/.bashrc` source line.
+
+## 0.36.7
+
+### Patch Changes
+
+- 47c8399: `playground deploy` no longer crashes with an opaque `Raw mode is not supported on the current process.stdin` error when run without an interactive terminal (agents, CI, piped input). A new `-y, --yes` flag runs the deploy non-interactively using defaults (requires `--domain`; `--signer` defaults to `dev`). When prompts are needed but stdin is not a TTY and `--yes` was not passed, the command now exits with an actionable message pointing at `--yes` instead of the internal Ink crash.
+
+## 0.36.6
+
+### Patch Changes
+
+- 7b649f6: `playground deploy --no-build` now validates the build directory up front. A missing or mistyped `--buildDir` fails immediately with an actionable message (`Build directory not found: …`) before the availability check, summary, and any on-chain work, instead of surfacing late as an opaque `Path not found` inside the storage phase.
+
+  The build directory is now resolved against `--dir` (the project root) for the storage upload as well, so deploys run with `--dir` pointing outside the current working directory upload the directory the build actually wrote to.
+
+## 0.36.5
+
+### Patch Changes
+
+- 1e51790: Long status-row messages no longer fuse into their label when they wrap (e.g. "deploy failedNo smart contracts…"). The label and value now live in separate flex boxes so a wrapping value can't swallow the label's trailing space.
+
+## 0.36.4
+
+### Patch Changes
+
+- fd7f49f: Fix a confusing `pg deploy` failure when the contract pre-step runs against a project with no contracts. Previously, requesting contract deploy (via `--contracts` or the TUI prompt) in a frontend-only project or from the wrong directory failed with the cryptic "No library specified and no dependencies found in cdm.json", surfaced in the TUI under a misleading "Signing Failed" banner. Deploy now reports an actionable error naming the directory and the likely cause, the standalone `pg contract install` error message points at the cdm.json it inspected, and non-signing contract failures are no longer mislabeled as signing failures.
+
+## 0.36.3
+
+### Patch Changes
+
+- 7009f4e: `deploy`: warn that the dev signer earns no XP before you pick it.
+
+  - The signer-choice screen now shows a yellow callout above the options, when phone signing is available, explaining that the dev signer publishes from a shared test account and so earns no XP, and that picking your phone signer publishes from your own account and earns XP.
+  - When you are not logged in, the existing "Mobile signing unavailable" notice now also mentions that logging in lets your deploys earn XP.
+
+- 7009f4e: `login`: show that setting a username earns 25 XP.
+
+  - The "set a username?" step at the end of `playground login` now shows a green callout above the choice, telling users that setting a username grants them 25 XP and claims their handle, so the incentive is visible before they decide to skip.
+
+## 0.36.2
+
+### Patch Changes
+
+- c3f84eb: `decentralize`: explain the auto-generated domain suffix, warn on large sites, and document cancel.
+
+  - Auto-generated free `.dot` names (e.g. `dominique-io-urcn30`) now show an inline note explaining the random suffix lets anyone register the name without a proof-of-personhood credential — it was previously unexplained and read as a bug.
+  - Mirroring a large site now surfaces a "large site — this may take several minutes" warning once the download crosses 200 files, in both the interactive TUI and headless output.
+  - The TUI and headless output now document that Ctrl+C cancels at any time.
+
+## 0.36.1
+
+### Patch Changes
+
+- aa6fdd2: Handle the IPFS "repo needs migration" failure during deploys.
+
+  - `playground login` now detects a stale local Kubo repo (older on-disk format than the installed `ipfs` binary) and runs the one-time `ipfs repo migrate` as part of setup, so deploys don't later crash inside `ipfs add`.
+  - When a deploy still hits the migration error (e.g. the IPFS binary was upgraded after login), the cryptic `Command failed: ipfs add … repo needs migration` is replaced with a clear instruction to run `ipfs repo migrate` or re-run `playground login`.
+
+## 0.36.0
+
+### Minor Changes
+
+- ceab059: Upgrade the product-sdk / triangle-js-sdks / DotNS dependency stack and add the
+  Summit network token symbol.
+
+  - **`@parity/product-sdk-terminal` `^0.4.0` → `^0.5.0`**, which pulls the
+    `@novasamatech/*` host stack (host-papp, statement-store, host-api, …) from
+    `0.8.6` to `0.8.7`. Also bumps the within-caret product-sdk floors
+    (`contracts` `0.7.4`, `cloud-storage` `0.6.1`, `descriptors` `0.6.1`, `keys`
+    `0.3.7`, `tx` `0.2.11`) and `@parity/dotns-cli` `0.6.6` → `0.6.8`.
+  - **You will need to re-pair your phone once after this upgrade.** host-papp
+    0.8.7 renamed the on-disk session storage key (`SsoSessionsV2` →
+    `SsoSessionsV3`) and added a required field to the persisted session; there is
+    no migration, so existing pairings are invisible until you run `playground
+login` again. Cached allowance slot keys are unaffected.
+  - **New `SUM` token symbol for the Summit network.** Token amounts (balances,
+    `playground drip`) now read the active env's symbol, so flipping the network to
+    Summit relabels every amount from `PAS` to `SUM` automatically.
+
+## 0.35.5
+
+### Patch Changes
+
+- 9b0ab99: Surface the real cargo-pvm-contract build error during `pg` install instead of a
+  generic "Command failed (set -euo pipefail …)". `runShell` now accepts an optional
+  `description`/`failurePrefix`, and the cargo-pvm-contract toolchain step uses them so
+  failures report a readable label plus the underlying build output.
+
+## 0.35.4
+
+### Patch Changes
+
+- 274f022: deploy: the "Moddable Setup Needed" screen is no longer a dead end. When the source check fails (for example, no GitHub origin is configured), the deploy now offers "continue without moddable" and a clean exit (exit 0 with a friendly nudge), instead of forcing the whole deploy to abort with an error. The interactive message also no longer references CLI flags.
+
+## 0.35.3
+
+### Patch Changes
+
+- e1413f5: Fix mod-of-a-mod XP attribution for SDK/RevX deploys. The `moddedFrom` lineage
+  field was only rewritten by the `dot mod` TUI, while SDK consumers that clone a
+  source app themselves (RevX in a WebContainer) and deploy via `runDeploy` re-published
+  whatever `moddedFrom` the cloned repo's `dot.json` carried. Because a moddable app
+  that was itself modded from the tutorial ships `moddedFrom: <tutorial>` in its
+  committed `dot.json`, modding such an app credited the tutorial's owner instead of
+  the immediate parent's owner (playground-app#335).
+
+  `runDeploy` now accepts an explicit `moddedFrom`, and an explicit value takes
+  precedence over the (possibly stale) `dot.json` field so callers that just performed
+  the mod record the true immediate parent. The resolved value drives both the on-chain
+  lineage edge and the metadata JSON `moddedFrom` (so the badge and the XP credit can't
+  disagree), and is canonicalized to `<label>.dot` — an empty or malformed explicit value
+  falls through to `dot.json` rather than recording garbage on-chain.
+
+## 0.35.2
+
+### Patch Changes
+
+- b658814: `pg mod` now checks that a project's `setup.sh` can find a JavaScript package manager (npm, pnpm, yarn, or bun) before running it. If the script references package managers but none of them are installed, setup stops early with a clear message instead of failing partway through with an opaque error. Scripts that fall back across managers (try bun, else pnpm, else npm) pass as long as any one is installed.
+
+## 0.35.1
+
+### Patch Changes
+
+- 1b30c98: Handle missing system prerequisites on clean Linux installs (#248): `playground init` now checks for `curl` and a C linker and installs them (via `apt`) before the steps that need them, `install.sh` fails fast with the exact remedy when `curl` is absent, and the README documents the Debian/Ubuntu prerequisite line (`build-essential curl`).
+
+## 0.35.0
+
+### Minor Changes
+
+- d166579: Add `playground drip` — top up your signed-in account with a little testnet PAS (1 PAS per run, up to a 10 PAS cap) when you're running low. It funds only your own product account (the one paired via `playground login`), not arbitrary addresses. If you're not signed in, or the shared dev funder is temporarily empty, it shows a clear note instead of an error.
+
+### Patch Changes
+
+- d166579: Fix PGAS smart-contract allowance landing on the wrong account, and fix the login mapping check reporting false "NOT mapped". RFC-0010 allowance requests now send `playground.dot` as the calling product id instead of the terminal's `dot-cli` namespace, so the phone's `Pgas.claim_pgas` mints to the playground product account (`playground.dot/0`) — creating, auto-mapping, and gas-funding it in one step, with no dev-account funding. Previously the claim targeted `dot-cli/0`, leaving the real product account unmapped. The login mapping verification now reads the best head (finalization on paseo-next-v2 lags ~80 s behind the just-included claim, so the old finalized-head read missed freshly-mapped accounts) with a short retry window. Existing sessions re-grant once on the next `playground login` (single approval dialog); the phone's approval prompt now also names the playground product instead of `dot-cli`.
+
+## 0.34.7
+
+### Patch Changes
+
+- 7a50517: Give `playground login` accurate guidance when a resource allowance can't be granted. A wallet that declines a request (`Rejected`) and one that cannot provision it at all (`NotAvailable`, e.g. an out-of-date mobile build) now produce different messages: the former still says to re-run and approve on your phone, while the latter tells you to make sure you're on the latest version of the app. Previously both were reported as a generic "denied ... approve on your phone", which sent users into a re-run loop that could never succeed.
+
+## 0.34.6
+
+### Patch Changes
+
+- 360cf07: Remove the Bulletin storage quota check and the per-deploy "Increase allowance" phone tap. The Bulletin `store` extrinsic treats the tx/byte allowance counters as soft limits — the chain only requires that an authorization exists and has not expired — so a quota-exhausted-but-valid slot uploads fine. Deploy and login now verify existence + non-expiry only, removing an approval many users hit unnecessarily.
+
 ## 0.34.5
 
 ### Patch Changes

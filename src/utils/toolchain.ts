@@ -87,6 +87,47 @@ function isIpfsInitialized(): boolean {
     return existsSync(resolve(homedir(), ".ipfs"));
 }
 
+/**
+ * True when an error is Kubo's "repo needs migration" abort. The exact notice
+ * is "ipfs repo needs migration, please run migration tool."; we match the
+ * stable "repo needs migration" fragment case-insensitively so surrounding
+ * text (Node's `Command failed: …` prefix, a trailing newline) doesn't matter.
+ *
+ * This is the single source of truth for the marker, shared by the login-setup
+ * probe (`ipfsRepoNeedsMigration`) and the deploy-time remap
+ * (`storage.ts::remapIpfsMigrationError`). Scoped to "repo needs migration"
+ * rather than a bare "needs migration" so an unrelated upstream error that
+ * happens to say "needs migration" isn't misattributed to IPFS.
+ */
+export function isIpfsMigrationError(err: unknown): boolean {
+    return /repo needs migration/i.test(err instanceof Error ? err.message : String(err));
+}
+
+/**
+ * Detect a stale Kubo repo that the installed `ipfs` binary refuses to use
+ * until it's migrated to the current on-disk format. Kubo stamps `~/.ipfs`
+ * with a repo version; when the binary is newer than the repo (e.g. the user
+ * installed ipfs long ago, then `dot login` installed/upgraded Kubo), every
+ * repo-touching command — including the `ipfs add` polkadot-app-deploy runs
+ * during a deploy — fails with "ipfs repo needs migration, please run
+ * migration tool." We probe with a cheap, offline, read-only command and look
+ * for that marker in the error.
+ *
+ * Returns false when there's no repo to migrate (nothing initialized yet) so
+ * the IPFS step's fresh-install path is unaffected.
+ */
+export async function ipfsRepoNeedsMigration(): Promise<boolean> {
+    if (!isIpfsInitialized()) return false;
+    try {
+        await run("ipfs repo stat --offline");
+        return false;
+    } catch (err) {
+        // Node's `exec` appends the child's stderr to the rejection message,
+        // which is where Kubo prints the migration notice.
+        return isIpfsMigrationError(err);
+    }
+}
+
 export interface ToolStep {
     name: string;
     check: () => Promise<boolean>;
@@ -118,8 +159,10 @@ cargo install --force --locked --target "$host_target" --path "$tmp_dir/crates/c
 // install script starts with `git clone` (#247 — clean Ubuntu has no git, so
 // the clone failed before the git step ran; macOS masked it via Xcode CLT).
 // git goes first overall: it's the cheapest step, so a broken apt surfaces
-// before the multi-hundred-MB rustup/nightly downloads. Pinned by a test in
-// toolchain.test.ts.
+// before the multi-hundred-MB rustup/nightly downloads. Likewise curl MUST
+// come before rustup/IPFS (their installers fetch via curl) and the C linker
+// MUST come before cargo-pvm-contract (`cargo install` links) — #248. Pinned
+// by tests in toolchain.test.ts.
 export const TOOL_STEPS: ToolStep[] = [
     {
         name: "git",
@@ -136,6 +179,46 @@ export const TOOL_STEPS: ToolStep[] = [
             }
         },
         manualHint: "https://git-scm.com/downloads",
+    },
+    {
+        // The rustup and IPFS install commands below fetch via curl (#248).
+        // The install.sh one-liner already implies curl exists, but `playground
+        // init` can also run standalone on a machine the binary was copied to.
+        name: "curl",
+        check: () => commandExists("curl"),
+        install: async (onData) => {
+            if (platform() === "darwin" && (await commandExists("brew"))) {
+                await runPiped("brew install curl", onData);
+            } else if (platform() === "linux") {
+                await runPiped(`${sudo()}apt update && ${sudo()}apt install -y curl`, onData);
+            } else {
+                throw new Error(
+                    "Cannot install curl automatically on this platform — install manually.",
+                );
+            }
+        },
+        manualHint: "https://curl.se/download.html",
+    },
+    {
+        // cargo-pvm-contract's `cargo install` compiles Rust, which needs a
+        // system C linker (#248). Bare Ubuntu ships none; macOS masks the gap
+        // via Xcode CLT, same pattern as #247's missing git.
+        name: "C linker (cc)",
+        check: () => commandExists("cc"),
+        install: async (onData) => {
+            if (platform() === "linux") {
+                await runPiped(
+                    `${sudo()}apt update && ${sudo()}apt install -y build-essential`,
+                    onData,
+                );
+            } else {
+                throw new Error(
+                    "Cannot install a C toolchain automatically on this platform — install manually.",
+                );
+            }
+        },
+        manualHint:
+            "Debian/Ubuntu: sudo apt install -y build-essential — macOS: xcode-select --install",
     },
     {
         name: "rustup",
@@ -166,12 +249,23 @@ export const TOOL_STEPS: ToolStep[] = [
     {
         name: "cargo-pvm-contract",
         check: hasCargoPvmContract,
-        install: (onData) => runPiped(CARGO_PVM_CONTRACT_INSTALL, onData),
+        install: (onData) =>
+            runPiped(CARGO_PVM_CONTRACT_INSTALL, onData, {
+                description: `cargo install cargo-pvm-contract @ ${CARGO_PVM_CONTRACT_REV.slice(0, 12)}`,
+                failurePrefix: "cargo-pvm-contract build failed",
+            }),
         manualHint: `Install cargo-pvm-contract from https://github.com/paritytech/cargo-pvm-contract at commit ${CARGO_PVM_CONTRACT_REV}`,
     },
     {
         name: "IPFS",
-        check: async () => (await commandExists("ipfs")) && isIpfsInitialized(),
+        // A stale repo (older on-disk format than the installed Kubo) passes
+        // the binary + init checks but blows up later inside the deploy's
+        // `ipfs add` with "repo needs migration". Treat it as not-ready so the
+        // install step migrates it before any deploy runs.
+        check: async () =>
+            (await commandExists("ipfs")) &&
+            isIpfsInitialized() &&
+            !(await ipfsRepoNeedsMigration()),
         install: async (onData) => {
             if (!(await commandExists("ipfs"))) {
                 if (platform() === "darwin" && (await commandExists("brew"))) {
@@ -187,9 +281,15 @@ export const TOOL_STEPS: ToolStep[] = [
             }
             if (!isIpfsInitialized()) {
                 await runPiped("ipfs init", onData);
+            } else if (await ipfsRepoNeedsMigration()) {
+                // One-time, offline, idempotent: Kubo bundles its fs-repo
+                // migrations since v0.15, so this needs no network and no-ops
+                // when the repo is already current.
+                await runPiped("ipfs repo migrate", onData);
             }
         },
-        manualHint: "https://docs.ipfs.tech/install/ then run: ipfs init",
+        manualHint:
+            "https://docs.ipfs.tech/install/ then run: ipfs init (or `ipfs repo migrate` if it reports a stale repo)",
     },
     {
         // Required by `dot decentralize` (mirrors a live site via `wget --mirror`).

@@ -20,7 +20,7 @@ export {
     MIN_BALANCE,
     type BalanceStatus,
 } from "./funding.js";
-export { checkMapping, ensureMapped } from "./mapping.js";
+export { checkMapping } from "./mapping.js";
 export {
     checkAllowance,
     ensureAllowance,
