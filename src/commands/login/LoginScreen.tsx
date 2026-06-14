@@ -20,7 +20,6 @@ import { DependencyList } from "./DependencyList.js";
 import { IdentityLines } from "./IdentityLines.js";
 import { QrLogin } from "./QrLogin.js";
 import { AccountSetup } from "./AccountSetup.js";
-import { UsernamePrompt } from "./UsernamePrompt.js";
 import { NextSteps } from "./NextStepsCallout.js";
 import { computeAllDone } from "./completion.js";
 import { VERSION_LABEL } from "../../utils/version.js";
@@ -42,10 +41,6 @@ export function LoginScreen({
     const [depsComplete, setDepsComplete] = useState(false);
     const [accountComplete, setAccountComplete] = useState(false);
     const [accountOk, setAccountOk] = useState(true);
-    // `null` ≡ "no username on chain and user declined to set one";
-    // `string` ≡ "username known (existing or just-claimed)".
-    // `undefined` ≡ "prompt has not resolved yet".
-    const [username, setUsername] = useState<string | null | undefined>(undefined);
 
     const allDone = computeAllDone({
         needsQr,
@@ -53,7 +48,6 @@ export function LoginScreen({
         loggedInAddress: addresses?.productAddress ?? null,
         depsComplete,
         accountComplete,
-        usernameComplete: username !== undefined,
     });
 
     const handleDepsDone = () => {
@@ -68,16 +62,6 @@ export function LoginScreen({
     const handleAccountDone = (success: boolean) => {
         setAccountOk(success);
         setAccountComplete(true);
-        // Account setup is a prerequisite for setUsername (the tx needs the
-        // smart-contract allowance + a funded product account). When account
-        // setup fails we skip the prompt entirely and treat the step as
-        // resolved-with-no-username so the login flow can land on
-        // "setup complete (with errors)" instead of hanging.
-        if (!success) setUsername(null);
-    };
-
-    const handleUsernameDone = (next: string | null) => {
-        setUsername(next);
     };
 
     useEffect(() => {
@@ -86,12 +70,7 @@ export function LoginScreen({
 
     return (
         <Box flexDirection="column">
-            <Header
-                cmd="playground login"
-                network={getNetworkLabel()}
-                username={username ?? undefined}
-                right={VERSION_LABEL}
-            />
+            <Header cmd="playground login" network={getNetworkLabel()} right={VERSION_LABEL} />
 
             {needsQr && <QrLogin login={login} onDone={handleAuthDone} />}
 
@@ -105,10 +84,6 @@ export function LoginScreen({
                     freshlyPaired={needsQr}
                     onDone={handleAccountDone}
                 />
-            )}
-
-            {addresses && accountComplete && accountOk && (
-                <UsernamePrompt addresses={addresses} onDone={handleUsernameDone} />
             )}
 
             {allDone && (
