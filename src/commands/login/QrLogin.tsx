@@ -50,9 +50,9 @@ export function QrLogin({
     }, []);
 
     if (status.step === "success") {
-        // The "logged in" row is rendered by IdentityLines (which also
-        // shows username + product account); QrLogin's success path no
-        // longer prints its own row to avoid duplicating the address.
+        // The "logged in" row is rendered by IdentityLines (which shows the
+        // wallet root + product account); QrLogin's success path no longer
+        // prints its own row to avoid duplicating the address.
         return null;
     }
     if (status.step === "error") {

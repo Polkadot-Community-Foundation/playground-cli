@@ -14,27 +14,39 @@
 // limitations under the License.
 
 /**
- * Revive account mapping — SS58 ↔ H160.
+ * Revive account mapping — SS58 ↔ H160 (read-only check).
  *
  * On paseo-next-v2 the asset-hub runtime wires `pallet_revive::AutoMapper` into
  * `frame_system::OnNewAccount` (see polkadot-sdk
  * `substrate/frame/revive/src/address.rs::AutoMapper`), so any account that
- * has had a consumer-ref bumped — first balance transfer, first Revive call,
- * etc. — is auto-mapped via `AddressMapper::map_no_deposit` without ever
- * needing an explicit `Revive.map_account` extrinsic.
- *
- * We still check via storage before attempting to map, so that:
- *   - Accounts already mapped by AutoMapper short-circuit without signing a
- *     redundant tx (the explicit `map_account` is what was throwing BadProof
- *     under the AsPgas extension surface on early runs).
- *   - The fallback `ensureMapped` call is only reached for the rare case where
- *     no on-chain side-effect has yet triggered AutoMapper.
+ * has had a provider/sufficient ref bumped — first balance transfer, first
+ * sufficient-asset credit, etc. — is auto-mapped via
+ * `AddressMapper::map_no_deposit` without ever needing an explicit
+ * `Revive.map_account` extrinsic. The login-time `SmartContractAllowance`
+ * grant triggers exactly that: the phone's `Pgas.claim_pgas` mints PGAS (a
+ * sufficient asset) to the product account, creating and auto-mapping it.
+ * The CLI therefore only ever READS the mapping; the old write-side helpers
+ * (`ensureMapped`, the dev-account top-up) were removed with the
+ * funding-removal change.
  */
 
-import { createInkSdk } from "@polkadot-api/sdk-ink";
-import { ensureAccountMapped } from "@parity/product-sdk-tx";
-import type { PolkadotSigner } from "polkadot-api";
 import type { PaseoClient } from "../connection.js";
+
+export interface CheckMappingOptions {
+    /**
+     * Total read attempts before reporting "not mapped". >1 makes the check
+     * robust right after an on-chain side effect (e.g. the login-time PGAS
+     * claim): the phone confirms in-block against ITS node's best chain, and
+     * our (load-balanced) RPC node may import that block a moment later.
+     */
+    attempts?: number;
+    /** Pause between attempts. */
+    delayMs?: number;
+    /** Injectable for tests. */
+    sleep?: (ms: number) => Promise<void>;
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * Returns true iff `address` (SS58) is mapped in Revive.
@@ -45,79 +57,50 @@ import type { PaseoClient } from "../connection.js";
  * `Revive.OriginalAccount[H160]` — non-null iff the H160 has an associated
  * SS58 binding stored.
  *
- * The storage query can throw `Incompatible runtime entry Storage(Revive.OriginalAccount)`
- * when our bundled `@parity/product-sdk-descriptors/paseo-asset-hub` type
- * info for `OriginalAccount` has drifted from the live runtime. We swallow it
- * to "not mapped" rather than crashing login — the fallback `ensureMapped`
- * path will handle the no-op case correctly if the account turns out to be
- * already mapped (the chain rejects the redundant `map_account` extrinsic,
- * which our error surface displays clearly). Drop the swallow once
- * `@parity/product-sdk-descriptors` ships a regenerated `paseo-asset-hub`
- * descriptor that matches the live runtime.
+ * The load-bearing read-path choice is `at: "best"` instead of PAPI's default
+ * `"finalized"`: paseo-next-v2's Asset Hub finalization lags 13-14 blocks
+ * (~80 s, measured live 2026-06-11). The phone reports a PGAS claim
+ * `Allocated` as soon as it is in a BEST block, so a finalized-head read in
+ * the next few seconds deterministically misses the just-created account and
+ * login falsely reported "NOT mapped". A best-head false positive (mapping
+ * re-orged out) is harmless for this UX gate.
+ *
+ * `getUnsafeApi()` is defence-in-depth, NOT a fix for an observed bug: typed
+ * reads of `Revive.OriginalAccount` were verified working live against
+ * `@parity/product-sdk-descriptors@0.6.0` (2026-06-11). An earlier comment
+ * here claimed the typed read "can throw Incompatible runtime entry" on
+ * descriptor drift; during the 2026-06-11 debugging that hypothetical was
+ * briefly mistaken for the root cause — it never reproduced. The unsafe API
+ * simply keeps this check immune if descriptors ever lag a runtime upgrade
+ * (same descriptor-free approach polkadot-app-deploy uses throughout).
  */
-export async function checkMapping(client: PaseoClient, address: string): Promise<boolean> {
-    try {
-        const evmAddress = await client.assetHub.apis.ReviveApi.address(address);
-        const original = await client.assetHub.query.Revive.OriginalAccount.getValue(evmAddress);
-        return original !== null && original !== undefined;
-    } catch (err) {
-        if (process.env.DOT_DEPLOY_VERBOSE === "1") {
-            // eslint-disable-next-line no-console
-            console.error(
-                `[checkMapping] swallowed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        }
-        return false;
-    }
-}
-
-/**
- * Submit `Revive.map_account` from the user's signer. Should not normally be
- * needed on paseo-next-v2 — AutoMapper handles it implicitly on the first
- * consumer-ref bump. Kept as a fallback for the cold-start case where no
- * prior on-chain activity has touched the user's account.
- *
- * Catches known-benign rejections that effectively mean "the account is
- * already mapped" so the login flow doesn't surface a scary error on a
- * second run:
- *
- *   - `InvalidTransaction::Stale` — the chain saw a tx with this nonce
- *     already. On an `AutoMap=true` chain `map_account` is a dispatch-side
- *     no-op, so the only way the chain processes the second submission is
- *     to reject it at validate_transaction time, and Stale is the typical
- *     shape (CheckNonce returns stale when `tx.nonce <= account.nonce`).
- *   - `AccountAlreadyMapped` — explicit Revive dispatch error from
- *     non-AutoMap chains. Self-explanatory.
- *
- * If our `checkMapping` storage probe could read the live runtime cleanly
- * we'd never enter this path twice — but the bundled
- * `@parity/product-sdk-descriptors/paseo-asset-hub` is currently stale vs.
- * the live `wss://paseo-asset-hub-next-rpc.polkadot.io` runtime, so storage
- * decodes fail and `checkMapping` returns a false negative. This catch is
- * the safety net until the descriptor catches up.
- */
-export async function ensureMapped(
+export async function checkMapping(
     client: PaseoClient,
     address: string,
-    signer: PolkadotSigner,
-): Promise<void> {
-    const inkSdk = createInkSdk(client.raw.assetHub, { atBest: true });
-    try {
-        await ensureAccountMapped(address, signer, inkSdk, client.assetHub);
-    } catch (err) {
-        if (isBenignMappingError(err)) {
-            return;
-        }
-        throw err;
-    }
-}
+    opts: CheckMappingOptions = {},
+): Promise<boolean> {
+    const attempts = Math.max(1, opts.attempts ?? 1);
+    const delayMs = opts.delayMs ?? 2000;
+    const sleep = opts.sleep ?? defaultSleep;
 
-function isBenignMappingError(err: unknown): boolean {
-    const msg = err instanceof Error ? err.message : String(err);
-    // PAPI's tx-invalid rejection JSON shape — `{"type":"Invalid","value":{"type":"Stale"}}`.
-    if (/"type"\s*:\s*"Stale"/i.test(msg)) return true;
-    if (/InvalidTransaction.*Stale|Stale.*InvalidTransaction/i.test(msg)) return true;
-    // Pre-AutoMap dispatch error from explicit map_account on an already-mapped account.
-    if (/AccountAlreadyMapped/i.test(msg)) return true;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            const unsafeApi = client.raw.assetHub.getUnsafeApi();
+            const evmAddress = await unsafeApi.apis.ReviveApi.address(address, { at: "best" });
+            const original: unknown = await unsafeApi.query.Revive.OriginalAccount.getValue(
+                evmAddress,
+                { at: "best" },
+            );
+            if (original !== null && original !== undefined) return true;
+        } catch (err) {
+            if (process.env.DOT_DEPLOY_VERBOSE === "1") {
+                // eslint-disable-next-line no-console
+                console.error(
+                    `[checkMapping] attempt ${attempt}/${attempts} failed: ${err instanceof Error ? err.message : String(err)}`,
+                );
+            }
+        }
+        if (attempt < attempts) await sleep(delayMs);
+    }
     return false;
 }

@@ -15,7 +15,12 @@
 
 import type { ApAllocationOutcome } from "@parity/product-sdk-terminal/host";
 import { describe, expect, test } from "vitest";
-import { PLAYGROUND_RESOURCES, describeResource, summarizeOutcomes } from "./resources.js";
+import {
+    PLAYGROUND_RESOURCES,
+    describeAllocationFailure,
+    describeResource,
+    summarizeOutcomes,
+} from "./resources.js";
 
 // `ApAllocationOutcome`'s `Allocated.value` is the materialized resource
 // payload (not `undefined`), so we build minimal valid literals. Only the
@@ -67,5 +72,59 @@ describe("describeResource", () => {
         expect(describeResource({ tag: "BulletInAllowance", value: undefined })).toMatch(
             /bulletin/i,
         );
+    });
+});
+
+describe("describeAllocationFailure", () => {
+    const bulletin: typeof PLAYGROUND_RESOURCES = [{ tag: "BulletInAllowance", value: undefined }];
+    const sc: typeof PLAYGROUND_RESOURCES = [{ tag: "SmartContractAllowance", value: 0 }];
+
+    test("returns null when nothing failed", () => {
+        const summary = summarizeOutcomes([allocated], bulletin);
+        expect(describeAllocationFailure(summary)).toBeNull();
+    });
+
+    test("Rejected gets the approve-on-phone remedy, not the update-app one", () => {
+        const summary = summarizeOutcomes([rejected], bulletin);
+        const message = describeAllocationFailure(summary);
+        expect(message).toMatch(/declined: Bulletin storage/);
+        expect(message).toMatch(/approve on your phone/);
+        // Guard against the unavailable remedy leaking into the declined
+        // message: assert on the phrase the unavailable branch actually emits.
+        expect(message).not.toMatch(/latest version of the app/);
+    });
+
+    test("singular vs plural noun agrees with the unavailable count", () => {
+        const single = describeAllocationFailure(summarizeOutcomes([notAvailable], bulletin));
+        expect(single).toMatch(/grant this allowance/);
+        expect(single).not.toMatch(/these allowances/);
+
+        const resources: typeof PLAYGROUND_RESOURCES = [...bulletin, ...sc];
+        const both = describeAllocationFailure(
+            summarizeOutcomes([notAvailable, notAvailable], resources),
+        );
+        expect(both).toMatch(/grant these allowances/);
+        expect(both).not.toMatch(/this allowance/);
+    });
+
+    test("NotAvailable gets the update-app remedy, not the approve-on-phone one", () => {
+        // The reported bug: a wallet that can't provision Bulletin returns
+        // NotAvailable, and "re-run and approve" is a dead end. The guidance
+        // must point at updating the mobile app instead.
+        const summary = summarizeOutcomes([notAvailable], bulletin);
+        const message = describeAllocationFailure(summary);
+        expect(message).toMatch(/unavailable: Bulletin storage/);
+        expect(message).toMatch(/latest version of the app/);
+        expect(message).not.toMatch(/approve on your phone/);
+    });
+
+    test("a mix of Rejected and NotAvailable surfaces both remedies", () => {
+        const resources: typeof PLAYGROUND_RESOURCES = [...bulletin, ...sc];
+        const summary = summarizeOutcomes([notAvailable, rejected], resources);
+        const message = describeAllocationFailure(summary);
+        expect(message).toMatch(/unavailable: Bulletin storage/);
+        expect(message).toMatch(/declined: smart-contract gas/);
+        expect(message).toMatch(/latest version of the app/);
+        expect(message).toMatch(/approve on your phone/);
     });
 });

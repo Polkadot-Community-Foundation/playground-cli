@@ -40,6 +40,7 @@ export { Select, type SelectOption, type SelectProps } from "./Select.js";
 export { Input, type InputProps } from "./Input.js";
 export { LogTail, type LogTailProps } from "./LogTail.js";
 export { Callout } from "./Callout.js";
+export { PromptInfo } from "./PromptInfo.js";
 export {
     PhoneApprovalCallout,
     type PhoneApprovalCalloutProps,

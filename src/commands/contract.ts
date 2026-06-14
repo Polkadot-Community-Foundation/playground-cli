@@ -515,12 +515,20 @@ function detectProjectType(rootDir: string): {
     };
 }
 
-function installRequestsFromArgs(libraries: string[], cdmJson: CdmJson): InstallLibraryRequest[] {
+export function installRequestsFromArgs(
+    libraries: string[],
+    cdmJson: CdmJson,
+    location: string,
+): InstallLibraryRequest[] {
     if (libraries.length > 0) return libraries.map(parseContractInstallLibraryArg);
 
     const deps = cdmJson.dependencies;
     if (!deps || Object.keys(deps).length === 0) {
-        throw new Error("No library specified and no dependencies found in cdm.json.");
+        throw new Error(
+            `No library specified and no dependencies found in cdm.json (looked in ${location}). ` +
+                'Pass a library to install (e.g. "@org/name"), or add a "dependencies" map to ' +
+                "cdm.json. If you meant to deploy a frontend, run from the project root.",
+        );
     }
 
     return Object.entries(deps).map(([library, version]) => ({
@@ -627,7 +635,7 @@ export async function runContractInstall(
     const cdmJson = cdmResult?.cdmJson ?? { dependencies: {}, contracts: {} };
     assertSupportedCdmJson(cdmJson, cdmResult?.cdmJsonPath);
     const target = resolveContractInstallTarget(opts, cdmJson);
-    const requests = installRequestsFromArgs(libraries, cdmJson);
+    const requests = installRequestsFromArgs(libraries, cdmJson, cdmResult?.cdmJsonPath ?? rootDir);
     const useUi = runOptions.useUi ?? true;
 
     let client: Awaited<ReturnType<typeof createCdmAssetHubClient>> | null = null;

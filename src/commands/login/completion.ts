@@ -24,13 +24,6 @@ export interface LoginCompletionState {
     loggedInAddress: string | null;
     depsComplete: boolean;
     accountComplete: boolean;
-    /**
-     * The username prompt only runs once a session exists AND the account
-     * setup has succeeded (allowances + funding are prerequisites for the
-     * `setUsername` tx). When `loggedInAddress` is null we treat this step
-     * as not applicable, same as `accountComplete`.
-     */
-    usernameComplete: boolean;
 }
 
 export function computeAllDone(state: LoginCompletionState): boolean {
@@ -38,6 +31,6 @@ export function computeAllDone(state: LoginCompletionState): boolean {
     return (
         state.depsComplete &&
         state.authResolved &&
-        (needsAccountSetup ? state.accountComplete && state.usernameComplete : true)
+        (needsAccountSetup ? state.accountComplete : true)
     );
 }

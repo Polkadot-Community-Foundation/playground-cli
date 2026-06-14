@@ -27,7 +27,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { generateLabel } from "./randomName.js";
+import { deriveBaseFromPath, generateLabel } from "./randomName.js";
 
 const ITERATIONS = 200;
 
@@ -144,5 +144,40 @@ describe("generateLabel", () => {
         // Tail is 4 letters (26^4 ≈ 456k) + 2 digits, so 50 calls colliding
         // would point at a broken RNG.
         expect(labels.size).toBe(50);
+    });
+});
+
+describe("deriveBaseFromPath (--path flow)", () => {
+    it("uses the directory basename", () => {
+        expect(deriveBaseFromPath("./dist")).toBe("dist");
+        expect(deriveBaseFromPath("/home/me/sites/my-portfolio/build")).toBe("build");
+    });
+
+    it("ignores a trailing slash", () => {
+        expect(deriveBaseFromPath("/home/me/sites/build/")).toBe("build");
+    });
+
+    it("transliterates dots and strips unsafe characters", () => {
+        expect(deriveBaseFromPath("/tmp/my.site.v2")).toBe("my-site-v2");
+        expect(deriveBaseFromPath("/tmp/My Site!")).toBe("mysite");
+    });
+
+    it("returns null when nothing usable remains", () => {
+        expect(deriveBaseFromPath("/")).toBeNull();
+        expect(deriveBaseFromPath("/tmp/---")).toBeNull();
+    });
+
+    it("feeds generateLabel's prefix, with the decent- fallback when unusable", () => {
+        expect(generateLabel(undefined, "./dist")).toMatch(/^dist-/);
+        expect(generateLabel(undefined, "/tmp/---")).toMatch(/^decent-/);
+    });
+
+    it("preserves the NoStatus shape invariants", () => {
+        for (let i = 0; i < ITERATIONS; i++) {
+            const label = generateLabel(undefined, "./dist");
+            expect(baseLength(label)).toBeGreaterThanOrEqual(9);
+            expect(trailingDigits(label)).toBe(2);
+            expect(label).toMatch(/^[a-z0-9][a-z0-9-]*$/);
+        }
     });
 });

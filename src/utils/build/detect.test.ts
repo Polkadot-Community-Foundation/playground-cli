@@ -141,6 +141,45 @@ describe("detectBuildConfig", () => {
             ),
         ).toThrow(BuildDetectError);
     });
+
+    it("throws a wrong-directory error when package.json is missing entirely", () => {
+        // A missing package.json almost always means the user is one level
+        // above their project (e.g. ran `dot mod` then `dot build` from the
+        // parent). Point them at the cwd, not at editing a package.json that
+        // isn't there.
+        expect(() => detectBuildConfig(input({ packageJson: null }))).toThrow(BuildDetectError);
+        expect(() => detectBuildConfig(input({ packageJson: null }))).toThrow(
+            /No package\.json found/,
+        );
+    });
+
+    it("names the project directory in the missing-package.json error", () => {
+        expect(() =>
+            detectBuildConfig(input({ packageJson: null, projectDir: "/home/me" })),
+        ).toThrow(/\/home\/me/);
+    });
+
+    it("renders the missing-package.json error cleanly when no projectDir is known", () => {
+        // The dir name is optional, so the fallback must not leak `undefined`
+        // or a dangling space before the sentence-ending period.
+        let message = "";
+        try {
+            detectBuildConfig(input({ packageJson: null }));
+        } catch (err) {
+            message = (err as Error).message;
+        }
+        expect(message).toContain("No package.json found.");
+        expect(message).not.toMatch(/undefined/);
+        expect(message).not.toMatch(/ {2}/);
+    });
+
+    it("keeps the generic build-strategy error when package.json exists but is unrecognised", () => {
+        // package.json IS present — the user is in the right place, we just
+        // can't infer a build. Keep the original guidance.
+        expect(() => detectBuildConfig(input({ packageJson: { scripts: {} } }))).toThrow(
+            /No build strategy detected/,
+        );
+    });
 });
 
 describe("detectInstallConfig", () => {

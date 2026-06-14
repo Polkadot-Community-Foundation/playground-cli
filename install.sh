@@ -11,10 +11,24 @@ ALIAS="pg"
 # saved locally under $CMD, so the old `dot` command name is gone.
 ASSET_PREFIX="dot"
 
-# 1) Detect platform
-OS=$(uname -s); case "$OS" in Linux) OS=linux;; Darwin) OS=darwin;; *) echo "Unsupported OS: $OS"; exit 1;; esac
+# 1) Detect platform. Git Bash / MSYS / Cygwin report MINGW*/MSYS*/CYGWIN* —
+# point Windows users at WSL instead of a bare "Unsupported OS".
+OS=$(uname -s); case "$OS" in Linux) OS=linux;; Darwin) OS=darwin;; MINGW*|MSYS*|CYGWIN*) echo "Windows is not supported natively. Install WSL (https://learn.microsoft.com/windows/wsl/install) and re-run this command inside it."; exit 1;; *) echo "Unsupported OS: $OS"; exit 1;; esac
 ARCH=$(uname -m); case "$ARCH" in x86_64|amd64) ARCH=x64;; arm64|aarch64) ARCH=arm64;; *) echo "Unsupported arch: $ARCH"; exit 1;; esac
 ASSET="$ASSET_PREFIX-$OS-$ARCH"
+
+# 1b) Prerequisite guard (#248). Everything below fetches via curl. Reaching
+# this point without curl means the script was fetched some other way (wget,
+# copy-paste), so fail fast with the exact remedy instead of a cryptic error.
+if ! command -v curl >/dev/null 2>&1; then
+  echo "Error: curl is required but not installed." >&2
+  if [ "$OS" = "linux" ]; then
+    echo "Install prerequisites first: sudo apt update && sudo apt install -y build-essential curl" >&2
+  else
+    echo "Install the Xcode Command Line Tools first: xcode-select --install" >&2
+  fi
+  exit 1
+fi
 
 # 2) Resolve release tag
 #
@@ -68,6 +82,28 @@ append_once() {
 }
 if command -v bash >/dev/null 2>&1; then
   append_once "$HOME/.bashrc" 'export PATH="$HOME/.polkadot/bin:$HOME/.local/bin:$PATH"'
+  # Login bash shells (every macOS terminal tab) read only the FIRST existing of
+  # ~/.bash_profile, ~/.bash_login, ~/.profile and never auto-source ~/.bashrc.
+  # We need a ~/.bash_profile bridge so the PATH line above is loaded. But
+  # CREATING ~/.bash_profile from scratch would shadow a pre-existing
+  # ~/.bash_login / ~/.profile and silently drop the user's login-shell config.
+  # So when we have to create the bridge, carry the file bash would otherwise
+  # have read forward first. (If ~/.bash_profile already exists we leave its
+  # precedence untouched and only append the bashrc source below.)
+  if [ ! -e "$HOME/.bash_profile" ]; then
+    for legacy in .bash_login .profile; do
+      if [ -f "$HOME/$legacy" ]; then
+        printf '[ -f "$HOME/%s" ] && . "$HOME/%s"\n' "$legacy" "$legacy" >> "$HOME/.bash_profile"
+        break
+      fi
+    done
+  fi
+  # NB: if the carried-forward file itself sources ~/.bashrc (e.g. Debian's
+  # default ~/.profile does), a login shell sources ~/.bashrc twice. That is
+  # harmless for the idempotent PATH export above and not worth a runtime guard;
+  # sourcing ~/.bashrc exactly once across both that case and a macOS ~/.profile
+  # (which does NOT source it, so this line is required) would need a marker var
+  # coupling the two files. Double-sourcing beats silently dropping the config.
   append_once "$HOME/.bash_profile" '[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"'
 fi
 if command -v zsh >/dev/null 2>&1; then

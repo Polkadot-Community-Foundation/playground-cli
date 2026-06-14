@@ -66,17 +66,15 @@ export const loginCommand = new Command("login")
                 await withSpan("cli.login.setup", "run login setup", () => app.waitUntilExit());
             } finally {
                 // The login flow opens the shared Paseo client lazily via
-                // `getConnection()` for the registry username lookup
-                // (`lookupRegistryUsername` in `UsernamePrompt`) and any
-                // subsequent `setUsername` tx. AccountSetup uses the same
-                // singleton. Login runs with `hardExit: false`, so the event
-                // loop has to drain naturally — leaving the WS open means
-                // `dot login` hangs after "setup complete".
+                // `getConnection()` (AccountSetup uses the same singleton).
+                // Login runs with `hardExit: false`, so the event loop has to
+                // drain naturally — leaving the WS open means `dot login`
+                // hangs after "setup complete".
                 destroyConnection();
                 // QR-path login handle: `connect()` transferred adapter
                 // ownership to us (it's the transport `waitForLogin` signs
                 // in over). Once the TUI has exited nothing uses it —
-                // AccountSetup / UsernamePrompt open their own handles via
+                // AccountSetup opens its own handles via
                 // `getSessionSigner()` — so release it here, or its
                 // statement-store WebSocket keeps the event loop (and the
                 // process) alive indefinitely. Fire-and-forget + `.catch()`

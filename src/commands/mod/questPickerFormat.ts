@@ -29,3 +29,15 @@ export function formatDifficulty(d: number | undefined): string {
     if (typeof d !== "number" || d <= 0) return "—";
     return "★".repeat(Math.min(d, 5));
 }
+
+/**
+ * Index of the quest the learner can start right now: the first one with no
+ * `depends_on`. The CLI has no completion tracking (mod always clones the
+ * track's main), so dependency-free is the only "unlocked" signal available.
+ * Falls back to the first quest when every entry declares dependencies, so a
+ * malformed track still gets a start row instead of an all-locked dead end.
+ */
+export function findStartQuestIndex(quests: { depends_on?: string[] }[]): number {
+    const i = quests.findIndex((q) => !q.depends_on || q.depends_on.length === 0);
+    return i === -1 ? 0 : i;
+}

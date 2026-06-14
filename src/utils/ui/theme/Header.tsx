@@ -27,13 +27,6 @@ export interface HeaderProps {
     subtitle?: string;
     /** Short network label — "paseo" on testnet. */
     network?: string;
-    /**
-     * The user's playground-registry username, when one is known. Rendered as
-     * a final left-side breadcrumb piece after `network`. The caller is
-     * responsible for reading from the registry contract; the header just
-     * paints whatever string is passed and elides the slot when omitted.
-     */
-    username?: string;
     /** Right-aligned metadata; most commonly the CLI version. */
     right?: string;
     /**
@@ -52,7 +45,7 @@ export interface HeaderProps {
  * a hairline rule, and — as a side effect — sets the user's terminal tab
  * title so they can see progress without refocusing the terminal.
  */
-export function Header({ cmd, subtitle, network, username, right, tabTitle }: HeaderProps) {
+export function Header({ cmd, subtitle, network, right, tabTitle }: HeaderProps) {
     const { stdout } = useStdout();
 
     useEffect(() => {
@@ -69,7 +62,7 @@ export function Header({ cmd, subtitle, network, username, right, tabTitle }: He
     // paddingLeft sits INSIDE the row's width (yoga is border-box), so the
     // text actually gets width - leftMargin columns.
     const { pieces, separator } = layoutHeader(
-        { cmd, subtitle, network, username },
+        { cmd, subtitle, network },
         right,
         width - LAYOUT.leftMargin,
     );
