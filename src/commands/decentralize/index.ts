@@ -34,7 +34,13 @@ import React from "react";
 import { render } from "ink";
 import { runCliCommand } from "../../cli-runtime.js";
 import { errorMessage, withSpan } from "../../telemetry.js";
-import { DEFAULT_ENV, ENV_FLAG_CHOICES, type Env, resolveLegacyEnv } from "../../config.js";
+import {
+    DEFAULT_ENV,
+    ENV_FLAG_CHOICES,
+    type Env,
+    resolveLegacyEnv,
+    setActiveEnv,
+} from "../../config.js";
 import { resolveSigner, type ResolvedSigner, SignerNotAvailableError } from "../../utils/signer.js";
 import { resolveDomain } from "../../utils/decentralize/domain.js";
 import {
@@ -91,6 +97,8 @@ export const decentralizeCommand = new Command("decentralize")
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
+            // Make --env active before any chain access (see deploy/index.ts + config.ts).
+            setActiveEnv(env);
             if (opts.site) {
                 await runHeadless({ env, opts });
             } else {
