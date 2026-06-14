@@ -49,6 +49,7 @@ import {
     ENV_FLAG_CHOICES,
     type Env,
     resolveLegacyEnv,
+    setActiveEnv,
 } from "../../config.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
@@ -125,6 +126,10 @@ export const deployCommand = new Command("deploy")
         runCliCommand("deploy", { watchdog: true, hardExit: true }, async () => {
             const projectDir = resolve(opts.dir ?? process.cwd());
             const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
+            // Make --env the process-wide active env BEFORE any chain access, so
+            // the no-arg getConnection()/getChainConfig() paths (registry publish,
+            // account mapping) follow it instead of defaulting to Paseo.
+            setActiveEnv(env);
 
             let userSigner: ResolvedSigner | null = null;
 
