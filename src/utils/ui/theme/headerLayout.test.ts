@@ -76,23 +76,6 @@ describe("layoutHeader", () => {
         expect(leftWidth(layout)).toBeLessThanOrEqual(60 - "v0.28.5".length - RIGHT_GAP_MIN);
     });
 
-    it("sacrifices the username before the subtitle", () => {
-        const layout = layoutHeader(
-            {
-                cmd: "playground deploy",
-                subtitle: "myapp.dot",
-                network: "paseo next v2",
-                username: "a-thirty-character-username-xx",
-            },
-            "v0.28.5",
-            72,
-        );
-        const [, subtitle, , username] = layout.pieces;
-        expect(subtitle).toBe("myapp.dot");
-        expect(username).toContain("…");
-        expect(leftWidth(layout)).toBeLessThanOrEqual(72 - "v0.28.5".length - RIGHT_GAP_MIN);
-    });
-
     it("uses the full width when there is no right label", () => {
         const layout = layoutHeader(
             {
@@ -106,24 +89,6 @@ describe("layoutHeader", () => {
         // 66 cols of content fits in 72 without any squeeze.
         expect(layout.separator).toBe("  ·  ");
         expect(layout.pieces[1]).toBe("devsignerutkplayground.dot");
-    });
-
-    it("keeps the gap even when both username and subtitle hit the floor", () => {
-        const layout = layoutHeader(
-            {
-                cmd: "playground deploy",
-                subtitle: "a-very-long-domain-name-indeed-yes.dot",
-                network: "paseo next v2",
-                username: "a-thirty-character-username-xx",
-            },
-            "v0.28.5",
-            70,
-        );
-        // Previously the MIN_PIECE floor left 1 col of overflow and yoga glued
-        // the version onto the username. The below-floor pass must absorb it.
-        expect(leftWidth(layout)).toBeLessThanOrEqual(70 - "v0.28.5".length - RIGHT_GAP_MIN);
-        expect(layout.pieces[0]).toBe("playground deploy");
-        expect(layout.pieces[2]).toBe("paseo next v2");
     });
 
     it("truncates below the floor before clipping cmd (56-col terminal)", () => {

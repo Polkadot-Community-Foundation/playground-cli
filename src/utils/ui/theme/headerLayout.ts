@@ -27,10 +27,10 @@
  * Degradation order, mildest first:
  *   1. narrow the piece separator from "  ·  " to " · "
  *   2. shrink the gap before the right label from 2 spaces to 1
- *   3. middle-truncate the username, then the subtitle/domain, down to a
- *      legible floor (middle-truncation keeps the ".dot" suffix visible)
- *   4. truncate them below the floor if the row is still too tight
- *   5. drop the username, then the subtitle, entirely
+ *   3. middle-truncate the subtitle/domain down to a legible floor
+ *      (middle-truncation keeps the ".dot" suffix visible)
+ *   4. truncate it below the floor if the row is still too tight
+ *   5. drop the subtitle entirely
  * The cmd and network labels are never cut — they're short and fixed.
  */
 
@@ -50,7 +50,6 @@ export interface HeaderParts {
     cmd: string;
     subtitle?: string;
     network?: string;
-    username?: string;
 }
 
 export interface HeaderLayout {
@@ -68,7 +67,7 @@ export function layoutHeader(
     const budgetAt = (gap: number) => Math.max(0, width - (right ? right.length + gap : 0));
 
     const piecesOf = (p: HeaderParts) =>
-        [p.cmd, p.subtitle, p.network, p.username].filter((v): v is string => Boolean(v));
+        [p.cmd, p.subtitle, p.network].filter((v): v is string => Boolean(v));
     const widthOf = (p: HeaderParts, separator: string) => piecesOf(p).join(separator).length;
 
     const comfortable = budgetAt(RIGHT_GAP);
@@ -79,10 +78,10 @@ export function layoutHeader(
 
     const tight = budgetAt(RIGHT_GAP_MIN);
     const current: HeaderParts = { ...parts };
-    // Username first (least load-bearing), then the subtitle/domain. Two
-    // truncation passes: down to the legible floor, then — only if the row is
-    // still too tight — below it.
-    const shrinkable: Array<"username" | "subtitle"> = ["username", "subtitle"];
+    // The subtitle/domain is the only squeezable piece. Two truncation passes:
+    // down to the legible floor, then — only if the row is still too tight —
+    // below it.
+    const shrinkable: Array<"subtitle"> = ["subtitle"];
     for (const floor of [MIN_PIECE, ABS_MIN_PIECE]) {
         for (const key of shrinkable) {
             const value = current[key];

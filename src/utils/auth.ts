@@ -62,11 +62,10 @@ const QR_TIMEOUT_MS = 60_000;
  * - `rootAddress` — SS58 of `session.rootAccountId`. This is the
  *   `rootUserAccountId` the mobile app sent over the SSO handshake. On
  *   current mobile builds this is the bare-mnemonic sr25519 root (no
- *   junction). It is what `Resources.Consumers` on the People parachain
- *   is keyed by, so it's the right input for `lookupUsername`. It is
- *   NOT the same address the phone shows as "Wallet account" on its
- *   debug screen — that uses the hard-junction `//wallet` path which
- *   the host cannot reproduce from a public key alone.
+ *   junction). It is NOT the same address the phone shows as "Wallet
+ *   account" on its debug screen — that uses the hard-junction
+ *   `//wallet` path which the host cannot reproduce from a public key
+ *   alone.
  * - `productAddress` — SS58 of the playground product account derived
  *   via `product/playground.dot/0` from `rootAccountId`. This is what
  *   actually signs on-chain transactions from the CLI.
