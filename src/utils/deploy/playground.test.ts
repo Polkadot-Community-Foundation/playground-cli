@@ -466,9 +466,9 @@ describe("buildMetadata", () => {
             branch: null,
             readme: null,
             moddedFrom: null,
-            tag: "defi",
+            tag: "site",
         });
-        expect(meta).toEqual({ tag: "defi" });
+        expect(meta).toEqual({ tag: "site" });
     });
 
     it("omits tag when null", () => {

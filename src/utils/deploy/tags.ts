@@ -30,9 +30,9 @@
  * custom tag).
  */
 export const PLAYGROUND_TAGS = [
+    "site",
     "social",
     "chat",
-    "defi",
     "utility",
     "gaming",
     "marketplace",

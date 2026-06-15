@@ -271,14 +271,14 @@ describe("runDeploy", () => {
             domain: "tagged",
             mode: "phone",
             publishToPlayground: true,
-            tag: "defi",
+            tag: "site",
             userSigner: fakeUserSigner,
             onEvent: push,
         });
         const tagged = (publishToPlaygroundMock.mock.calls as unknown[][])[0]?.[0] as
             | { tag?: string | null }
             | undefined;
-        expect(tagged?.tag).toBe("defi");
+        expect(tagged?.tag).toBe("site");
 
         publishToPlaygroundMock.mockClear();
 

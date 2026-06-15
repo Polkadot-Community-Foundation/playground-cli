@@ -21,9 +21,9 @@ describe("PLAYGROUND_TAGS", () => {
         // If this fails because the app added/removed/reordered a tag, update
         // both this list and the array in `playground-app/src/App.tsx`.
         expect([...PLAYGROUND_TAGS]).toEqual([
+            "site",
             "social",
             "chat",
-            "defi",
             "utility",
             "gaming",
             "marketplace",
@@ -34,7 +34,7 @@ describe("PLAYGROUND_TAGS", () => {
 
 describe("isPlaygroundTag", () => {
     it("accepts a canonical tag", () => {
-        expect(isPlaygroundTag("defi")).toBe(true);
+        expect(isPlaygroundTag("site")).toBe(true);
     });
 
     it("rejects an unknown tag", () => {
@@ -45,6 +45,6 @@ describe("isPlaygroundTag", () => {
         // The CLI only ever emits the lowercase canonical values (the flag is
         // validated against the list and the picker offers them verbatim), so
         // the guard need not normalise — it just confirms membership.
-        expect(isPlaygroundTag("DeFi")).toBe(false);
+        expect(isPlaygroundTag("Site")).toBe(false);
     });
 });
