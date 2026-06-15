@@ -127,7 +127,7 @@ describe("pickNextStage", () => {
     it("lands on confirm once a tag is chosen (or skipped) when publishing", () => {
         // A resolved tag (a string OR an explicit null "skip") clears the last
         // publish-only prompt.
-        for (const tag of ["defi", null] as const) {
+        for (const tag of ["site", null] as const) {
             expect(pickNextStage({ ...urlThroughDomain, publishToPlayground: true, tag })).toEqual({
                 kind: "confirm",
             });
