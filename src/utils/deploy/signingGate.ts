@@ -20,7 +20,7 @@
  *
  * Every on-chain extrinsic in a deploy — polkadot-app-deploy's DotNS
  * register/setContenthash and Bulletin chunk `store()` calls, plus our own
- * `registry.publish()` and metadata `store()` — derives its nonce by reading
+ * registry publish call and metadata `store()` — derives its nonce by reading
  * the account's *current* on-chain next-index at submission time
  * (`system_accountNextIndex` inside polkadot-app-deploy; polkadot-api's
  * `signSubmitAndWatch` for the publish path). None of these accept a

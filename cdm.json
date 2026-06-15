@@ -5,13 +5,38 @@
   },
   "contracts": {
     "@w3s/playground-registry": {
-      "version": 7,
-      "address": "0xeB814656e2466b5A8e613F8121D57c75F684A35D",
+      "version": 11,
+      "address": "0xBa606EC33a32B51DeDe246372975a956f1A3f9D7",
       "abi": [
         {
           "type": "constructor",
           "inputs": [],
           "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "spikeVerify",
+          "inputs": [
+            {
+              "name": "signature",
+              "type": "uint8[]"
+            },
+            {
+              "name": "message",
+              "type": "uint8[]"
+            },
+            {
+              "name": "public_key",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view"
         },
         {
           "type": "function",
@@ -53,6 +78,48 @@
             },
             {
               "name": "is_dev_signer",
+              "type": "bool"
+            }
+          ],
+          "outputs": [],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "publishDev",
+          "inputs": [
+            {
+              "name": "domain",
+              "type": "string"
+            },
+            {
+              "name": "metadata_uri",
+              "type": "string"
+            },
+            {
+              "name": "visibility",
+              "type": "uint8"
+            },
+            {
+              "name": "owner",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "isSome",
+                  "type": "bool"
+                },
+                {
+                  "name": "value",
+                  "type": "address"
+                }
+              ]
+            },
+            {
+              "name": "modded_from",
+              "type": "string"
+            },
+            {
+              "name": "is_moddable",
               "type": "bool"
             }
           ],
@@ -110,18 +177,6 @@
         {
           "type": "function",
           "name": "star",
-          "inputs": [
-            {
-              "name": "domain",
-              "type": "string"
-            }
-          ],
-          "outputs": [],
-          "stateMutability": "nonpayable"
-        },
-        {
-          "type": "function",
-          "name": "unstar",
           "inputs": [
             {
               "name": "domain",
@@ -282,6 +337,42 @@
             }
           ],
           "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "adminSetDeployAwardCount",
+          "inputs": [
+            {
+              "name": "account",
+              "type": "address"
+            },
+            {
+              "name": "count",
+              "type": "uint32"
+            }
+          ],
+          "outputs": [],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "adminSetAppSocialCounts",
+          "inputs": [
+            {
+              "name": "domain",
+              "type": "string"
+            },
+            {
+              "name": "star_count",
+              "type": "uint32"
+            },
+            {
+              "name": "mod_count",
+              "type": "uint32"
+            }
+          ],
+          "outputs": [],
+          "stateMutability": "nonpayable"
         },
         {
           "type": "function",
@@ -1021,7 +1112,7 @@
         },
         {
           "type": "function",
-          "name": "importUsernames",
+          "name": "importIdentities",
           "inputs": [
             {
               "name": "entries",
@@ -1032,8 +1123,8 @@
                   "type": "address"
                 },
                 {
-                  "name": "name",
-                  "type": "string"
+                  "name": "root_pubkey",
+                  "type": "bytes32"
                 }
               ]
             }
@@ -1043,11 +1134,15 @@
         },
         {
           "type": "function",
-          "name": "setUsername",
+          "name": "setIdentity",
           "inputs": [
             {
-              "name": "name",
-              "type": "string"
+              "name": "root_pubkey",
+              "type": "bytes32"
+            },
+            {
+              "name": "signature",
+              "type": "uint8[]"
             }
           ],
           "outputs": [],
@@ -1055,14 +1150,14 @@
         },
         {
           "type": "function",
-          "name": "clearUsername",
+          "name": "clearIdentity",
           "inputs": [],
           "outputs": [],
           "stateMutability": "nonpayable"
         },
         {
           "type": "function",
-          "name": "getUsername",
+          "name": "getRootAccount",
           "inputs": [
             {
               "name": "account",
@@ -1072,14 +1167,14 @@
           "outputs": [
             {
               "name": "",
-              "type": "string"
+              "type": "bytes32"
             }
           ],
           "stateMutability": "view"
         },
         {
           "type": "function",
-          "name": "getUsernames",
+          "name": "getRootAccounts",
           "inputs": [
             {
               "name": "accounts",
@@ -1089,51 +1184,41 @@
           "outputs": [
             {
               "name": "",
-              "type": "string[]"
+              "type": "bytes32[]"
             }
           ],
           "stateMutability": "view"
         },
         {
           "type": "function",
-          "name": "getUsernameOwner",
+          "name": "adminSetIdentity",
           "inputs": [
             {
-              "name": "name",
-              "type": "string"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "",
+              "name": "account",
               "type": "address"
-            }
-          ],
-          "stateMutability": "view"
-        },
-        {
-          "type": "function",
-          "name": "isUsernameAvailable",
-          "inputs": [
-            {
-              "name": "name",
-              "type": "string"
             },
             {
-              "name": "prospective_caller",
+              "name": "root_pubkey",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": [],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "adminClearIdentity",
+          "inputs": [
+            {
+              "name": "account",
               "type": "address"
             }
           ],
-          "outputs": [
-            {
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view"
+          "outputs": [],
+          "stateMutability": "nonpayable"
         }
       ],
-      "metadataCid": "bafk2bzaceavewu2aczp237db4dtzgej4tkjavhwfczp3jgaottwzzgpzuadry"
+      "metadataCid": "bafk2bzaceaanuqhbybkuhzk3de7pzv37g7mnvgj7inrpsisi3kxsg36xdh7f6"
     }
   }
 }

@@ -18,11 +18,11 @@
  *
  * We upload the metadata JSON through Bulletin `TransactionStorage.store`
  * with the product-scoped RFC-0010 Bulletin allowance account, then call
- * `registry.publish(domain, metadataCid, visibility, owner)` ourselves via
+ * `registry.publish(...)` / `registry.publishDev(...)` ourselves via
  * `getRegistryContract()`.
- * Publishing is always signed by the user's product account so the contract's
- * `env::caller()` matches their address — that's what drives the playground-app
- * "myApps" view.
+ * Phone publishing is signed by the user's product account so the contract's
+ * `env::caller()` matches their address. Dev publishing is signed by the dev
+ * account and may pass a claimed owner for the playground-app "myApps" view.
  *
  * We deliberately do NOT use `polkadot-app-deploy.deploy()` for the metadata
  * upload: `deploy()` unconditionally runs a DotNS `register()` +
@@ -61,10 +61,10 @@ export interface PublishToPlaygroundOptions {
     /** The DotNS label (with or without `.dot`). */
     domain: string;
     /**
-     * Signer that submits the `registry.publish(...)` tx. In phone mode
-     * this is the user's session signer (caller becomes owner). In dev
-     * mode this is a dev signer (Alice / `--suri`), and `claimedOwnerH160`
-     * carries the H160 to record as owner.
+     * Signer that submits the registry publish tx. In phone mode this is the
+     * user's session signer and calls `publish(...)` (caller becomes owner).
+     * In dev mode this is a dev signer (Alice / `--suri`) and calls
+     * `publishDev(...)`; `claimedOwnerH160` carries the H160 to record as owner.
      */
     publishSigner: ResolvedSigner;
     /**
@@ -130,9 +130,9 @@ export interface PublishToPlaygroundOptions {
     moddedFrom?: string;
     /**
      * True when the publish is signed by the dev signer (Alice / `--suri`)
-     * rather than the user's session. The contract surfaces this bit on each
-     * `AppInfo` so the playground-app can distinguish phone-published apps
-     * from dev-published throwaways.
+     * rather than the user's session. Dev publishes use the ungated
+     * `publishDev(...)` contract path, which records the app without awarding
+     * deploy XP or source-app mod XP.
      */
     isDevSigner?: boolean;
 }
@@ -415,15 +415,24 @@ export async function publishToPlayground(
                     const moddedFromArg = moddedFrom ?? "";
                     const isModdable = options.isModdable ?? false;
                     const isDevSigner = options.isDevSigner ?? false;
-                    const result = await registry.publish.tx(
-                        fullDomain,
-                        metadataCid,
-                        visibility,
-                        owner,
-                        moddedFromArg,
-                        isModdable,
-                        isDevSigner,
-                    );
+                    const result = isDevSigner
+                        ? await registry.publishDev.tx(
+                              fullDomain,
+                              metadataCid,
+                              visibility,
+                              owner,
+                              moddedFromArg,
+                              isModdable,
+                          )
+                        : await registry.publish.tx(
+                              fullDomain,
+                              metadataCid,
+                              visibility,
+                              owner,
+                              moddedFromArg,
+                              isModdable,
+                              false,
+                          );
                     if (result && result.ok === false) {
                         throw new Error("Registry publish transaction reverted");
                     }
