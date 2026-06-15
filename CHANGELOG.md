@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.39.0
+
+### Minor Changes
+
+- b71124b: Replace the `defi` app tag with `site`. The `site` tag is now the first option offered in the deploy/decentralize tag picker and the `--tag` flag, and `defi` is no longer accepted.
+
 ## 0.38.8
 
 ### Patch Changes
