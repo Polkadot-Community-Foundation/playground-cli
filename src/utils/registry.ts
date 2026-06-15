@@ -107,7 +107,7 @@ async function liveManager(
 
 /**
  * Get a typed handle to the playground registry contract for SIGNED writes
- * (e.g. `registry.publish.tx(...)`). Caller is responsible for providing a
+ * (e.g. registry publish transactions). Caller is responsible for providing a
  * funded + mapped user signer.
  */
 export async function getRegistryContract(rawClient: PolkadotClient, signer: ResolvedSigner) {
