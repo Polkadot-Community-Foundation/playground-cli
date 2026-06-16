@@ -18,8 +18,8 @@ allowBuilds:
   node-datachannel: false
 
 minimumReleaseAgeExclude:
-  - "@parity/polkadot-app-deploy@0.10.0"
-  - "@parity/dotns-cli@0.6.8"
+  - "@parity/polkadot-app-deploy@0.11.0"
+  - "@parity/dotns-cli@0.7.2"
   # The @novasamatech/* 0.8.7 family (pulled transitively by
   # @parity/product-sdk-terminal@^0.5.0 → host-papp@^0.8.7) publishes the stable
   # tag the same day; the min-age gate would otherwise pin us to the older
@@ -34,10 +34,21 @@ minimumReleaseAgeExclude:
   - "@novasamatech/storage-adapter@0.8.7"
   - "@novasamatech/scale@0.8.7"
   - "@novasamatech/substrate-slot-sr25519-wasm@0.8.7"
+  - '@parity/cdm-builder@3.1.6'
+  - '@parity/cdm-codegen@0.6.19'
+  - '@parity/cdm-env@2.0.6'
+  - '@parity/product-sdk-chain-client@0.7.4'
+  - '@parity/product-sdk-cloud-storage@0.6.4'
+  - '@parity/product-sdk-contracts@0.7.7'
+  - '@parity/product-sdk-host@0.10.2'
+  - '@parity/product-sdk-keys@0.3.10'
+  - '@parity/product-sdk-local-storage@0.2.9'
+  - '@parity/product-sdk-signer@0.8.1'
+  - '@parity/product-sdk-tx@0.2.14'
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
-  # from the tarball) through 0.6.8 and the local 0.7.0 source; the version-
+  # from the tarball) through every published 0.6.x AND 0.7.2; the version-
   # agnostic `>` prefix keeps this stub applied across bumps. See CLAUDE.md.
   "@parity/dotns-cli>@polkadot-api/descriptors": "file:./stubs/papi-descriptors-stub"
   # Load-bearing: collapses three transitive json-rpc-provider versions onto
