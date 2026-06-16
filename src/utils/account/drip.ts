@@ -69,8 +69,18 @@ function getDevAccount(): ReturnType<typeof seedToAccount> {
     return cachedDevAccount;
 }
 
-/** 1 PAS in planck. Asset Hub Paseo uses 12 decimals. */
-const ONE_PAS = 1_000_000_000_000n;
+/**
+ * Decimal places for the native token (PAS) on Asset Hub Paseo. Verified live
+ * against the chain (2026-06-16): `system_properties.tokenDecimals` is 10 on
+ * both the asset hub and people chains, and `Balances.ExistentialDeposit`
+ * (100_000_000 planck) is the canonical 0.01 PAS only at 10 decimals. PGAS is
+ * 1:1 with PAS, so `playground status` formats PGAS balances at this same scale
+ * (see `account/pgas.ts`).
+ */
+export const PAS_DECIMALS = 10;
+
+/** 1 PAS in planck. */
+const ONE_PAS = 10n ** BigInt(PAS_DECIMALS);
 
 /** Amount sent per `playground drip` invocation. */
 export const DRIP_AMOUNT = ONE_PAS;
@@ -170,9 +180,9 @@ export async function dripToProductAccount(
 }
 
 /**
- * Format a planck amount (12-decimal) as a short human string, e.g. `"3.5 PAS"`
- * (or `"3.5 SUM"` on Summit). The token symbol comes from the active env's
- * `tokenSymbol` (see `getTokenSymbol`), so flipping `ACTIVE_TESTNET_ENV`
+ * Format a planck amount (`PAS_DECIMALS`-decimal) as a short human string, e.g.
+ * `"3.5 PAS"` (or `"3.5 SUM"` on Summit). The token symbol comes from the active
+ * env's `tokenSymbol` (see `getTokenSymbol`), so flipping `ACTIVE_TESTNET_ENV`
  * re-labels every amount. Trims trailing zeros and caps at 4 fractional digits —
  * display-only, never used for on-chain math.
  */
@@ -182,6 +192,6 @@ export function formatPas(planck: bigint): string {
     const whole = planck / base;
     const frac = planck % base;
     if (frac === 0n) return `${whole} ${symbol}`;
-    const fracStr = frac.toString().padStart(12, "0").slice(0, 4).replace(/0+$/, "");
+    const fracStr = frac.toString().padStart(PAS_DECIMALS, "0").slice(0, 4).replace(/0+$/, "");
     return fracStr ? `${whole}.${fracStr} ${symbol}` : `${whole} ${symbol}`;
 }

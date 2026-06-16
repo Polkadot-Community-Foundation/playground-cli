@@ -71,6 +71,7 @@ import {
 } from "./signerNotice.js";
 import {
     BUILD_HELP,
+    BUILD_HINT,
     CONTRACTS_HELP,
     SIGNER_HELP,
     PUBLISH_HELP,
@@ -152,7 +153,7 @@ interface Resolved {
  * `promptHelp.ts`. The `accent` tone marks it as informational (distinct from
  * the yellow `warning` notices).
  */
-/** One-line dim hint above a trivial text input (domain, build directory). */
+/** One-line dim hint above a lightweight prompt. */
 function PromptHint({ text }: { text: string }) {
     return (
         <Box marginLeft={2} marginBottom={1}>
@@ -311,6 +312,7 @@ export function DeployScreen({
             {stage.kind === "prompt-build" && (
                 <Box flexDirection="column">
                     <PromptInfo box={BUILD_HELP} />
+                    <PromptHint text={BUILD_HINT} />
                     <Select<boolean>
                         label="build before deploy?"
                         options={[

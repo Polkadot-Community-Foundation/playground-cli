@@ -27,7 +27,7 @@ import { defaultRepoName } from "../../utils/git/repoName.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import { parseGitHubRepoUrl, type GitHubRepoRef } from "../../utils/mod/source.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
-import { editWithClaudeStep } from "./nextSteps.js";
+import { editWithAgentStep } from "./nextSteps.js";
 import { shouldShowTutorialPrompt } from "./tutorialPromptHint.js";
 
 interface FetchedAppMetadata {
@@ -148,7 +148,7 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
         );
         if (!targetDir) return;
 
-        const { ok, setupRan } = await withSpan("cli.mod.setup", "download and setup mod", () =>
+        const { ok } = await withSpan("cli.mod.setup", "download and setup mod", () =>
             runSetup({
                 domain,
                 metadata: metadata
@@ -172,10 +172,16 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
         );
 
         console.log();
-        if (ok && !setupRan) {
+        // The generic "Next steps" footer prints for every successful mod.
+        // We used to suppress it when `setup.sh` ran (on the assumption the
+        // script printed its own footer), but not every app's setup.sh does —
+        // e.g. playground-tutorial-v-two's ends after fetching skills — which
+        // left those mods with no footer at all. `setupRan` now only drives the
+        // "full setup log" Hint, not this block.
+        if (ok) {
             console.log("  Next steps:");
             console.log(`  1. cd ${targetDir}`);
-            console.log(editWithClaudeStep(shouldShowTutorialPrompt({ domain, startedTutorial })));
+            console.log(editWithAgentStep(shouldShowTutorialPrompt({ domain, startedTutorial })));
             console.log("  3. playground deploy --playground");
         }
         if (!ok) process.exitCode = 1;

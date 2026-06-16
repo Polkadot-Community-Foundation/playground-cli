@@ -42,12 +42,23 @@ import {
     DEFAULT_ENV,
     getActiveEnv,
     getChainConfig,
+    getPgasAssetId,
     setActiveEnv,
     type ChainConfig,
     type Env,
 } from "./config.js";
 
 const { doc } = await loadEnvironments();
+
+describe("getPgasAssetId", () => {
+    it("returns the paseo-next-v2 PGAS asset id by default", () => {
+        expect(getPgasAssetId("paseo-next-v2")).toBe(2_000_000_000);
+    });
+
+    it("returns a number for every wired env", () => {
+        expect(typeof getPgasAssetId("summit")).toBe("number");
+    });
+});
 
 /** First (primary) wss endpoint declared for a chain on an env, or undefined. */
 function upstreamEndpoint(chainId: string, envId: string): string | undefined {

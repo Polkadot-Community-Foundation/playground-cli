@@ -1,5 +1,37 @@
 # playground-cli
 
+## 0.40.2
+
+### Patch Changes
+
+- 0b9a7af: Polish the deploy and mod prompt copy: the mod next-step text now refers to your AI agent generically, and the deploy build prompt explains that pressing enter keeps the default rebuild choice.
+
+## 0.40.1
+
+### Patch Changes
+
+- 3df9e22: `playground login` now clears the pairing QR code from the screen once the phone scans it and finishes signing in, leaving a clean logged-in summary. Previously the QR stayed on screen for the rest of setup; it is no longer rendered inside the live UI region (which could also cause it to duplicate on shorter terminals).
+
+## 0.40.0
+
+### Minor Changes
+
+- f830ec0: Add `playground status`: show your signed-in product account (SS58 + H160), native and PGAS balances, Bulletin authorization validity (with a time estimate), and how recently you paired your phone — all read-only, with no phone interaction.
+
+  Fix the native token decimal scale: PAS/SUM are 10 decimals (verified live against the chain), not 12. This corrects every balance display (amounts were under-shown 100x) and makes `playground drip` transfer the documented 1 PAS per run (10 PAS cap) instead of 100 PAS (1000 PAS cap). PGAS is shown at the same 10-decimal scale.
+
+## 0.39.1
+
+### Patch Changes
+
+- 1000519: `playground mod` now always prints the "Next steps" footer for a successful mod. It was previously hidden whenever the app shipped a `setup.sh`, which left apps whose setup script does not print its own next-steps guidance (e.g. the tutorial app) with no footer at all.
+
+## 0.39.0
+
+### Minor Changes
+
+- b71124b: Replace the `defi` app tag with `site`. The `site` tag is now the first option offered in the deploy/decentralize tag picker and the `--tag` flag, and `defi` is no longer accepted.
+
 ## 0.38.8
 
 ### Patch Changes

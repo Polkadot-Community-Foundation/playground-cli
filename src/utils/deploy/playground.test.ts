@@ -29,7 +29,7 @@ const { captureWarningMock, withSpanMock, bulletinStorageSigner, getBulletinAllo
     }));
 
 // Mock the metadata upload path so we never actually touch the network.
-// The mock returns a fake CID that publish() treats as the metadata CID.
+// The mock returns a fake CID that registry publishing treats as the metadata CID.
 vi.mock("@parity/product-sdk-cloud-storage", () => ({
     calculateCid: vi.fn(async () => ({ toString: (): string => "bafymeta" })),
 }));
@@ -62,12 +62,14 @@ vi.mock("polkadot-api/ws", () => ({
 // Likewise stub the connection + registry helpers. We capture the publish
 // arguments so we can assert on them.
 const publishTx = vi.fn(async () => ({ ok: true, txHash: "0xdead" }));
+const publishDevTx = vi.fn(async () => ({ ok: true, txHash: "0xfeed" }));
 vi.mock("../connection.js", () => ({
     getConnection: vi.fn(async () => ({ raw: { assetHub: {} } })),
 }));
 vi.mock("../registry.js", () => ({
     getRegistryContract: vi.fn(async () => ({
         publish: { tx: publishTx },
+        publishDev: { tx: publishDevTx },
     })),
 }));
 vi.mock("../../telemetry.js", () => ({
@@ -103,6 +105,8 @@ const fakeSigner: ResolvedSigner = {
 beforeEach(() => {
     publishTx.mockClear();
     publishTx.mockImplementation(async () => ({ ok: true, txHash: "0xdead" }));
+    publishDevTx.mockClear();
+    publishDevTx.mockImplementation(async () => ({ ok: true, txHash: "0xfeed" }));
     captureWarningMock.mockClear();
     withSpanMock.mockClear();
     getBulletinAllowanceSignerMock.mockClear();
@@ -466,9 +470,9 @@ describe("buildMetadata", () => {
             branch: null,
             readme: null,
             moddedFrom: null,
-            tag: "defi",
+            tag: "site",
         });
-        expect(meta).toEqual({ tag: "defi" });
+        expect(meta).toEqual({ tag: "site" });
     });
 
     it("omits tag when null", () => {
@@ -518,6 +522,7 @@ describe("publishToPlayground", () => {
                 false,
                 false,
             );
+            expect(publishDevTx).not.toHaveBeenCalled();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -579,15 +584,17 @@ describe("publishToPlayground", () => {
         }
     });
 
-    it("passes claimedOwnerH160 through as the registry.publish owner argument", async () => {
+    it("passes claimedOwnerH160 through as the registry.publishDev owner argument", async () => {
         await publishToPlayground({
             domain: "claimed-app",
             publishSigner: fakeSigner,
             repositoryUrl: null,
             cwd: "/definitely/not/a/repo",
             claimedOwnerH160: "0x1234567890abcdef1234567890abcdef12345678",
+            isDevSigner: true,
         });
-        expect(publishTx).toHaveBeenCalledWith(
+        expect(publishTx).not.toHaveBeenCalled();
+        expect(publishDevTx).toHaveBeenCalledWith(
             "claimed-app.dot",
             "bafymeta",
             1,
@@ -596,7 +603,6 @@ describe("publishToPlayground", () => {
                 value: "0x1234567890abcdef1234567890abcdef12345678",
             },
             "",
-            false,
             false,
         );
     });
@@ -623,7 +629,7 @@ describe("publishToPlayground", () => {
         );
     });
 
-    it("forwards isModdable and isDevSigner to registry.publish", async () => {
+    it("routes dev signer publishes through registry.publishDev", async () => {
         await publishToPlayground({
             domain: "modded-by-dev",
             publishSigner: fakeSigner,
@@ -632,7 +638,8 @@ describe("publishToPlayground", () => {
             isModdable: true,
             isDevSigner: true,
         });
-        expect(publishTx).toHaveBeenCalledWith(
+        expect(publishTx).not.toHaveBeenCalled();
+        expect(publishDevTx).toHaveBeenCalledWith(
             "modded-by-dev.dot",
             "bafymeta",
             1,
@@ -641,7 +648,6 @@ describe("publishToPlayground", () => {
                 value: "0x0000000000000000000000000000000000000000",
             },
             "",
-            true,
             true,
         );
     });
