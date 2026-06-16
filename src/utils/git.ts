@@ -30,8 +30,14 @@ function sanitize(s: string): string {
     return s.replace(ANSI_RE, "").replace(/\r/g, "");
 }
 
-/** Env vars that tell child processes to skip interactive/color output. */
-const PLAIN_ENV = { ...process.env, TERM: "dumb", NO_COLOR: "1", CI: "1" };
+/**
+ * Env vars that tell child processes to skip interactive/color output. Built
+ * per-call (not a module-load snapshot) so a binary installed earlier in the
+ * same run — e.g. the package-manager auto-install prepends its bin dir to
+ * `process.env.PATH` — is visible to the child. A snapshot would freeze a stale
+ * PATH and make `setup.sh` fail with "command not found" for the fresh PM.
+ */
+const plainEnv = () => ({ ...process.env, TERM: "dumb", NO_COLOR: "1", CI: "1" });
 
 /**
  * Run a shell command, streaming output to log.
@@ -47,7 +53,7 @@ export async function runCommand(
 ): Promise<void> {
     const { cwd, log, logFile } = options;
     return new Promise((resolve, reject) => {
-        const proc = exec(cmd, { cwd, env: PLAIN_ENV });
+        const proc = exec(cmd, { cwd, env: plainEnv() });
         let file: ReturnType<typeof createWriteStream> | null = null;
         if (logFile) {
             file = createWriteStream(logFile);
