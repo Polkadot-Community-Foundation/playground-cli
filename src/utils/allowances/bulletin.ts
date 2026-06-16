@@ -169,6 +169,22 @@ export async function cachedBulletinSlotAuthorization(
     return getBulletinSlotAuthorization(bulletinApi, slotSigner);
 }
 
+/**
+ * SS58 of the CACHED Bulletin slot account, or null when no slot key is cached
+ * locally yet (user never granted, or the cache was cleared). Pure local read —
+ * no chain query, no phone interaction. `playground status` reads the on-chain
+ * authorization against this address.
+ */
+export async function getCachedBulletinSlotAddress(
+    adapter: NonNullable<ResolvedSigner["adapter"]>,
+): Promise<string | null> {
+    const slotSigner = await createSlotAccountSigner(
+        productScopedAdapter(adapter),
+        BULLETIN_RESOURCE,
+    );
+    return slotSigner ? ss58Encode(slotSigner.publicKey) : null;
+}
+
 function requireSession(publishSigner: ResolvedSigner) {
     const { userSession, adapter } = publishSigner;
     if (!userSession || !adapter) {

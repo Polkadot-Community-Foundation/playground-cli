@@ -18,16 +18,16 @@ import { assertTagRequiresPlayground } from "./index.js";
 
 describe("assertTagRequiresPlayground", () => {
     it("rejects --tag without --playground", () => {
-        expect(() => assertTagRequiresPlayground({ tag: "defi", playground: false })).toThrow(
+        expect(() => assertTagRequiresPlayground({ tag: "site", playground: false })).toThrow(
             /--tag requires --playground/,
         );
-        expect(() => assertTagRequiresPlayground({ tag: "defi" })).toThrow(
+        expect(() => assertTagRequiresPlayground({ tag: "site" })).toThrow(
             /--tag requires --playground/,
         );
     });
 
     it("allows a tag when publishing to the playground", () => {
-        expect(() => assertTagRequiresPlayground({ tag: "defi", playground: true })).not.toThrow();
+        expect(() => assertTagRequiresPlayground({ tag: "site", playground: true })).not.toThrow();
     });
 
     it("allows no tag regardless of the --playground flag", () => {

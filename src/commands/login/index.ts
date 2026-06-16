@@ -19,6 +19,7 @@ import { render } from "ink";
 import { captureWarning, withSpan, errorMessage } from "../../telemetry.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import { LoginScreen } from "./LoginScreen.js";
+import { runQrScanPhase } from "./qrScanPhase.js";
 import { connect, type LoginHandle, type SessionAddresses } from "../../utils/auth.js";
 import { destroyConnection } from "../../utils/connection.js";
 
@@ -29,8 +30,9 @@ export const loginCommand = new Command("login")
         runCliCommand("login", { hardExit: false }, async () => {
             console.log();
 
-            let login: LoginHandle | null = null;
-            let existingAddresses: SessionAddresses | null = null;
+            let loginHandle: LoginHandle | null = null;
+            let addresses: SessionAddresses | null = null;
+            let freshlyPaired = false;
 
             if (!opts.yes) {
                 try {
@@ -40,11 +42,27 @@ export const loginCommand = new Command("login")
                         () => connect(),
                     );
                     if (result.kind === "existing") {
-                        existingAddresses = result.addresses;
+                        addresses = result.addresses;
                     } else {
-                        login = result.login;
-                        console.log("  Scan with the Polkadot mobile app to log in:\n");
-                        console.log(result.qrCode);
+                        // Fresh pairing: show the QR, wait for the phone to scan
+                        // + finish auth, then erase the QR — all BEFORE Ink
+                        // mounts, so the tall QR never enters Ink's re-rendered
+                        // region (which is what stranded + duplicated it before).
+                        loginHandle = result.login;
+                        const scan = await withSpan("cli.login.scan", "wait for QR scan", () =>
+                            runQrScanPhase(result.login, result.qrCode),
+                        );
+                        addresses = scan.addresses;
+                        // Only a run that actually paired should trigger the
+                        // post-pairing phone grace / allowance grant.
+                        freshlyPaired = scan.addresses !== null;
+                        if (scan.error) {
+                            // The scan phase now captures auth failures instead
+                            // of letting them propagate to the outer catch, so
+                            // record the telemetry signal here too.
+                            captureWarning("Login did not complete", { error: scan.error });
+                            console.log(`  Login failed: ${scan.error}\n`);
+                        }
                     }
                 } catch (err) {
                     const msg = errorMessage(err);
@@ -57,8 +75,8 @@ export const loginCommand = new Command("login")
 
             const app = render(
                 React.createElement(LoginScreen, {
-                    login,
-                    existingAddresses,
+                    addresses,
+                    freshlyPaired,
                     onDone: () => app.unmount(),
                 }),
             );
@@ -72,7 +90,7 @@ export const loginCommand = new Command("login")
                 // hangs after "setup complete".
                 destroyConnection();
                 // QR-path login handle: `connect()` transferred adapter
-                // ownership to us (it's the transport `waitForLogin` signs
+                // ownership to us (it's the transport the scan phase signs
                 // in over). Once the TUI has exited nothing uses it —
                 // AccountSetup opens its own handles via
                 // `getSessionSigner()` — so release it here, or its
@@ -80,7 +98,7 @@ export const loginCommand = new Command("login")
                 // process) alive indefinitely. Fire-and-forget + `.catch()`
                 // for the same post-destroy-artifact reasons as
                 // `SessionHandle.destroy()` (see auth.ts).
-                login?.adapter.destroy().catch(() => {});
+                loginHandle?.adapter.destroy().catch(() => {});
             }
 
             console.log();

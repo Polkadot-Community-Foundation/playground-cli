@@ -188,7 +188,7 @@ describe("assertPublishFlagsConsistent", () => {
         expect(() =>
             assertPublishFlagsConsistent({
                 moddable: false,
-                tag: "defi",
+                tag: "site",
                 publishToPlayground: false,
             }),
         ).toThrow(/--tag requires --playground/);
@@ -204,7 +204,7 @@ describe("assertPublishFlagsConsistent", () => {
         expect(() =>
             assertPublishFlagsConsistent({
                 moddable: true,
-                tag: "defi",
+                tag: "site",
                 publishToPlayground: false,
             }),
         ).toThrow(/--moddable requires --playground/);
@@ -214,7 +214,7 @@ describe("assertPublishFlagsConsistent", () => {
         expect(() =>
             assertPublishFlagsConsistent({
                 moddable: true,
-                tag: "defi",
+                tag: "site",
                 publishToPlayground: true,
             }),
         ).not.toThrow();

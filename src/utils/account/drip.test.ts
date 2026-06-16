@@ -40,7 +40,10 @@ const RECIPIENT = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 // SS58 of the bare-master account derived from the standard dev mnemonic with
 // empty derivation; see the pubkey assertion at the bottom of the file.
 const DEV_FUNDER = "5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV";
-const ONE_PAS = 1_000_000_000_000n;
+// Mirrors the production scale (PAS_DECIMALS = 10). Must match the module's
+// ONE_PAS so `transferred: ONE_PAS` / funder-balance assertions line up with the
+// imported DRIP_AMOUNT / SOURCE_BUFFER.
+const ONE_PAS = 10_000_000_000n;
 const SOURCE_BUFFER = ONE_PAS;
 const FUNDER_REQUIRED = DRIP_AMOUNT + SOURCE_BUFFER;
 // Plenty of headroom so the preflight balance check passes in tests that
@@ -185,7 +188,7 @@ describe("formatPas", () => {
 
     it("trims trailing zeros and caps at 4 fractional digits", () => {
         expect(formatPas(ONE_PAS + ONE_PAS / 2n)).toBe("1.5 PAS");
-        // 0.123456 PAS -> truncated to 4 dp
-        expect(formatPas(123_456_000_000n)).toBe("0.1234 PAS");
+        // 0.123456 PAS (1_234_560_000 planck at 10 decimals) -> truncated to 4 dp
+        expect(formatPas(1_234_560_000n)).toBe("0.1234 PAS");
     });
 });

@@ -134,7 +134,7 @@ export interface DeploySignerSetup {
     bulletinDeployAuthOptions: Pick<DeployOptions, "signer" | "signerAddress" | "mnemonic">;
 
     /**
-     * Signer used to call `registry.publish()` for the playground step.
+     * Signer used to call the registry publish method for the playground step.
      *
      * - Phone mode: the user's session signer — caller becomes owner.
      * - Dev mode: the dev signer (Alice or `--suri`) — caller becomes
@@ -146,7 +146,7 @@ export interface DeploySignerSetup {
     publishSigner: ResolvedSigner | null;
 
     /**
-     * The H160 to pass as the `owner` argument of `registry.publish(...)`.
+     * The H160 to pass as the `owner` argument of the registry publish method.
      * Non-null only in dev mode WITH an active phone session — the dev
      * account signs the tx but the user's H160 is recorded as owner so the
      * app shows in their MyApps view. `null` ⇒ contract defaults to
