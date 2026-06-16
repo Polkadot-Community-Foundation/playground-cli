@@ -244,6 +244,24 @@ export async function ensurePackageManagerForTools(
     return pm;
 }
 
+/** Compute the install plan (which tools are missing) without installing. */
+export async function planPackageManagerForTools(
+    pm: PackageManager,
+    tools: PmTool[],
+): Promise<InstallPlan> {
+    const toolsToInstall: string[] = [];
+    for (const tool of tools) {
+        if (!(await tool.check())) toolsToInstall.push(tool.label);
+    }
+    return { pm, toolsToInstall };
+}
+
+/** Disk-backed variant: detect the PM and report its install plan. */
+export async function planPackageManager(projectDir: string): Promise<InstallPlan> {
+    const pm = detectProjectPackageManager(loadPackageManagerSnapshot(projectDir));
+    return planPackageManagerForTools(pm, PM_TOOLS[pm]);
+}
+
 /** Copy-paste manual instructions when we won't / can't auto-install. */
 export function packageManagerManualHint(pm: PackageManager, tools: PmTool[]): string {
     const hints = tools.map((t) => `${t.label}: ${t.manualHint ?? "(see official docs)"}`);

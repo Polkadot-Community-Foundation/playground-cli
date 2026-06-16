@@ -23,6 +23,7 @@ import {
     bunInstallCommand,
     PM_TOOLS,
     ensurePackageManagerForTools,
+    planPackageManagerForTools,
     PackageManagerUnavailableError,
     type PmTool,
 } from "./packageManagers.js";
@@ -211,5 +212,23 @@ describe("ensurePackageManagerForTools", () => {
         ).rejects.toThrow("network down");
         // pnpm comes after the failed Node install, so it must not have run.
         expect(installed).toEqual([]);
+    });
+});
+
+describe("planPackageManagerForTools", () => {
+    it("reports the pm and only the missing tool labels, installing nothing", async () => {
+        const installed: string[] = [];
+        const tools = [fakeTool("Node.js", true, installed), fakeTool("pnpm", false, installed)];
+        const plan = await planPackageManagerForTools("pnpm", tools);
+        expect(plan).toEqual({ pm: "pnpm", toolsToInstall: ["pnpm"] });
+        expect(installed).toEqual([]);
+    });
+
+    it("reports an empty toolsToInstall when everything is present", async () => {
+        const installed: string[] = [];
+        const plan = await planPackageManagerForTools("npm", [
+            fakeTool("Node.js", true, installed),
+        ]);
+        expect(plan.toolsToInstall).toEqual([]);
     });
 });
