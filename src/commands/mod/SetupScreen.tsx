@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Text } from "ink";
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -31,9 +31,12 @@ import { runCommand } from "../../utils/git.js";
 import { createOptionalGitBaseline } from "../../utils/mod/git-baseline.js";
 import { downloadGitHubTarball, parseGitHubRepoUrl } from "../../utils/mod/source.js";
 import {
-    findUnsatisfiedPackageManagers,
-    missingPackageManagerMessage,
-} from "../../utils/mod/packageManager.js";
+    ensurePackageManager,
+    planPackageManager,
+    type InstallPlan,
+} from "../../utils/packageManagers.js";
+import { decidePmPhase, pmConfirmLabel } from "./setupFlow.js";
+import { Select } from "../../utils/ui/theme/Select.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
@@ -71,10 +74,18 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
     // sourceUnavailable.ts) — the publisher made the repo private/deleted it
     // after publishing, which we can't undo and the user can't fix.
     const [unavailable, setUnavailable] = useState(false);
+    // Package-manager-aware phase machine. After the source is downloaded we
+    // detect the project's PM and, when it (or Node) is missing, ask once to
+    // install it before running setup.sh. See setupFlow.ts for the decision.
+    const [phase, setPhase] = useState<"pre" | "confirm" | "install" | "post" | "halt">("pre");
+    const [pmPlan, setPmPlan] = useState<InstallPlan | null>(null);
     const setupLogFile = resolve(targetDir, ".dot-mod-setup.log");
     const sourceLogFile = resolve(targetDir, ".dot-mod-source.log");
 
-    const steps: Step[] = [
+    // Steps that always run first: fetch metadata + download source. `meta` is
+    // populated by the first step and read by the second, so they must stay
+    // together in this array (StepRunner runs them sequentially).
+    const preSteps: Step[] = [
         {
             name: "fetch app metadata",
             run: async (log) => {
@@ -148,32 +159,43 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
                 ignoreModLogs(targetDir);
             },
         },
-        {
-            name: "run setup.sh",
-            keepLogOnSuccess: true,
-            run: async (log) => {
-                const setupPath = resolve(targetDir, "setup.sh");
-                if (!existsSync(setupPath)) {
-                    // Most moddable apps have no setup.sh, and that's normal —
-                    // surfacing it as a warning row alarmed users. Skip the step
-                    // silently so nothing is shown; the parent still prints the
-                    // generic "Next steps" footer because `setupRan` stays false.
-                    throw new SilentSkip("no setup.sh found");
-                }
-                const missing = await findUnsatisfiedPackageManagers(
-                    readFileSync(setupPath, "utf8"),
-                );
-                if (missing.length > 0) {
-                    throw new Error(missingPackageManagerMessage(missing));
-                }
-                await runCommand("bash setup.sh", { cwd: targetDir, log, logFile: setupLogFile });
-                setupRanRef.current = true;
-                setSetupRanVisible(true);
-            },
-        },
     ];
 
+    // Final on-disk work: run the app's setup.sh. The package manager is
+    // guaranteed present by the install phase that runs before this, so the
+    // old "missing package manager" gate is gone.
+    const runSetupSh: Step = {
+        name: "run setup.sh",
+        keepLogOnSuccess: true,
+        run: async (log) => {
+            const setupPath = resolve(targetDir, "setup.sh");
+            if (!existsSync(setupPath)) {
+                // Most moddable apps have no setup.sh, and that's normal —
+                // surfacing it as a warning row alarmed users. Skip the step
+                // silently so nothing is shown; the parent still prints the
+                // generic "Next steps" footer because `setupRan` stays false.
+                throw new SilentSkip("no setup.sh found");
+            }
+            await runCommand("bash setup.sh", { cwd: targetDir, log, logFile: setupLogFile });
+            setupRanRef.current = true;
+            setSetupRanVisible(true);
+        },
+    };
+
     const [error, setError] = useState<string | null>(null);
+
+    // Declining the install (or having no installable PM path) is a SOFT
+    // outcome: exit cleanly with `setupRan: false` and let the halt Callout
+    // explain the manual remedy. Fire `onDone` exactly once on entering halt.
+    const haltReportedRef = useRef(false);
+    useEffect(() => {
+        if (phase === "halt" && !haltReportedRef.current) {
+            haltReportedRef.current = true;
+            onDone({ ok: true, setupRan: false });
+        }
+        // onDone is captured once on mount by the parent; gate purely on phase.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase]);
 
     return (
         <Box flexDirection="column">
@@ -193,14 +215,93 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
                 </Callout>
             )}
 
-            <StepRunner
-                title={`modding ${domain}`}
-                steps={steps}
-                onDone={(result) => {
-                    if (result.error) setError(result.error);
-                    onDone({ ok: result.ok, setupRan: setupRanRef.current });
-                }}
-            />
+            {phase === "pre" && (
+                <StepRunner
+                    title={`modding ${domain}`}
+                    steps={preSteps}
+                    onDone={async (result) => {
+                        if (!result.ok) {
+                            if (result.error) setError(result.error);
+                            onDone({ ok: false, setupRan: false });
+                            return;
+                        }
+                        // Planning is best-effort: if PM detection throws, fall
+                        // through to setup.sh and let any real failure surface
+                        // there rather than blocking the mod on a probe error.
+                        // This callback is fire-and-forget (StepRunner doesn't
+                        // await it), but the success path only ever advances the
+                        // phase — it never calls the terminal onDone — so the
+                        // component stays mounted and the post-await setState
+                        // lands on a live component.
+                        try {
+                            const plan = await planPackageManager(targetDir);
+                            setPmPlan(plan);
+                            const next = decidePmPhase({
+                                missing: plan.toolsToInstall,
+                                isTTY: Boolean(process.stdin.isTTY),
+                            });
+                            setPhase(next === "setup" ? "post" : next);
+                        } catch {
+                            setPhase("post");
+                        }
+                    }}
+                />
+            )}
+
+            {phase === "confirm" && pmPlan && (
+                <Select
+                    label={pmConfirmLabel(pmPlan.pm, pmPlan.toolsToInstall)}
+                    options={[
+                        { value: "yes", label: "Install now" },
+                        { value: "no", label: "Cancel — I'll install it myself" },
+                    ]}
+                    onSelect={(v) => setPhase(v === "yes" ? "install" : "halt")}
+                />
+            )}
+
+            {phase === "install" && (
+                <StepRunner
+                    title="installing package manager"
+                    steps={[
+                        {
+                            name: `install ${pmPlan?.pm ?? "package manager"}`,
+                            run: async (log) => {
+                                // `confirm` omitted on purpose — the user already
+                                // confirmed (TTY) or we auto-proceed (non-TTY).
+                                await ensurePackageManager(targetDir, { onData: log });
+                            },
+                        },
+                    ]}
+                    onDone={(result) => {
+                        if (!result.ok) {
+                            setError(result.error ?? "package manager install failed");
+                            onDone({ ok: false, setupRan: false });
+                            return;
+                        }
+                        setPhase("post");
+                    }}
+                />
+            )}
+
+            {phase === "post" && (
+                <StepRunner
+                    title={`finishing ${domain}`}
+                    steps={[runSetupSh]}
+                    onDone={(result) => {
+                        if (result.error) setError(result.error);
+                        onDone({ ok: result.ok, setupRan: setupRanRef.current });
+                    }}
+                />
+            )}
+
+            {phase === "halt" && pmPlan && (
+                <Callout tone="warning" title="package manager not installed">
+                    <Text>
+                        This project uses {pmPlan.pm}. Install it, then re-run playground mod (or
+                        the build).
+                    </Text>
+                </Callout>
+            )}
 
             {!unavailable && <Hint>→ {targetDir}</Hint>}
             {setupRanVisible && <Hint>full setup log: {setupLogFile}</Hint>}

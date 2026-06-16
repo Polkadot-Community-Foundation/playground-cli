@@ -49,6 +49,10 @@ describe("detectPackageManager", () => {
     it("picks bun when only bun.lockb is present", () => {
         expect(detectPackageManager(new Set(["bun.lockb"]))).toBe("bun");
     });
+
+    it("picks bun when only bun.lock (bun 1.2+ text lockfile) is present", () => {
+        expect(detectPackageManager(new Set(["bun.lock"]))).toBe("bun");
+    });
 });
 
 describe("detectBuildConfig", () => {

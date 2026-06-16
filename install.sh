@@ -11,6 +11,16 @@ ALIAS="pg"
 # saved locally under $CMD, so the old `dot` command name is gone.
 ASSET_PREFIX="dot"
 
+# Record whether the command ALREADY resolves on the caller's PATH (re-install /
+# upgrade) before we touch anything. We install into BOTH $INSTALL_DIR/bin and
+# ~/.local/bin (the symlinks below); ~/.local/bin is already on PATH by default
+# on Debian/Ubuntu, so a "fresh" install there resolves immediately. Check both
+# dirs so the reload hint is suppressed whenever the command already works.
+case ":$PATH:" in
+  *":$INSTALL_DIR/bin:"*|*":$HOME/.local/bin:"*) ALREADY_ON_PATH=1 ;;
+  *) ALREADY_ON_PATH=0 ;;
+esac
+
 # 1) Detect platform. Git Bash / MSYS / Cygwin report MINGW*/MSYS*/CYGWIN* —
 # point Windows users at WSL instead of a bare "Unsupported OS".
 OS=$(uname -s); case "$OS" in Linux) OS=linux;; Darwin) OS=darwin;; MINGW*|MSYS*|CYGWIN*) echo "Windows is not supported natively. Install WSL (https://learn.microsoft.com/windows/wsl/install) and re-run this command inside it."; exit 1;; *) echo "Unsupported OS: $OS"; exit 1;; esac
@@ -138,3 +148,16 @@ echo -e "${Y}│${R}                                        ${Y}│${R}"
 echo -e "${Y}│${R}   ${B}$CMD login${R}                     ${Y}│${R}"
 echo -e "${Y}╰────────────────────────────────────────╯${R}"
 echo -e "${D}  Tip: ${ALIAS} is a short alias for ${CMD}.${R}"
+
+# This script runs in a child process, so it CANNOT add $CMD to the caller's
+# live PATH — sourcing an rc file here would only touch this dying process, not
+# the parent shell. On a fresh install the command therefore won't resolve until
+# the caller's shell reloads, so print the exact reload command for their shell.
+if [ "$ALREADY_ON_PATH" = "0" ]; then
+  case "$(basename "${SHELL:-bash}")" in
+    zsh)  RC="$HOME/.zshrc" ;;
+    fish) RC="$HOME/.config/fish/config.fish" ;;
+    *)    RC="$HOME/.bashrc" ;;
+  esac
+  echo -e "${D}  First run \033[1msource ${RC/#$HOME/\$HOME}${R}${D} (or open a new terminal) to use ${CMD}.${R}"
+fi
