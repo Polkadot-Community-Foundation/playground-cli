@@ -22,6 +22,9 @@ import {
     yarnInstallCommand,
     bunInstallCommand,
     PM_TOOLS,
+    ensurePackageManagerForTools,
+    PackageManagerUnavailableError,
+    type PmTool,
 } from "./packageManagers.js";
 
 describe("parsePackageManagerField", () => {
@@ -139,5 +142,74 @@ describe("PM_TOOLS — which tools each PM needs", () => {
 
     it("bun is standalone — no Node", () => {
         expect(PM_TOOLS.bun.map((t) => t.label)).toEqual(["bun"]);
+    });
+});
+
+function fakeTool(label: string, installed: boolean, installSpy: string[]): PmTool {
+    return {
+        name: label,
+        label,
+        check: async () => installed,
+        install: async () => {
+            installSpy.push(label);
+        },
+        manualHint: `install ${label}`,
+    };
+}
+
+describe("ensurePackageManagerForTools", () => {
+    it("is a no-op and installs nothing when all tools are present", async () => {
+        const installed: string[] = [];
+        await ensurePackageManagerForTools("pnpm", [fakeTool("Node.js", true, installed)], {});
+        expect(installed).toEqual([]);
+    });
+
+    it("installs missing tools in order when confirm resolves true", async () => {
+        const installed: string[] = [];
+        const tools = [fakeTool("Node.js", false, installed), fakeTool("pnpm", false, installed)];
+        await ensurePackageManagerForTools("pnpm", tools, { confirm: async () => true });
+        expect(installed).toEqual(["Node.js", "pnpm"]);
+    });
+
+    it("auto-proceeds (installs) when no confirm callback is given", async () => {
+        const installed: string[] = [];
+        await ensurePackageManagerForTools("bun", [fakeTool("bun", false, installed)], {});
+        expect(installed).toEqual(["bun"]);
+    });
+
+    it("throws PackageManagerUnavailableError without installing when confirm is declined", async () => {
+        const installed: string[] = [];
+        const tools = [fakeTool("Node.js", false, installed)];
+        await expect(
+            ensurePackageManagerForTools("npm", tools, { confirm: async () => false }),
+        ).rejects.toBeInstanceOf(PackageManagerUnavailableError);
+        expect(installed).toEqual([]);
+    });
+
+    it("passes the plan (pm + only the missing tool labels) to confirm", async () => {
+        const installed: string[] = [];
+        const tools = [fakeTool("Node.js", true, installed), fakeTool("pnpm", false, installed)];
+        let seen: unknown;
+        await ensurePackageManagerForTools("pnpm", tools, {
+            confirm: async (plan) => {
+                seen = plan;
+                return true;
+            },
+        });
+        expect(seen).toEqual({ pm: "pnpm", toolsToInstall: ["pnpm"] });
+    });
+
+    it("propagates an install failure and does not run later tools", async () => {
+        const installed: string[] = [];
+        const node = fakeTool("Node.js", false, installed);
+        node.install = async () => {
+            throw new Error("network down");
+        };
+        const pnpm = fakeTool("pnpm", false, installed);
+        await expect(
+            ensurePackageManagerForTools("pnpm", [node, pnpm], { confirm: async () => true }),
+        ).rejects.toThrow("network down");
+        // pnpm comes after the failed Node install, so it must not have run.
+        expect(installed).toEqual([]);
     });
 });

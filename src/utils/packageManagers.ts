@@ -24,9 +24,10 @@
  * boundaries: `src/utils/deploy/*` and `src/utils/build/*`).
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
-import { resolve } from "node:path";
-import { detectPackageManager, type PackageManager } from "./build/detect.js";
+import { join, resolve } from "node:path";
+import { detectPackageManager, PM_LOCKFILES, type PackageManager } from "./build/detect.js";
 import { detectReferencedPackageManagers } from "./mod/packageManager.js";
 import { runShell } from "./process.js";
 import { sudo } from "./sudo.js";
@@ -183,3 +184,108 @@ export const PM_TOOLS: Record<PackageManager, PmTool[]> = {
     yarn: [NODE_TOOL, YARN_TOOL],
     bun: [BUN_TOOL],
 };
+
+/** What `ensurePackageManager` will install, shown to the user before it does. */
+export interface InstallPlan {
+    pm: PackageManager;
+    /** Labels of the tools that are missing and will be installed. */
+    toolsToInstall: string[];
+}
+
+export interface EnsurePackageManagerOptions {
+    /** Per-line install output sink. */
+    onData?: (line: string) => void;
+    /**
+     * Asked once before installing, with the plan. Return true to proceed.
+     * Omitted → auto-proceed (the non-interactive posture).
+     */
+    confirm?: (plan: InstallPlan) => Promise<boolean>;
+}
+
+/**
+ * Thrown when the user declines the install at the confirmation prompt. Carries
+ * the manual-install hint as its message. This is a SOFT outcome — callers
+ * render it as a gentle "install it yourself" notice, not an error row.
+ *
+ * Install-time failures (a curl/apt step exiting non-zero) and the
+ * unsupported-platform case are NOT this class: a tool's `install()` rejects
+ * with a plain Error carrying the captured log / manual hint, which callers
+ * surface as a hard failure. Keep the two paths distinct.
+ */
+export class PackageManagerUnavailableError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "PackageManagerUnavailableError";
+    }
+}
+
+/** Core orchestration, parameterized on the tool list so it is trivially testable. */
+export async function ensurePackageManagerForTools(
+    pm: PackageManager,
+    tools: PmTool[],
+    opts: EnsurePackageManagerOptions,
+): Promise<PackageManager> {
+    const missing: PmTool[] = [];
+    for (const tool of tools) {
+        if (!(await tool.check())) missing.push(tool);
+    }
+    if (missing.length === 0) return pm;
+
+    const plan: InstallPlan = { pm, toolsToInstall: missing.map((t) => t.label) };
+    const proceed = opts.confirm ? await opts.confirm(plan) : true;
+    if (!proceed) {
+        throw new PackageManagerUnavailableError(packageManagerManualHint(pm, missing));
+    }
+
+    for (const tool of missing) {
+        opts.onData?.(`> installing ${tool.label}`);
+        await tool.install(opts.onData);
+    }
+    return pm;
+}
+
+/** Copy-paste manual instructions when we won't / can't auto-install. */
+export function packageManagerManualHint(pm: PackageManager, tools: PmTool[]): string {
+    const hints = tools.map((t) => `${t.label}: ${t.manualHint ?? "(see official docs)"}`);
+    return `This project uses ${pm}. Install it manually, then re-run:\n${hints.join("\n")}`;
+}
+
+/** Read the PM-detection snapshot from a project directory. */
+export function loadPackageManagerSnapshot(projectDir: string): PmSnapshot {
+    const pkgPath = join(projectDir, "package.json");
+    let packageManagerField: string | null = null;
+    if (existsSync(pkgPath)) {
+        try {
+            const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { packageManager?: string };
+            packageManagerField = pkg.packageManager ?? null;
+        } catch {
+            // Unreadable/malformed package.json — fall through to lockfile/script.
+            // Detection degrades gracefully here on purpose; contrast
+            // build/runner.ts::loadDetectInput, which parses unguarded so a
+            // broken manifest fails the build loudly.
+        }
+    }
+    const lockfiles = new Set<string>();
+    for (const name of Object.values(PM_LOCKFILES)) {
+        if (existsSync(join(projectDir, name))) lockfiles.add(name);
+    }
+    const setupPath = join(projectDir, "setup.sh");
+    const setupScript = existsSync(setupPath) ? readFileSync(setupPath, "utf8") : null;
+    return { packageManagerField, lockfiles, setupScript };
+}
+
+/**
+ * Public entry point: detect the project's PM from disk and ensure it (and Node
+ * when required) is installed. Throws PackageManagerUnavailableError when the
+ * user declines the prompt (a soft outcome); rejects with a plain Error
+ * carrying the captured install log when an install step fails or the platform
+ * is unsupported.
+ */
+export async function ensurePackageManager(
+    projectDir: string,
+    opts: EnsurePackageManagerOptions = {},
+): Promise<PackageManager> {
+    const snapshot = loadPackageManagerSnapshot(projectDir);
+    const pm = detectProjectPackageManager(snapshot);
+    return ensurePackageManagerForTools(pm, PM_TOOLS[pm], opts);
+}
