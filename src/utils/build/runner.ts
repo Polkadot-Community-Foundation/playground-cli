@@ -20,6 +20,7 @@
 
 import { readFileSync, statSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { ensurePackageManager, type InstallPlan } from "../packageManagers.js";
 import { runStreamed } from "../process.js";
 import {
     detectBuildConfig,
@@ -79,6 +80,11 @@ export interface RunBuildOptions {
     config?: BuildConfig;
     /** Per-line output callback (stdout + stderr). */
     onData?: (line: string) => void;
+    /**
+     * Asked once before installing a missing package manager. Return true to
+     * proceed. Omitted → auto-proceed (non-interactive posture).
+     */
+    confirm?: (plan: InstallPlan) => Promise<boolean>;
 }
 
 export interface RunBuildResult {
@@ -101,6 +107,9 @@ export async function runBuild(options: RunBuildOptions): Promise<RunBuildResult
 
     const install: InstallConfig | null = detectInstallConfig(input);
     if (install) {
+        // Make sure the detected PM (and Node, when it needs it) actually exists
+        // before we shell out to it — otherwise this is the "scary error" path.
+        await ensurePackageManager(cwd, { onData: options.onData, confirm: options.confirm });
         options.onData?.(`> ${install.description}`);
         await runStreamed({
             ...install,
