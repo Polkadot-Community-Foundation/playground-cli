@@ -81,14 +81,16 @@ describe("dot build", () => {
 		expect(output).toContain("Compile error: unexpected token");
 	});
 
-	test("exits non-zero when no build strategy can be detected", async () => {
+	test("exits non-zero when there's nothing to build", async () => {
 		const project = stage("contracts-only");
 		const result = await dot(["build", "--dir", project]);
 		expect(result.exitCode).not.toBe(0);
-		// Exact wording from src/utils/build/detect.ts:
-		//   `No build strategy detected. Add a "build" script to package.json,
-		//    or install vite/next/typescript.`
+		// The contracts-only fixture has only foundry.toml and no package.json,
+		// so the detector reports the more specific "No package.json found"
+		// guidance (src/utils/build/detect.ts handles a missing package.json
+		// before the generic no-strategy hint, to steer users who ran the
+		// command a directory above their project).
 		const output = result.stdout + result.stderr;
-		expect(output).toContain("No build strategy detected");
+		expect(output).toContain("No package.json found");
 	});
 });

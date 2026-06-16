@@ -114,18 +114,21 @@ describe("dot mod — clone", () => {
 			expect(gitignore).toContain(".dot-mod-source.log");
 
 			// ── Step 3 (run setup.sh) ──────────────────────────────────────
-			// The script's first line of substantive output is
-			// `echo "[setup] Rock Paper Scissors tutorial"`. If the log file
-			// exists with that prefix, setup.sh actually ran. (We can't
-			// assert exit 0 of the script here — exit-code propagation is
-			// already covered by the outer `result.exitCode` check above.)
+			// The template's setup.sh prints its progress on `==>`-prefixed
+			// lines (e.g. `==> Installing npm dependencies...`). If the log file
+			// exists with that prefix, setup.sh actually ran. (We can't assert
+			// exit 0 of the script here — exit-code propagation is already
+			// covered by the outer `result.exitCode` check above.) We match the
+			// `==>` prefix rather than a specific message so the test is robust
+			// to the upstream template (paritytech/Rock-Paper-Scissors) tweaking
+			// its setup steps.
 			const setupLog = join(projectDir, ".dot-mod-setup.log");
 			expect(
 				existsSync(setupLog),
 				`setup.sh log not found — step 3 did not run.\n${result.stdout}\n${result.stderr}`,
 			).toBe(true);
 			const setupLogContent = readFileSync(setupLog, "utf-8");
-			expect(setupLogContent).toContain("[setup]");
+			expect(setupLogContent).toContain("==>");
 		},
 	);
 
