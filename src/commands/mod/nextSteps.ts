@@ -14,13 +14,13 @@
 // limitations under the License.
 
 /**
- * The "edit with claude" line of the post-clone "Next steps" block. For a quest
+ * The "edit with your AI agent" line of the post-clone "Next steps" block. For a quest
  * track the user actually started, it nudges them toward the prepopulated AI
  * prompt that kicks off the guided tutorial; a plain mod has no such entry
  * point, so it stays generic.
  */
-export function editWithClaudeStep(startedTutorial: boolean): string {
+export function editWithAgentStep(startedTutorial: boolean): string {
     return startedTutorial
-        ? '  2. edit with claude (prompt: "start tutorial")'
-        : "  2. edit with claude";
+        ? '  2. edit with your AI agent (prompt: "start tutorial")'
+        : "  2. edit with your AI agent";
 }

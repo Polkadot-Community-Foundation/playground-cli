@@ -22,6 +22,7 @@ import {
     MODDABLE_HELP,
     TAGS_HELP,
     DOMAIN_HELP,
+    BUILD_HINT,
     BUILD_DIR_HINT,
     DOMAIN_HINT,
     CONTRACTS_RENAME_NOTICE_TITLE,
@@ -112,11 +113,17 @@ describe("contract-redeploy rename notice", () => {
     });
 });
 
-describe("trivial-input hints", () => {
+describe("lightweight prompt hints", () => {
     it("are one-line, non-empty strings", () => {
-        for (const [name, hint] of Object.entries({ BUILD_DIR_HINT, DOMAIN_HINT })) {
+        for (const [name, hint] of Object.entries({ BUILD_HINT, BUILD_DIR_HINT, DOMAIN_HINT })) {
             expect(hint.trim(), name).not.toBe("");
             expect(hint, name).not.toContain("\n");
         }
+    });
+
+    it("tells users enter accepts the build prompt default", () => {
+        const hint = BUILD_HINT.toLowerCase();
+        expect(hint).toContain("enter");
+        expect(hint).toContain("rebuild");
     });
 });
