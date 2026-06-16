@@ -21,6 +21,7 @@ import {
     pnpmInstallCommand,
     yarnInstallCommand,
     bunInstallCommand,
+    PM_TOOLS,
 } from "./packageManagers.js";
 
 describe("parsePackageManagerField", () => {
@@ -123,5 +124,20 @@ describe("install command builders", () => {
     it("installs yarn via corepack (its official path)", () => {
         expect(yarnInstallCommand()).toContain("corepack");
         expect(yarnInstallCommand()).toContain("yarn@stable");
+    });
+});
+
+describe("PM_TOOLS — which tools each PM needs", () => {
+    it("npm needs only Node (npm ships with it)", () => {
+        expect(PM_TOOLS.npm.map((t) => t.label)).toEqual(["Node.js"]);
+    });
+
+    it("pnpm and yarn need Node first, then themselves", () => {
+        expect(PM_TOOLS.pnpm.map((t) => t.label)).toEqual(["Node.js", "pnpm"]);
+        expect(PM_TOOLS.yarn.map((t) => t.label)).toEqual(["Node.js", "yarn"]);
+    });
+
+    it("bun is standalone — no Node", () => {
+        expect(PM_TOOLS.bun.map((t) => t.label)).toEqual(["bun"]);
     });
 });

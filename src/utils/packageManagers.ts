@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * Package-manager detection — React-free on purpose.
+ * Package-manager detection and install orchestration — React-free on purpose.
  *
  * The interactive parts of the auto-install flow (the confirmation prompt and
  * the streaming install log) are driven by the TUI layer through callbacks, so
@@ -24,9 +24,13 @@
  * boundaries: `src/utils/deploy/*` and `src/utils/build/*`).
  */
 
+import { homedir, platform } from "node:os";
+import { resolve } from "node:path";
 import { detectPackageManager, type PackageManager } from "./build/detect.js";
 import { detectReferencedPackageManagers } from "./mod/packageManager.js";
+import { runShell } from "./process.js";
 import { sudo } from "./sudo.js";
+import { commandExists, prependPath, type ToolStep } from "./toolchain.js";
 
 export type { PackageManager };
 
@@ -106,3 +110,76 @@ export function yarnInstallCommand(): string {
 export function bunInstallCommand(): string {
     return "curl -fsSL https://bun.sh/install | bash";
 }
+
+/** A toolchain step plus a short label shown in the confirmation prompt. */
+export interface PmTool extends ToolStep {
+    /** Human label for the confirmation prompt (e.g. "Node.js", "pnpm"). */
+    label: string;
+}
+
+const NODE_TOOL: PmTool = {
+    name: "node",
+    label: "Node.js",
+    check: () => commandExists("node"),
+    install: async (onData) => {
+        const cmd = nodeInstallCommand(platform(), await commandExists("brew"));
+        if (!cmd) {
+            throw new Error(
+                "Cannot install Node.js automatically on this platform — install from https://nodejs.org/en/download",
+            );
+        }
+        await runShell(cmd, onData, { description: "install Node.js" });
+    },
+    manualHint: "https://nodejs.org/en/download",
+};
+
+const PNPM_TOOL: PmTool = {
+    name: "pnpm",
+    label: "pnpm",
+    check: () => commandExists("pnpm"),
+    install: async (onData) => {
+        await runShell(pnpmInstallCommand(), onData, { description: "install pnpm" });
+        // get.pnpm.io writes PNPM_HOME and edits shell rc files, but those edits
+        // don't reach the running process. Expose the bin dir now so the very
+        // next step can resolve `pnpm`. The installer's default PNPM_HOME is
+        // platform-specific: ~/Library/pnpm on macOS, ~/.local/share/pnpm on Linux.
+        const pnpmHome =
+            platform() === "darwin"
+                ? resolve(homedir(), "Library/pnpm")
+                : resolve(homedir(), ".local/share/pnpm");
+        prependPath(process.env.PNPM_HOME ?? pnpmHome);
+    },
+    manualHint: "https://pnpm.io/installation",
+};
+
+const YARN_TOOL: PmTool = {
+    name: "yarn",
+    label: "yarn",
+    check: () => commandExists("yarn"),
+    install: (onData) => runShell(yarnInstallCommand(), onData, { description: "install yarn" }),
+    manualHint: "https://yarnpkg.com/getting-started/install",
+};
+
+const BUN_TOOL: PmTool = {
+    name: "bun",
+    label: "bun",
+    check: () => commandExists("bun"),
+    install: async (onData) => {
+        await runShell(bunInstallCommand(), onData, { description: "install bun" });
+        // bun's installer drops the binary in ~/.bun/bin and edits shell rc files.
+        prependPath(resolve(homedir(), ".bun/bin"));
+    },
+    manualHint: "https://bun.sh/docs/installation",
+};
+
+/**
+ * Ordered list of tools to ensure for each PM. Order matters: Node must be
+ * present before yarn (corepack ships with Node) and before pnpm (build scripts
+ * call `node`). bun is its own runtime and needs nothing else.
+ */
+export const PM_TOOLS: Record<PackageManager, PmTool[]> = {
+    npm: [NODE_TOOL],
+    pnpm: [NODE_TOOL, PNPM_TOOL],
+    yarn: [NODE_TOOL, YARN_TOOL],
+    bun: [BUN_TOOL],
+};
