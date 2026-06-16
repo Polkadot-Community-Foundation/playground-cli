@@ -26,6 +26,7 @@
 
 import { detectPackageManager, type PackageManager } from "./build/detect.js";
 import { detectReferencedPackageManagers } from "./mod/packageManager.js";
+import { sudo } from "./sudo.js";
 
 export type { PackageManager };
 
@@ -68,4 +69,40 @@ export function detectProjectPackageManager(snap: PmSnapshot): PackageManager {
         if (fromScript) return fromScript;
     }
     return "npm";
+}
+
+/**
+ * Shell command to install Node.js, or null when we have no controllable
+ * non-interactive path on this platform. NodeSource (not apt's `nodejs`) on
+ * Linux because Debian/Ubuntu ship a years-old Node that breaks modern builds.
+ */
+export function nodeInstallCommand(plat: NodeJS.Platform, hasBrew: boolean): string | null {
+    if (plat === "darwin" && hasBrew) return "brew install node";
+    if (plat === "linux") {
+        return `curl -fsSL https://deb.nodesource.com/setup_lts.x | ${sudo()}bash - && ${sudo()}apt install -y nodejs`;
+    }
+    return null;
+}
+
+/**
+ * pnpm's official standalone installer (manages its own runtime). Note: pnpm's
+ * script does not support Intel Macs (`darwin-x64`); on that host the install
+ * surfaces pnpm's own error plus the manual hint rather than succeeding.
+ */
+export function pnpmInstallCommand(): string {
+    return "curl -fsSL https://get.pnpm.io/install.sh | sh -";
+}
+
+/** yarn's official path: corepack ships with Node and activates a yarn shim. */
+export function yarnInstallCommand(): string {
+    return "corepack enable && corepack prepare yarn@stable --activate";
+}
+
+/**
+ * bun's official standalone installer (its own runtime, no Node needed). On
+ * Linux it requires `unzip` on PATH; bare containers without it surface bun's
+ * own "unzip is required" error plus the manual hint.
+ */
+export function bunInstallCommand(): string {
+    return "curl -fsSL https://bun.sh/install | bash";
 }

@@ -14,7 +14,14 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import { detectProjectPackageManager, parsePackageManagerField } from "./packageManagers.js";
+import {
+    detectProjectPackageManager,
+    parsePackageManagerField,
+    nodeInstallCommand,
+    pnpmInstallCommand,
+    yarnInstallCommand,
+    bunInstallCommand,
+} from "./packageManagers.js";
 
 describe("parsePackageManagerField", () => {
     it("parses a name@version field", () => {
@@ -81,5 +88,40 @@ describe("detectProjectPackageManager precedence", () => {
             setupScript: "pnpm install || npm install",
         });
         expect(pm).toBe("npm");
+    });
+});
+
+describe("install command builders", () => {
+    it("installs Node via brew on macOS when brew is present", () => {
+        expect(nodeInstallCommand("darwin", true)).toBe("brew install node");
+    });
+
+    it("installs Node via NodeSource on Linux (avoids ancient apt node)", () => {
+        const cmd = nodeInstallCommand("linux", false);
+        expect(cmd).toContain("deb.nodesource.com/setup_lts.x");
+        expect(cmd).toContain("apt install -y nodejs");
+    });
+
+    it("chains the NodeSource setup and apt install (both privileged) with &&", () => {
+        const cmd = nodeInstallCommand("linux", false) ?? "";
+        // The setup script is piped into a privileged shell, then apt installs.
+        const prefix = process.getuid?.() === 0 ? "" : "sudo ";
+        expect(cmd).toContain(`| ${prefix}bash - && ${prefix}apt install -y nodejs`);
+    });
+
+    it("returns null for Node on unsupported platforms", () => {
+        expect(nodeInstallCommand("win32", false)).toBeNull();
+        // macOS without brew has no non-interactive path we control.
+        expect(nodeInstallCommand("darwin", false)).toBeNull();
+    });
+
+    it("uses the official standalone installers for pnpm and bun", () => {
+        expect(pnpmInstallCommand()).toContain("get.pnpm.io/install.sh");
+        expect(bunInstallCommand()).toContain("bun.sh/install");
+    });
+
+    it("installs yarn via corepack (its official path)", () => {
+        expect(yarnInstallCommand()).toContain("corepack");
+        expect(yarnInstallCommand()).toContain("yarn@stable");
     });
 });
