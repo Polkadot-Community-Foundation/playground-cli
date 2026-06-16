@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.40.2
+
+### Patch Changes
+
+- 0b9a7af: Polish the deploy and mod prompt copy: the mod next-step text now refers to your AI agent generically, and the deploy build prompt explains that pressing enter keeps the default rebuild choice.
+
 ## 0.40.1
 
 ### Patch Changes
