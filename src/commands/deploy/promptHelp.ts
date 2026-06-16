@@ -24,10 +24,9 @@
  * gating are intentionally unchanged (contracts must run before the frontend
  * build, so it stays first); this module only owns the words.
  *
- * Boxed prompts (conceptual choices) get a `{ title, body }`; the two trivial
- * text inputs (domain, build directory) get a single dim hint line instead of
- * a full bordered box. Keep bodies short enough to read at a glance; the test
- * enforces a soft length cap.
+ * Boxed prompts (conceptual choices) get a `{ title, body }`; lightweight
+ * nudges get a single dim hint line instead of a full bordered box. Keep bodies
+ * short enough to read at a glance; the test enforces a soft length cap.
  */
 
 export interface PromptBox {
@@ -41,6 +40,9 @@ export const BUILD_HELP: PromptBox = {
         "Compiles your latest code into the files we upload. Choose Yes to " +
         "rebuild now, or No to redeploy the build that's already in your build folder.",
 };
+
+export const BUILD_HINT =
+    "Press enter to rebuild now. Change this only if you want to redeploy an existing build.";
 
 export const CONTRACTS_HELP: PromptBox = {
     title: "Smart contracts · your app's on-chain backend",
@@ -116,7 +118,7 @@ export const CONTRACTS_RENAME_NOTICE_BODY =
 
 export const CONTRACTS_RENAME_NOTICE_HINT = "enter to continue · esc to exit and rename";
 
-/** One-line hints for the trivial text inputs (no bordered box). */
+/** One-line hints for lightweight prompts (no bordered box). */
 export const BUILD_DIR_HINT =
     "The folder holding your built site (the files we upload). The default fits most projects.";
 

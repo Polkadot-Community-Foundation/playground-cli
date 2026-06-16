@@ -27,7 +27,7 @@ import { defaultRepoName } from "../../utils/git/repoName.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import { parseGitHubRepoUrl, type GitHubRepoRef } from "../../utils/mod/source.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
-import { editWithClaudeStep } from "./nextSteps.js";
+import { editWithAgentStep } from "./nextSteps.js";
 import { shouldShowTutorialPrompt } from "./tutorialPromptHint.js";
 
 interface FetchedAppMetadata {
@@ -181,7 +181,7 @@ async function runModCommand(rawDomain: string | undefined): Promise<void> {
         if (ok) {
             console.log("  Next steps:");
             console.log(`  1. cd ${targetDir}`);
-            console.log(editWithClaudeStep(shouldShowTutorialPrompt({ domain, startedTutorial })));
+            console.log(editWithAgentStep(shouldShowTutorialPrompt({ domain, startedTutorial })));
             console.log("  3. playground deploy --playground");
         }
         if (!ok) process.exitCode = 1;

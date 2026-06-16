@@ -20,7 +20,7 @@
  *
  * Kept in its own module so it can be removed in one go if we decide against
  * it: delete this file and pass `startedTutorial` straight to
- * `editWithClaudeStep` at the `playground mod` call site to revert to the
+ * `editWithAgentStep` at the `playground mod` call site to revert to the
  * quest-track behaviour.
  */
 const TUTORIAL_APP_DOMAIN = "playground-tutorial.dot";

@@ -14,14 +14,16 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { editWithClaudeStep } from "./nextSteps.js";
+import { editWithAgentStep } from "./nextSteps.js";
 
-describe("editWithClaudeStep", () => {
+describe("editWithAgentStep", () => {
     it("nudges toward the tutorial prompt when a quest track was started", () => {
-        expect(editWithClaudeStep(true)).toBe('  2. edit with claude (prompt: "start tutorial")');
+        expect(editWithAgentStep(true)).toBe(
+            '  2. edit with your AI agent (prompt: "start tutorial")',
+        );
     });
 
     it("stays generic for a plain mod (no tutorial started)", () => {
-        expect(editWithClaudeStep(false)).toBe("  2. edit with claude");
+        expect(editWithAgentStep(false)).toBe("  2. edit with your AI agent");
     });
 });
