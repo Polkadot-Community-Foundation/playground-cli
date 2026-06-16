@@ -68,7 +68,9 @@ export interface ChainConfig {
      * Native token symbol for display only (balances, drip amounts) — never used
      * for on-chain math. Read it via `getTokenSymbol()` / threaded through
      * `formatPas` so flipping `ACTIVE_TESTNET_ENV` re-labels the whole CLI in one
-     * place. All wired envs use 12-decimal planck regardless of symbol.
+     * place. All wired envs use 10-decimal planck regardless of symbol (PAS and
+     * SUM are both 10 decimals — verified live against the chain, see
+     * `PAS_DECIMALS` in `account/drip.ts`).
      */
     tokenSymbol: string;
     /** Relay chain RPC (mostly informational; product-sdk talks to system chains directly). */
@@ -104,6 +106,15 @@ export interface ChainConfig {
      * stored here — see `src/utils/registry.ts` and CLAUDE.md.
      */
     cdmEnvName: string;
+    /**
+     * Asset id of PGAS (the smart-contract gas token, a `sufficient` asset) on
+     * this env's Asset Hub. Display-only — read via `getPgasAssetId()` to show a
+     * balance in `playground status`. Like `tokenSymbol`, it is NOT present in
+     * polkadot-app-deploy's `environments.json`, so the `config.test.ts`
+     * divergence guard does not cross-check it; set it from the chain's own asset
+     * registry.
+     */
+    pgasAssetId: number;
 }
 
 // Paseo Next v2 — the active env. DotNS contracts are owned by
@@ -121,6 +132,7 @@ const PASEO_NEXT_V2: ChainConfig = {
     autoAccountMapping: true,
     faucetUrl: "https://faucet.polkadot.io/?network=pah",
     cdmEnvName: "paseo-next-v2",
+    pgasAssetId: 2_000_000_000,
 };
 
 // Web3 Summit network. Every endpoint/network value mirrors polkadot-app-deploy's
@@ -141,6 +153,7 @@ const SUMMIT: ChainConfig = {
     autoAccountMapping: true,
     faucetUrl: null,
     cdmEnvName: "w3s",
+    pgasAssetId: 2_000_000_000,
 };
 
 /**
@@ -221,6 +234,15 @@ export function getNetworkLabel(env: Env = DEFAULT_ENV): string {
  */
 export function getTokenSymbol(env: Env = DEFAULT_ENV): string {
     return getChainConfig(env).tokenSymbol;
+}
+
+/**
+ * Asset id of PGAS on the given env's Asset Hub (defaults to the active env).
+ * Display only — used by `playground status` to read the product account's PGAS
+ * balance. See `ChainConfig.pgasAssetId`.
+ */
+export function getPgasAssetId(env: Env = DEFAULT_ENV): number {
+    return getChainConfig(env).pgasAssetId;
 }
 
 /** Identifier the terminal adapter reports during SSO. Kept stable so mobile pairings persist across releases. */
