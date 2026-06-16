@@ -144,4 +144,21 @@ describe("runCommand log-file tee", () => {
         expect(lines).toEqual(["a", "b"]);
         expect(readFileSync(logFile, "utf-8")).toBe("a\nb\n");
     });
+
+    it("reads PATH live, so a binary installed earlier this run is visible", async () => {
+        // The package-manager auto-install mutates process.env.PATH in-process
+        // (prependPath) and then runs setup.sh through runCommand. The child
+        // must see that live PATH — a module-load env snapshot would miss it and
+        // setup.sh would hit "command not found" for the just-installed PM.
+        const sentinel = join(dir, "freshly-installed-bin");
+        const original = process.env.PATH;
+        process.env.PATH = `${sentinel}:${original ?? ""}`;
+        try {
+            const lines: string[] = [];
+            await runCommand('printf "%s" "$PATH"', { cwd: dir, log: (l) => lines.push(l) });
+            expect(lines.join("")).toContain(sentinel);
+        } finally {
+            process.env.PATH = original;
+        }
+    });
 });
