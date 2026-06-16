@@ -50,7 +50,7 @@ export const modCommand = new Command("mod")
         runCliCommand("mod", { watchdog: true, hardExit: true }, () => runModCommand(rawDomain)),
     );
 
-async function runModCommand(rawDomain: string | undefined): Promise<void> {
+export async function runModCommand(rawDomain: string | undefined): Promise<void> {
     try {
         const client = await withSpan("cli.mod.connection", "connect to registry chain", () =>
             getConnection(),
