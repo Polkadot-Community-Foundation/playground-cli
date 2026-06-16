@@ -18,33 +18,33 @@ import { Box } from "ink";
 import { Header, Row, Section } from "../../utils/ui/theme/index.js";
 import { DependencyList } from "./DependencyList.js";
 import { IdentityLines } from "./IdentityLines.js";
-import { QrLogin } from "./QrLogin.js";
 import { AccountSetup } from "./AccountSetup.js";
 import { NextSteps } from "./NextStepsCallout.js";
 import { computeAllDone } from "./completion.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
-import type { LoginHandle, SessionAddresses } from "../../utils/auth.js";
+import type { SessionAddresses } from "../../utils/auth.js";
 
 export function LoginScreen({
-    login,
-    existingAddresses,
+    addresses,
+    freshlyPaired,
     onDone,
 }: {
-    login: LoginHandle | null;
-    existingAddresses: SessionAddresses | null;
+    // Auth is fully resolved before this screen mounts (the QR scan happens in
+    // the pre-Ink scan phase, see qrScanPhase.ts), so `addresses` is fixed here.
+    addresses: SessionAddresses | null;
+    // True when this run just paired a phone, so AccountSetup waits out the
+    // phone's "Connecting device" modal and grants allowances.
+    freshlyPaired: boolean;
     onDone: () => void;
 }) {
-    const needsQr = login !== null;
-    const [addresses, setAddresses] = useState<SessionAddresses | null>(existingAddresses);
-    const [authResolved, setAuthResolved] = useState(!needsQr);
     const [depsComplete, setDepsComplete] = useState(false);
     const [accountComplete, setAccountComplete] = useState(false);
     const [accountOk, setAccountOk] = useState(true);
 
     const allDone = computeAllDone({
-        needsQr,
-        authResolved,
+        needsQr: false,
+        authResolved: true,
         loggedInAddress: addresses?.productAddress ?? null,
         depsComplete,
         accountComplete,
@@ -52,11 +52,6 @@ export function LoginScreen({
 
     const handleDepsDone = () => {
         setDepsComplete(true);
-    };
-
-    const handleAuthDone = (next: SessionAddresses | null) => {
-        if (next) setAddresses(next);
-        setAuthResolved(true);
     };
 
     const handleAccountDone = (success: boolean) => {
@@ -72,8 +67,6 @@ export function LoginScreen({
         <Box flexDirection="column">
             <Header cmd="playground login" network={getNetworkLabel()} right={VERSION_LABEL} />
 
-            {needsQr && <QrLogin login={login} onDone={handleAuthDone} />}
-
             {addresses && <IdentityLines addresses={addresses} />}
 
             <DependencyList onDone={handleDepsDone} />
@@ -81,7 +74,7 @@ export function LoginScreen({
             {addresses && depsComplete && (
                 <AccountSetup
                     address={addresses.productAddress}
-                    freshlyPaired={needsQr}
+                    freshlyPaired={freshlyPaired}
                     onDone={handleAccountDone}
                 />
             )}
