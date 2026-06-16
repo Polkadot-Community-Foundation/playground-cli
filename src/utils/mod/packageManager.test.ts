@@ -13,16 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { commandExists } from "../toolchain.js";
-import {
-    detectReferencedPackageManagers,
-    findUnsatisfiedPackageManagers,
-    missingPackageManagerMessage,
-} from "./packageManager.js";
-
-vi.mock("../toolchain.js", () => ({ commandExists: vi.fn() }));
-const mockCommandExists = vi.mocked(commandExists);
+import { describe, expect, it } from "vitest";
+import { detectReferencedPackageManagers } from "./packageManager.js";
 
 describe("detectReferencedPackageManagers", () => {
     it("detects npm and npx", () => {
@@ -72,76 +64,5 @@ describe("detectReferencedPackageManagers", () => {
 
     it("returns empty for scripts with no package manager", () => {
         expect(detectReferencedPackageManagers("make build")).toEqual([]);
-    });
-});
-
-describe("findUnsatisfiedPackageManagers", () => {
-    beforeEach(() => mockCommandExists.mockReset());
-
-    it("returns empty when the script needs no package manager", async () => {
-        await expect(findUnsatisfiedPackageManagers("make build")).resolves.toEqual([]);
-        expect(mockCommandExists).not.toHaveBeenCalled();
-    });
-
-    it("returns empty when the single required manager is installed", async () => {
-        mockCommandExists.mockResolvedValue(true);
-        await expect(findUnsatisfiedPackageManagers("npm install")).resolves.toEqual([]);
-    });
-
-    it("flags the manager when it is the only one referenced and is missing", async () => {
-        mockCommandExists.mockResolvedValue(false);
-        await expect(findUnsatisfiedPackageManagers("npm install")).resolves.toEqual(["npm"]);
-    });
-
-    it("flags yarn when a yarn-only script has no yarn installed", async () => {
-        mockCommandExists.mockResolvedValue(false);
-        await expect(findUnsatisfiedPackageManagers("yarn install")).resolves.toEqual(["yarn"]);
-    });
-
-    it("is satisfied when ANY referenced manager from a fallback chain is present", async () => {
-        // setup.sh tries bun, else pnpm, else npm; only npm installed -> fine.
-        mockCommandExists.mockImplementation(async (bin: string) => bin === "npm");
-        const script =
-            "if command -v bun; then bun i; elif command -v pnpm; then pnpm i; else npm i; fi";
-        await expect(findUnsatisfiedPackageManagers(script)).resolves.toEqual([]);
-    });
-
-    it("flags all referenced managers only when none are installed", async () => {
-        mockCommandExists.mockResolvedValue(false);
-        const script =
-            "if command -v bun; then bun i; elif command -v pnpm; then pnpm i; else npm i; fi";
-        await expect(findUnsatisfiedPackageManagers(script)).resolves.toEqual([
-            "npm",
-            "pnpm",
-            "bun",
-        ]);
-    });
-
-    it("short-circuits once a present manager is found", async () => {
-        mockCommandExists.mockResolvedValue(true);
-        await findUnsatisfiedPackageManagers("npm i\npnpm i\nbun i");
-        expect(mockCommandExists).toHaveBeenCalledTimes(1);
-    });
-});
-
-describe("missingPackageManagerMessage", () => {
-    it("points npm users at Node.js", () => {
-        const msg = missingPackageManagerMessage(["npm"]);
-        expect(msg).toContain("npm");
-        expect(msg).toContain("none is installed");
-        expect(msg).toContain("nodejs.org");
-    });
-
-    it("uses a generic install hint for a single non-npm manager", () => {
-        const msg = missingPackageManagerMessage(["bun"]);
-        expect(msg).toContain("bun");
-        expect(msg).toContain("Install bun");
-        expect(msg).not.toContain("nodejs.org");
-    });
-
-    it("phrases a fallback chain as 'one of'", () => {
-        const msg = missingPackageManagerMessage(["npm", "pnpm", "bun"]);
-        expect(msg).toContain("one of: npm, pnpm, bun");
-        expect(msg).toContain("none is installed");
     });
 });

@@ -24,13 +24,20 @@ import { DEFAULT_BUILD_DIR } from "../../config.js";
 
 export type PackageManager = "pnpm" | "yarn" | "bun" | "npm";
 
-/** Files we inspect on disk to infer the package manager. */
+/** Canonical lockfile basename per package manager. */
 export const PM_LOCKFILES: Record<PackageManager, string> = {
     pnpm: "pnpm-lock.yaml",
     yarn: "yarn.lock",
     bun: "bun.lockb",
     npm: "package-lock.json",
 };
+
+// Bun 1.2+ defaults to a TEXT lockfile (`bun.lock`); older bun wrote the binary
+// `bun.lockb`. Detect either so modern bun projects aren't mis-detected as npm.
+const BUN_TEXT_LOCKFILE = "bun.lock";
+
+/** Every lockfile basename to probe on disk (some PMs have more than one). */
+export const PM_LOCKFILES_ALL: string[] = [...Object.values(PM_LOCKFILES), BUN_TEXT_LOCKFILE];
 
 export interface BuildConfig {
     /** Binary + args to spawn. */
@@ -80,7 +87,7 @@ export class BuildDetectError extends Error {
 export function detectPackageManager(lockfiles: Set<string>): PackageManager {
     if (lockfiles.has(PM_LOCKFILES.pnpm)) return "pnpm";
     if (lockfiles.has(PM_LOCKFILES.yarn)) return "yarn";
-    if (lockfiles.has(PM_LOCKFILES.bun)) return "bun";
+    if (lockfiles.has(PM_LOCKFILES.bun) || lockfiles.has(BUN_TEXT_LOCKFILE)) return "bun";
     return "npm";
 }
 

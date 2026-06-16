@@ -18,9 +18,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { arch, homedir, platform } from "node:os";
 import { runShell as runPiped } from "./process.js";
-
-/** Returns "sudo " when not already running as root, empty string otherwise. */
-const sudo = () => (typeof process.getuid === "function" && process.getuid() === 0 ? "" : "sudo ");
+import { sudo } from "./sudo.js";
 
 /** Async exec — resolves with stdout, rejects on non-zero exit. */
 function run(cmd: string, opts?: { shell?: string }): Promise<string> {

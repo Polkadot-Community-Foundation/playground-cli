@@ -20,11 +20,12 @@
 
 import { readFileSync, statSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { ensurePackageManager, type InstallPlan } from "../packageManagers.js";
 import { runStreamed } from "../process.js";
 import {
     detectBuildConfig,
     detectInstallConfig,
-    PM_LOCKFILES,
+    PM_LOCKFILES_ALL,
     type BuildConfig,
     type DetectInput,
     type InstallConfig,
@@ -55,7 +56,7 @@ export function loadDetectInput(projectDir: string): DetectInput {
         : null;
 
     const lockfiles = new Set<string>();
-    for (const name of Object.values(PM_LOCKFILES)) {
+    for (const name of PM_LOCKFILES_ALL) {
         if (existsSync(join(root, name))) lockfiles.add(name);
     }
 
@@ -79,6 +80,11 @@ export interface RunBuildOptions {
     config?: BuildConfig;
     /** Per-line output callback (stdout + stderr). */
     onData?: (line: string) => void;
+    /**
+     * Asked once before installing a missing package manager. Return true to
+     * proceed. Omitted → auto-proceed (non-interactive posture).
+     */
+    confirm?: (plan: InstallPlan) => Promise<boolean>;
 }
 
 export interface RunBuildResult {
@@ -101,6 +107,9 @@ export async function runBuild(options: RunBuildOptions): Promise<RunBuildResult
 
     const install: InstallConfig | null = detectInstallConfig(input);
     if (install) {
+        // Make sure the detected PM (and Node, when it needs it) actually exists
+        // before we shell out to it — otherwise this is the "scary error" path.
+        await ensurePackageManager(cwd, { onData: options.onData, confirm: options.confirm });
         options.onData?.(`> ${install.description}`);
         await runStreamed({
             ...install,
