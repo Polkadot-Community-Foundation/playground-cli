@@ -125,9 +125,10 @@ describe("install command builders", () => {
         expect(bunInstallCommand()).toContain("bun.sh/install");
     });
 
-    it("installs yarn via corepack (its official path)", () => {
-        expect(yarnInstallCommand()).toContain("corepack");
-        expect(yarnInstallCommand()).toContain("yarn@stable");
+    it("installs yarn via corepack into a user-owned dir (avoids EACCES on Linux)", () => {
+        const cmd = yarnInstallCommand("/home/u/.corepack/bin");
+        expect(cmd).toContain('corepack enable --install-directory "/home/u/.corepack/bin"');
+        expect(cmd).toContain("yarn@stable");
     });
 });
 
@@ -147,12 +148,16 @@ describe("PM_TOOLS — which tools each PM needs", () => {
 });
 
 function fakeTool(label: string, installed: boolean, installSpy: string[]): PmTool {
+    // Models a real tool: `check()` flips to true once `install()` has run, so
+    // the orchestrator's post-install re-check passes.
+    let present = installed;
     return {
         name: label,
         label,
-        check: async () => installed,
+        check: async () => present,
         install: async () => {
             installSpy.push(label);
+            present = true;
         },
         manualHint: `install ${label}`,
     };
@@ -212,6 +217,52 @@ describe("ensurePackageManagerForTools", () => {
         ).rejects.toThrow("network down");
         // pnpm comes after the failed Node install, so it must not have run.
         expect(installed).toEqual([]);
+    });
+
+    it("throws when a tool is still missing after its install ran (PATH mismatch)", async () => {
+        const installed: string[] = [];
+        // install() "succeeds" but check() never flips — models an installer that
+        // wrote its binary somewhere not on PATH.
+        const stubborn: PmTool = {
+            name: "Node.js",
+            label: "Node.js",
+            check: async () => false,
+            install: async () => {
+                installed.push("Node.js");
+            },
+            manualHint: "https://nodejs.org/en/download",
+        };
+        await expect(ensurePackageManagerForTools("npm", [stubborn], {})).rejects.toThrow(
+            /still not on PATH/,
+        );
+        expect(installed).toEqual(["Node.js"]); // it did attempt the install
+    });
+
+    it("collapses concurrent installs of the same tool onto one run (single-flight)", async () => {
+        let installCount = 0;
+        let present = false;
+        let release!: () => void;
+        const gate = new Promise<void>((r) => {
+            release = r;
+        });
+        const make = (): PmTool => ({
+            name: "pnpm",
+            label: "pnpm",
+            check: async () => present,
+            install: async () => {
+                installCount++;
+                await gate;
+                present = true;
+            },
+            manualHint: "x",
+        });
+        // Two concurrent ensures racing the same missing tool (the deploy-all case).
+        const a = ensurePackageManagerForTools("pnpm", [make()], {});
+        const b = ensurePackageManagerForTools("pnpm", [make()], {});
+        await new Promise((r) => setTimeout(r, 10)); // let both reach the install
+        release();
+        await Promise.all([a, b]);
+        expect(installCount).toBe(1);
     });
 });
 

@@ -27,7 +27,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
-import { detectPackageManager, PM_LOCKFILES, type PackageManager } from "./build/detect.js";
+import { detectPackageManager, PM_LOCKFILES_ALL, type PackageManager } from "./build/detect.js";
 import { detectReferencedPackageManagers } from "./mod/packageManager.js";
 import { runShell } from "./process.js";
 import { sudo } from "./sudo.js";
@@ -98,9 +98,15 @@ export function pnpmInstallCommand(): string {
     return "curl -fsSL https://get.pnpm.io/install.sh | sh -";
 }
 
-/** yarn's official path: corepack ships with Node and activates a yarn shim. */
-export function yarnInstallCommand(): string {
-    return "corepack enable && corepack prepare yarn@stable --activate";
+/**
+ * yarn's official path: corepack (ships with Node) writes a yarn shim. We point
+ * `--install-directory` at a user-owned dir instead of corepack's default (the
+ * Node bin dir), because on a NodeSource Linux install that dir is root-owned
+ * and a plain `corepack enable` hits EACCES. The caller prepends `installDir`
+ * to PATH so the shim resolves. Works on macOS and Linux without sudo.
+ */
+export function yarnInstallCommand(installDir: string): string {
+    return `corepack enable --install-directory "${installDir}" && corepack prepare yarn@stable --activate`;
 }
 
 /**
@@ -157,7 +163,14 @@ const YARN_TOOL: PmTool = {
     name: "yarn",
     label: "yarn",
     check: () => commandExists("yarn"),
-    install: (onData) => runShell(yarnInstallCommand(), onData, { description: "install yarn" }),
+    install: async (onData) => {
+        const binDir = resolve(homedir(), ".corepack/bin");
+        await runShell(yarnInstallCommand(binDir), onData, { description: "install yarn" });
+        // corepack wrote the yarn shim into our user-owned --install-directory
+        // (avoids EACCES on a root-owned NodeSource bin dir); expose it now so the
+        // very next step resolves `yarn`.
+        prependPath(binDir);
+    },
     manualHint: "https://yarnpkg.com/getting-started/install",
 };
 
@@ -167,8 +180,10 @@ const BUN_TOOL: PmTool = {
     check: () => commandExists("bun"),
     install: async (onData) => {
         await runShell(bunInstallCommand(), onData, { description: "install bun" });
-        // bun's installer drops the binary in ~/.bun/bin and edits shell rc files.
-        prependPath(resolve(homedir(), ".bun/bin"));
+        // bun's installer writes the binary to $BUN_INSTALL/bin (default ~/.bun),
+        // and edits shell rc files that don't reach the running process. Honor
+        // BUN_INSTALL (the installer does) and expose the bin dir now.
+        prependPath(resolve(process.env.BUN_INSTALL ?? resolve(homedir(), ".bun"), "bin"));
     },
     manualHint: "https://bun.sh/docs/installation",
 };
@@ -219,6 +234,23 @@ export class PackageManagerUnavailableError extends Error {
     }
 }
 
+// Process-wide single-flight for installs, keyed by tool name. `deploy-all`
+// runs builds for several apps concurrently in ONE process; when they share a
+// missing PM, every worker would otherwise launch the same installer at once
+// (two `get.pnpm.io | sh` runs, or racing `sudo apt`/`dpkg` locks). Collapsing
+// concurrent installs of the same tool onto one promise makes that safe.
+const inFlightInstalls = new Map<string, Promise<void>>();
+
+function installOnce(tool: PmTool, onData?: (line: string) => void): Promise<void> {
+    const existing = inFlightInstalls.get(tool.name);
+    if (existing) return existing;
+    const p = Promise.resolve(tool.install(onData)).finally(() => {
+        inFlightInstalls.delete(tool.name);
+    });
+    inFlightInstalls.set(tool.name, p);
+    return p;
+}
+
 /** Core orchestration, parameterized on the tool list so it is trivially testable. */
 export async function ensurePackageManagerForTools(
     pm: PackageManager,
@@ -239,7 +271,23 @@ export async function ensurePackageManagerForTools(
 
     for (const tool of missing) {
         opts.onData?.(`> installing ${tool.label}`);
-        await tool.install(opts.onData);
+        await installOnce(tool, opts.onData);
+    }
+
+    // Re-verify: an installer can exit 0 yet leave the binary off the running
+    // process's PATH (e.g. a prependPath target that doesn't match where the
+    // installer actually wrote). Surface that here with the manual hint, instead
+    // of letting the next build/setup step die with a confusing "command not
+    // found" — the exact scary-error class this whole flow exists to kill.
+    const stillMissing: PmTool[] = [];
+    for (const tool of missing) {
+        if (!(await tool.check())) stillMissing.push(tool);
+    }
+    if (stillMissing.length > 0) {
+        const names = stillMissing.map((t) => t.label).join(", ");
+        throw new Error(
+            `Installed ${names} but it is still not on PATH. ${packageManagerManualHint(pm, stillMissing)}`,
+        );
     }
     return pm;
 }
@@ -284,7 +332,7 @@ export function loadPackageManagerSnapshot(projectDir: string): PmSnapshot {
         }
     }
     const lockfiles = new Set<string>();
-    for (const name of Object.values(PM_LOCKFILES)) {
+    for (const name of PM_LOCKFILES_ALL) {
         if (existsSync(join(projectDir, name))) lockfiles.add(name);
     }
     const setupPath = join(projectDir, "setup.sh");

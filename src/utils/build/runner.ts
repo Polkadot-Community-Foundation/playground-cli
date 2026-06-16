@@ -25,7 +25,7 @@ import { runStreamed } from "../process.js";
 import {
     detectBuildConfig,
     detectInstallConfig,
-    PM_LOCKFILES,
+    PM_LOCKFILES_ALL,
     type BuildConfig,
     type DetectInput,
     type InstallConfig,
@@ -56,7 +56,7 @@ export function loadDetectInput(projectDir: string): DetectInput {
         : null;
 
     const lockfiles = new Set<string>();
-    for (const name of Object.values(PM_LOCKFILES)) {
+    for (const name of PM_LOCKFILES_ALL) {
         if (existsSync(join(root, name))) lockfiles.add(name);
     }
 
