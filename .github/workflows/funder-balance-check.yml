@@ -38,6 +38,10 @@ jobs:
               # `continue-on-error` so the follow-up step can react to low /
               # error exits instead of the job being marked failed and skipping.
               continue-on-error: true
+              env:
+                  # Seed for the dedicated funder. Without it the probe can't
+                  # derive the address and exits 2 (treated as "low").
+                  MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
               run: |
                   bun run scripts/check-funder-balance.ts | tee balance.txt
                   echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"

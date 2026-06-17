@@ -36,6 +36,8 @@ Expected: a `0x…` address. If it prints `(empty)`, the CDM `DEPLOY_DOC.md` isn
 
 **b.** Flip the network switch in `src/config.ts`:
 
+Update `ACTIVE_TESTNET_ENV`: `"paseo-next-v2"` -> `"summit"`.
+
 ```ts
 export const ACTIVE_TESTNET_ENV: Env = "summit";   // was "paseo-next-v2"
 ```

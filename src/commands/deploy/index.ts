@@ -26,6 +26,7 @@ import { captureWarning, errorMessage, withSpan } from "../../telemetry.js";
 import { readLoginStampMs, staleSessionWarning } from "../../utils/loginStamp.js";
 import { resolveSigner, SignerNotAvailableError, type ResolvedSigner } from "../../utils/signer.js";
 import { getConnection, destroyConnection } from "../../utils/connection.js";
+import { enforceIdentityGate } from "../shared/gateOrNotice.js";
 import { checkMapping } from "../../utils/account/mapping.js";
 import { onProcessShutdown } from "../../utils/process-guard.js";
 import { runCliCommand } from "../../cli-runtime.js";
@@ -161,6 +162,24 @@ export const deployCommand = new Command("deploy")
                 };
             })();
             onProcessShutdown(cleanupOnce);
+
+            // Builder-identity gate (any signer mode): only revealed builders
+            // who joined the competition may deploy. Runs before signer
+            // resolution / phone work; reuses the shared connection preflight
+            // will use. Blocked is a soft outcome (yellow box, exit 0).
+            try {
+                const conn = await getConnection();
+                if (await enforceIdentityGate(conn.raw.assetHub)) {
+                    cleanupOnce();
+                    process.exitCode = 0;
+                    return;
+                }
+            } catch (err) {
+                process.stderr.write(`\n✖ ${errorMessage(err)}\n`);
+                cleanupOnce();
+                process.exitCode = 1;
+                throw err;
+            }
 
             // `--yes` fills the fields the TUI would prompt for (signer ⇒ dev,
             // buildDir ⇒ default) and requires --domain. Resolve it BEFORE

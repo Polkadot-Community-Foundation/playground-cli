@@ -57,8 +57,16 @@ After a registry-contract redeploy, the next CI run restores them automatically.
 
 | Secret | Required for | Status |
 |---|---|---|
-| `MASTER_FUNDER_SEED` | SIGNER top-up in globalSetup | Required — must be set |
+| `MASTER_FUNDER_SEED` | Dedicated-funder seed — SIGNER top-up in globalSetup + the Funder Balance Check job | Required — must be set |
 | `SENTRY_AUTH_TOKEN` | Telemetry verification (not yet implemented) | Optional |
+
+`MASTER_FUNDER_SEED` is a BIP-39 mnemonic read at runtime by
+`src/utils/account/funder.ts` (env var, never hardcoded). It derives the
+dedicated funder at the bare root (empty derivation path), which is the
+**primary** funder — the chain draws it down first and falls back to public
+Alice only when it's empty. When unset the chain is just Alice — fine for
+offline/local runs, but CI must set it. Provide it to local runs with
+`export MASTER_FUNDER_SEED=…`.
 
 `GITHUB_TOKEN` (auto-provided) is used by the report job and cleanup cron.
 
@@ -103,11 +111,14 @@ bun tools/register-e2e-fixtures.ts --suri "//MyStagingSigner"
 
 Nothing to do manually. `globalSetup` (`e2e/cli/setup/fund.ts`) and
 `tools/register-e2e-fixtures.ts` both auto-top-up when free balance is below
-500 PAS. The top-up source is `MASTER_FUNDER_SEED` (GitHub secret) or the
-CLI's built-in funder derivation locally.
+500 PAS — first from the dedicated funder derived from `MASTER_FUNDER_SEED`
+(GitHub secret in CI; `export MASTER_FUNDER_SEED=…` locally), then from public
+Alice as the fallback.
 
-If `MASTER_FUNDER_SEED` itself is empty, re-fund the parent funder account on
-Paseo and update the secret.
+If both the dedicated funder and Alice are empty, re-fund the dedicated funder
+account (the bare-root address — run `bun run scripts/check-funder-balance.ts`
+with the seed exported to print it) on Paseo, and update the secret if the seed
+itself changed.
 
 ### Registry contract redeployed (all domains wiped)
 

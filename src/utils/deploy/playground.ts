@@ -36,12 +36,12 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createClient } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
-import { paseo_bulletin as bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
 import { calculateCid } from "@parity/product-sdk-cloud-storage";
 import { submitAndWatch, withRetry } from "@parity/product-sdk-tx";
 import { getRegistryContract } from "../registry.js";
 import { getConnection } from "../connection.js";
 import { getChainConfig, type Env } from "../../config.js";
+import { getBulletinDescriptor } from "../descriptors.js";
 import { captureWarning, withSpan, errorMessage } from "../../telemetry.js";
 import {
     asCloudStorageApi,
@@ -353,7 +353,7 @@ export async function publishToPlayground(
                 }),
             );
             try {
-                const bulletinApi = bulletinClient.getTypedApi(bulletin);
+                const bulletinApi = bulletinClient.getTypedApi(getBulletinDescriptor(cfg.env));
                 const cid = (await calculateCid(metadataBytes)).toString();
                 const storeTx = bulletinApi.tx.TransactionStorage.store({ data: metadataBytes });
                 let storageSigner = await getBulletinAllowanceSigner({
