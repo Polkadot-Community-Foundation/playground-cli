@@ -70,6 +70,34 @@ describe("enforceIdentityGate", () => {
         },
     );
 
+    it.each(["1", "true", "yes"])(
+        "PCF: PLAYGROUND_SKIP_IDENTITY_GATE=%s opts the operator out without reading the chain",
+        async (val) => {
+            vi.stubEnv("PLAYGROUND_SKIP_IDENTITY_GATE", val);
+
+            const blocked = await enforceIdentityGate(RAW);
+
+            expect(blocked).toBe(false);
+            expect(checkIdentityGateMock).not.toHaveBeenCalled();
+            expect(renderNoticeMock).not.toHaveBeenCalled();
+            vi.unstubAllEnvs();
+        },
+    );
+
+    it.each(["0", "false", ""])(
+        "PCF: PLAYGROUND_SKIP_IDENTITY_GATE=%s does NOT bypass (gate still enforced)",
+        async (val) => {
+            vi.stubEnv("PLAYGROUND_SKIP_IDENTITY_GATE", val);
+            checkIdentityGateMock.mockResolvedValue({ status: "not-logged-in" });
+
+            const blocked = await enforceIdentityGate(RAW);
+
+            expect(blocked).toBe(true);
+            expect(checkIdentityGateMock).toHaveBeenCalledTimes(1);
+            vi.unstubAllEnvs();
+        },
+    );
+
     it("forwards a pre-resolved registry to the gate (so mod doesn't re-resolve)", async () => {
         checkIdentityGateMock.mockResolvedValue({ status: "revealed", productH160: H160 });
         const registry = { getRootAccount: { query: vi.fn() } };

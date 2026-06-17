@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { getRegistryAddress } from "@parity/cdm-env";
+import { getRegistryAddress } from "@polkadot-community-foundation/cdm-env";
 import type { ResolvedSigner } from "./signer.js";
 import { getChainConfig } from "../config.js";
 import cdmJson from "../../cdm.json";
