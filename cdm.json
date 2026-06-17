@@ -5,8 +5,8 @@
   },
   "contracts": {
     "@w3s/playground-registry": {
-      "version": 11,
-      "address": "0xBa606EC33a32B51DeDe246372975a956f1A3f9D7",
+      "version": 15,
+      "address": "0xd9894fA7A2D234A9ebF0AbD08b53360e620AEf62",
       "abi": [
         {
           "type": "constructor",
@@ -774,6 +774,71 @@
         },
         {
           "type": "function",
+          "name": "getAppData",
+          "inputs": [
+            {
+              "name": "domains",
+              "type": "string[]"
+            },
+            {
+              "name": "voter",
+              "type": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple[]",
+              "components": [
+                {
+                  "name": "domain",
+                  "type": "string"
+                },
+                {
+                  "name": "metadata_uri",
+                  "type": "tuple",
+                  "components": [
+                    {
+                      "name": "isSome",
+                      "type": "bool"
+                    },
+                    {
+                      "name": "value",
+                      "type": "string"
+                    }
+                  ]
+                },
+                {
+                  "name": "owner",
+                  "type": "address"
+                },
+                {
+                  "name": "visibility",
+                  "type": "uint8"
+                },
+                {
+                  "name": "publisher",
+                  "type": "address"
+                },
+                {
+                  "name": "star_count",
+                  "type": "uint32"
+                },
+                {
+                  "name": "mod_count",
+                  "type": "uint32"
+                },
+                {
+                  "name": "has_starred",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
           "name": "getOwner",
           "inputs": [
             {
@@ -1150,6 +1215,13 @@
         },
         {
           "type": "function",
+          "name": "claimAnonymousBonus",
+          "inputs": [],
+          "outputs": [],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
           "name": "clearIdentity",
           "inputs": [],
           "outputs": [],
@@ -1216,9 +1288,16 @@
           ],
           "outputs": [],
           "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "faucet",
+          "inputs": [],
+          "outputs": [],
+          "stateMutability": "nonpayable"
         }
       ],
-      "metadataCid": "bafk2bzaceaanuqhbybkuhzk3de7pzv37g7mnvgj7inrpsisi3kxsg36xdh7f6"
+      "metadataCid": "bafk2bzacecmce7tevya3yoh4m2sefbbn4xmqtj4tnttiw7jg5oxrz6dptyoca"
     }
   }
 }
