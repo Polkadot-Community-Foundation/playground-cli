@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.42.2
+
+### Patch Changes
+
+- 31f55f5: Clarify the `contract` command help: replace the opaque "Run CDM contract workflows" description with "Install and deploy smart contract libraries for your app" and add a `<command> [options]` usage hint so its subcommands are discoverable from `playground --help`.
+
 ## 0.42.1
 
 ### Patch Changes
