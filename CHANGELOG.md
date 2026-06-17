@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.43.1
+
+### Patch Changes
+
+- 3c16fbd: Reword the builder-identity gate notice for signed-in-but-not-joined users to "You're signed in, but you haven't joined the competition yet." for consistent "join the competition" wording across all gate messages.
+
 ## 0.43.0
 
 ### Minor Changes
