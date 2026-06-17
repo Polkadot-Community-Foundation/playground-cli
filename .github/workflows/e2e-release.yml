@@ -79,6 +79,9 @@ jobs:
                   DOT_E2E_BINARY: ${{ github.workspace }}/bin/dot-linux-x64
                   DOT_TAG: e2e-ci-release
                   DOT_TELEMETRY: "1"
+                  # Dedicated-funder seed for globalSetup's SIGNER top-up
+                  # fallback. Absent → Alice only.
+                  MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
 
             - name: Upload forensic artefacts
               if: always()

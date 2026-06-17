@@ -44,9 +44,10 @@ const ALICE_ADDRESS = "5Alice";
 const DEDICATED_ADDRESS = "5Dedicated";
 
 vi.mock("./funder.js", () => ({
+    // Production order: dedicated funder first (primary), Alice as fallback.
     FUNDER_CHAIN: [
-        { name: "Alice", address: ALICE_ADDRESS, signer: ALICE_SIGNER },
         { name: "dedicated", address: DEDICATED_ADDRESS, signer: DEDICATED_SIGNER },
+        { name: "Alice", address: ALICE_ADDRESS, signer: ALICE_SIGNER },
     ],
     DEDICATED_FUNDER_ADDRESS: DEDICATED_ADDRESS,
     faucetUrlFor: (addr: string) => `https://faucet.polkadot.io/?network=pah&address=${addr}`,
@@ -134,22 +135,22 @@ describe("checkBalance", () => {
 describe("pickFunder", () => {
     const required = FUND_AMOUNT + FUNDER_FEE_BUFFER;
 
-    it("returns Alice when she has enough (and never queries the dedicated account)", async () => {
-        const { client, getValue } = makeClient({ [ALICE_ADDRESS]: required + 1n });
-        const funder = await pickFunder(client, required);
-        expect(funder?.name).toBe("Alice");
-        // Short-circuits: only Alice's balance was queried.
-        const addresses = getValue.mock.calls.map((c) => c[0]);
-        expect(addresses).toEqual([ALICE_ADDRESS]);
-    });
-
-    it("falls through to dedicated when Alice is low", async () => {
-        const { client } = makeClient({
-            [ALICE_ADDRESS]: 0n,
-            [DEDICATED_ADDRESS]: required + 1n,
-        });
+    it("returns the dedicated funder when it has enough (and never queries Alice)", async () => {
+        const { client, getValue } = makeClient({ [DEDICATED_ADDRESS]: required + 1n });
         const funder = await pickFunder(client, required);
         expect(funder?.name).toBe("dedicated");
+        // Short-circuits: only the dedicated funder's balance was queried.
+        const addresses = getValue.mock.calls.map((c) => c[0]);
+        expect(addresses).toEqual([DEDICATED_ADDRESS]);
+    });
+
+    it("falls through to Alice when the dedicated funder is low", async () => {
+        const { client } = makeClient({
+            [DEDICATED_ADDRESS]: 0n,
+            [ALICE_ADDRESS]: required + 1n,
+        });
+        const funder = await pickFunder(client, required);
+        expect(funder?.name).toBe("Alice");
     });
 
     it("returns null when every funder is below the threshold", async () => {
@@ -168,16 +169,16 @@ describe("ensureFunded", () => {
         expect(mockSubmitAndWatch).not.toHaveBeenCalled();
     });
 
-    it("funds with FUND_AMOUNT via Alice when she has balance", async () => {
+    it("funds with FUND_AMOUNT via the dedicated funder when it has balance", async () => {
         const { client, transferFactory } = makeClient({
             [USER_ADDRESS]: 0n,
-            [ALICE_ADDRESS]: FUND_AMOUNT + FUNDER_FEE_BUFFER + 1n,
+            [DEDICATED_ADDRESS]: FUND_AMOUNT + FUNDER_FEE_BUFFER + 1n,
         });
         await ensureFunded(client, USER_ADDRESS);
 
         expect(mockSubmitAndWatch).toHaveBeenCalledTimes(1);
         const [, signer] = mockSubmitAndWatch.mock.calls[0];
-        expect(signer).toBe(ALICE_SIGNER);
+        expect(signer).toBe(DEDICATED_SIGNER);
 
         expect(transferFactory).toHaveBeenCalledTimes(1);
         const callArgs = transferFactory.mock.calls[0][0] as {
@@ -191,17 +192,17 @@ describe("ensureFunded", () => {
         expect(callArgs.dest).toMatchObject({ type: "Id" });
     });
 
-    it("falls through to the dedicated funder when Alice is low", async () => {
+    it("falls through to Alice when the dedicated funder is low", async () => {
         const { client } = makeClient({
             [USER_ADDRESS]: 0n,
-            [ALICE_ADDRESS]: 0n,
-            [DEDICATED_ADDRESS]: FUND_AMOUNT + FUNDER_FEE_BUFFER + 1n,
+            [DEDICATED_ADDRESS]: 0n,
+            [ALICE_ADDRESS]: FUND_AMOUNT + FUNDER_FEE_BUFFER + 1n,
         });
         await ensureFunded(client, USER_ADDRESS);
 
         expect(mockSubmitAndWatch).toHaveBeenCalledTimes(1);
         const [, signer] = mockSubmitAndWatch.mock.calls[0];
-        expect(signer).toBe(DEDICATED_SIGNER);
+        expect(signer).toBe(ALICE_SIGNER);
     });
 
     it("throws AllFundersExhaustedError carrying the user address + tried list when every funder is low", async () => {
@@ -212,7 +213,7 @@ describe("ensureFunded", () => {
         });
         await expect(ensureFunded(client, USER_ADDRESS)).rejects.toSatisfy((err: unknown) => {
             if (!(err instanceof AllFundersExhaustedError)) return false;
-            return err.userAddress === USER_ADDRESS && err.tried.join(",") === "Alice,dedicated";
+            return err.userAddress === USER_ADDRESS && err.tried.join(",") === "dedicated,Alice";
         });
         expect(mockSubmitAndWatch).not.toHaveBeenCalled();
     });
@@ -220,7 +221,7 @@ describe("ensureFunded", () => {
     it("uses caller-supplied minBalance + fundAmount when passed", async () => {
         const { client, transferFactory } = makeClient({
             [USER_ADDRESS]: 3_000_000_000n,
-            [ALICE_ADDRESS]: 40_000_000_000n, // covers 20 PAS + buffer
+            [DEDICATED_ADDRESS]: 40_000_000_000n, // covers 20 PAS + buffer
         });
         await ensureFunded(client, USER_ADDRESS, 5_000_000_000n, 20_000_000_000n);
         expect(mockSubmitAndWatch).toHaveBeenCalledTimes(1);

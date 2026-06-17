@@ -70,6 +70,9 @@ jobs:
                   DOT_DEPLOY_VERBOSE: "1"
                   DOT_TAG: ${{ steps.setup.outputs.tag }}
                   DOT_TELEMETRY: "1"
+                  # Seed for the dedicated funder, the fallback globalSetup uses
+                  # to top up SIGNER once Alice drains. Absent → Alice only.
+                  MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
 
             - name: Surface failure detail
               if: failure()
@@ -165,6 +168,9 @@ jobs:
                   DOT_DEPLOY_VERBOSE: "1"
                   DOT_TAG: ${{ steps.setup.outputs.tag }}
                   DOT_TELEMETRY: "1"
+                  # Seed for the dedicated funder, the fallback globalSetup uses
+                  # to top up SIGNER once Alice drains. Absent → Alice only.
+                  MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
 
             - name: Surface failure detail
               if: failure()
@@ -225,6 +231,9 @@ jobs:
                   DOT_DEPLOY_VERBOSE: "1"
                   DOT_TAG: ${{ steps.setup.outputs.tag }}
                   DOT_TELEMETRY: "1"
+                  # Seed for the dedicated funder, the fallback globalSetup uses
+                  # to top up SIGNER once Alice drains. Absent → Alice only.
+                  MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
                   # nightly-deploy-moddable creates a fresh public repo in
                   # paritytech/ each run + pushes the fixture into it. Other
                   # cells in this matrix don't consume GH_TOKEN so setting it
@@ -306,6 +315,9 @@ jobs:
                   DOT_DEPLOY_VERBOSE: "1"
                   DOT_TAG: ${{ steps.setup.outputs.tag }}
                   DOT_TELEMETRY: "1"
+                  # Seed for the dedicated funder, the fallback globalSetup uses
+                  # to top up SIGNER once Alice drains. Absent → Alice only.
+                  MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
 
             - name: Surface failure detail
               if: failure()
