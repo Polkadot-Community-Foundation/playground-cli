@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.43.2
+
+### Patch Changes
+
+- 562d024: Bump CDM contract packages to use the fixed contract metadata Bulletin publish path.
+
 ## 0.43.1
 
 ### Patch Changes
