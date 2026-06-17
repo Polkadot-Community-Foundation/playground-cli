@@ -14,7 +14,9 @@
 // limitations under the License.
 
 import { describe, expect, it, beforeEach, vi } from "vitest";
+import { getRegistryAddress } from "@parity/cdm-env";
 import type { ResolvedSigner } from "./signer.js";
+import { getChainConfig } from "../config.js";
 import cdmJson from "../../cdm.json";
 
 const { fromLiveClientMock, getContractMock } = vi.hoisted(() => ({
@@ -32,6 +34,10 @@ vi.mock("@parity/product-sdk-descriptors/paseo-asset-hub", () => ({
     paseo_asset_hub: { genesis: "0xasset" },
 }));
 
+vi.mock("@parity/product-sdk-descriptors/summit-asset-hub", () => ({
+    summit_asset_hub: { genesis: "0xsummit-asset" },
+}));
+
 vi.mock("./contractManifest.js", () => ({
     PLAYGROUND_REGISTRY_CONTRACT: "@w3s/playground-registry",
     suppressReviveTraceNoise: (contract: unknown) => contract,
@@ -45,6 +51,10 @@ import { getRegistryContract, getReadOnlyRegistryContract } from "./registry.js"
 // frozen here so a regression back to Alice (or any other origin) fails loudly.
 // Must match @parity/product-sdk-contracts' QUERY_FALLBACK_ORIGIN.
 const READ_ONLY_ORIGIN = "5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV";
+const cfg = getChainConfig();
+const EXPECTED_CDM_REGISTRY = getRegistryAddress(cfg.cdmEnvName);
+const EXPECTED_ASSET_DESCRIPTOR =
+    cfg.env === "summit" ? { genesis: "0xsummit-asset" } : { genesis: "0xasset" };
 
 const fakeSigner: ResolvedSigner = {
     signer: {} as any,
@@ -67,9 +77,9 @@ describe("getRegistryContract", () => {
         await getRegistryContract(rawClient, fakeSigner);
 
         expect(fromLiveClientMock).toHaveBeenCalledWith(
-            cdmJson,
+            { ...cdmJson, registry: EXPECTED_CDM_REGISTRY },
             rawClient,
-            { genesis: "0xasset" },
+            EXPECTED_ASSET_DESCRIPTOR,
             {
                 libraries: ["@w3s/playground-registry"],
                 defaultOrigin: fakeSigner.address,
@@ -96,9 +106,9 @@ describe("getReadOnlyRegistryContract", () => {
         await getReadOnlyRegistryContract(rawClient);
 
         expect(fromLiveClientMock).toHaveBeenCalledWith(
-            cdmJson,
+            { ...cdmJson, registry: EXPECTED_CDM_REGISTRY },
             rawClient,
-            { genesis: "0xasset" },
+            EXPECTED_ASSET_DESCRIPTOR,
             {
                 libraries: ["@w3s/playground-registry"],
                 defaultOrigin: READ_ONLY_ORIGIN,

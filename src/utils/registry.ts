@@ -19,11 +19,11 @@
 
 import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
 import { ss58Encode } from "@parity/product-sdk-address";
-import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import { getRegistryAddress } from "@parity/cdm-env";
 import type { PolkadotClient } from "polkadot-api";
 import { getChainConfig } from "../config.js";
 import type { ResolvedSigner } from "./signer.js";
+import { getAssetHubDescriptor } from "./descriptors.js";
 import {
     PLAYGROUND_REGISTRY_CONTRACT,
     suppressReviveTraceNoise,
@@ -90,7 +90,7 @@ async function liveManager(
     const manifest: CdmJson = { ...cdmJson, registry: metaRegistry };
     try {
         return await withoutReviveTraceNoise(() =>
-            ContractManager.fromLiveClient(manifest, rawClient, paseo_asset_hub, {
+            ContractManager.fromLiveClient(manifest, rawClient, getAssetHubDescriptor(env), {
                 libraries: [PLAYGROUND_REGISTRY_CONTRACT],
                 defaultOrigin: origin,
                 ...(signer ? { defaultSigner: signer.signer } : {}),

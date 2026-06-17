@@ -20,26 +20,24 @@ import {
     type TypedApi,
 } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
-import { paseo_bulletin as bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
-import { paseo_individuality as individuality } from "@parity/product-sdk-descriptors/paseo-individuality";
-import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import { getChainConfig, getNetworkLabel } from "../config.js";
+import {
+    getAssetHubDescriptor,
+    getBulletinDescriptor,
+    getIndividualityDescriptor,
+    type AssetHubDescriptor,
+    type BulletinDescriptor,
+    type IndividualityDescriptor,
+} from "./descriptors.js";
 
-// The chain DESCRIPTORS are intentionally the `paseo_*` ones for EVERY env,
-// including summit — only the RPC URLs are env-driven (via getChainConfig). This
-// mirrors `@parity/cdm-env`, whose `DEPLOY_CHAIN_DESCRIPTORS`/`ASSET_HUB_DESCRIPTORS`
-// also map `w3s` (summit) → `paseo_asset_hub`/`paseo_bulletin`; the deploy engine
-// `@parity/polkadot-app-deploy` is descriptor-free (live `getUnsafeApi()`). PAPI
-// typed calls decode by structural type IDs, so this holds as long as summit's
-// runtime shapes match paseo's (they do today — same testnet family). Dedicated
-// `summit-*` descriptors DO exist in `@parity/product-sdk-descriptors` as an escape
-// hatch if the runtimes ever diverge; switching to them before they're needed would
-// DIVERGE from the engine. See CLAUDE.md → "Adding a network / Summit".
+// The public type name remains `PaseoClient` for compatibility with the rest of
+// the codebase, but runtime descriptor selection follows the active env. When
+// DEFAULT_ENV is summit, direct PAPI reads use product-sdk's summit descriptors.
 
 type PaseoChains = {
-    assetHub: typeof paseo_asset_hub;
-    bulletin: typeof bulletin;
-    individuality: typeof individuality;
+    assetHub: AssetHubDescriptor;
+    bulletin: BulletinDescriptor;
+    individuality: IndividualityDescriptor;
 };
 
 export type PaseoClient = {
@@ -65,6 +63,11 @@ function typedApi<T extends ChainDefinition>(raw: PolkadotClient, descriptor: T)
 
 async function connectPaseo(): Promise<PaseoClient> {
     const cfg = getChainConfig();
+    const descriptors = {
+        assetHub: getAssetHubDescriptor(cfg.env),
+        bulletin: getBulletinDescriptor(cfg.env),
+        individuality: getIndividualityDescriptor(cfg.env),
+    };
     const raw = {
         assetHub: createRawClient([cfg.assetHubRpc]),
         bulletin: createRawClient([cfg.bulletinRpc, ...cfg.bulletinRpcFallbacks]),
@@ -73,9 +76,9 @@ async function connectPaseo(): Promise<PaseoClient> {
 
     let destroyed = false;
     return {
-        assetHub: typedApi(raw.assetHub, paseo_asset_hub),
-        bulletin: typedApi(raw.bulletin, bulletin),
-        individuality: typedApi(raw.individuality, individuality),
+        assetHub: typedApi(raw.assetHub, descriptors.assetHub),
+        bulletin: typedApi(raw.bulletin, descriptors.bulletin),
+        individuality: typedApi(raw.individuality, descriptors.individuality),
         raw,
         destroy() {
             if (destroyed) return;

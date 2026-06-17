@@ -42,11 +42,12 @@ import { CONFIGS, DEFAULT_ENV, getPgasAssetId, type ChainConfig, type Env } from
 const { doc } = await loadEnvironments();
 
 describe("getPgasAssetId", () => {
-    it("returns the paseo-next-v2 PGAS asset id by default", () => {
-        expect(getPgasAssetId("paseo-next-v2")).toBe(2_000_000_000);
+    it("returns the active PGAS asset id by default", () => {
+        expect(getPgasAssetId()).toBe(2_000_000_000);
     });
 
     it("returns a number for every wired env", () => {
+        expect(typeof getPgasAssetId("paseo-next-v2")).toBe("number");
         expect(typeof getPgasAssetId("summit")).toBe("number");
     });
 });
