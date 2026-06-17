@@ -90,6 +90,10 @@ jobs:
               env:
                   DOT_TAG: e2e-ci-post-release
                   DOT_TELEMETRY: "1"
+                  # Dedicated-funder seed — the primary account globalSetup
+                  # tops up SIGNER from, ahead of the Alice fallback. Absent →
+                  # Alice only.
+                  MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
 
             - name: Upload forensic artefacts
               if: always()

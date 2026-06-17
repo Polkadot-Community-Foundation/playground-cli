@@ -41,14 +41,21 @@ function formatPas(planck: bigint): string {
 }
 
 async function main(): Promise<number> {
+    const address = DEDICATED_FUNDER_ADDRESS;
+    if (!address) {
+        console.error(
+            "MASTER_FUNDER_SEED is not set — cannot derive the dedicated funder address. " +
+                "Export the funder seed (the MASTER_FUNDER_SEED repository secret) and re-run.",
+        );
+        return 2;
+    }
     const client = await getConnection();
     try {
-        const account = await client.assetHub.query.System.Account.getValue(
-            DEDICATED_FUNDER_ADDRESS,
-            { at: "best" },
-        );
+        const account = await client.assetHub.query.System.Account.getValue(address, {
+            at: "best",
+        });
         const free = account.data.free;
-        console.log(`address=${DEDICATED_FUNDER_ADDRESS}`);
+        console.log(`address=${address}`);
         console.log(`balance=${formatPas(free)}`);
         console.log(`balance_planck=${free}`);
         console.log(`threshold=${formatPas(THRESHOLD_PLANCK)}`);

@@ -17,10 +17,11 @@
  * Account funding — check balance and fund the user from a testnet funder
  * chain on Paseo Asset Hub.
  *
- * The funder chain is walked in order: Alice first (public dev account — free
- * while she lasts), then a dedicated obscure seed. If every funder is below
- * the required threshold, callers receive `AllFundersExhaustedError` carrying
- * the user's address so they can render a faucet link.
+ * The funder chain is walked in order: the dedicated funder first (our own
+ * controlled account, when `MASTER_FUNDER_SEED` is set), then public Alice as
+ * the fallback. If every funder is below the required threshold, callers
+ * receive `AllFundersExhaustedError` carrying the user's address so they can
+ * render a faucet link.
  *
  * Testnet-only: will be replaced for mainnet where users fund themselves.
  */

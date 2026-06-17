@@ -23,6 +23,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { getTokenSymbol } from "../../config.js";
 
 const mockSubmitAndWatch = vi
     .fn<(tx: unknown, signer: unknown, options?: unknown) => Promise<unknown>>()
@@ -46,6 +47,7 @@ const DEV_FUNDER = "5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV";
 const ONE_PAS = 10_000_000_000n;
 const SOURCE_BUFFER = ONE_PAS;
 const FUNDER_REQUIRED = DRIP_AMOUNT + SOURCE_BUFFER;
+const TOKEN_SYMBOL = getTokenSymbol();
 // Plenty of headroom so the preflight balance check passes in tests that
 // expect the transfer to fire.
 const FUNDER_HEALTHY = FUNDER_REQUIRED * 100n;
@@ -181,14 +183,14 @@ describe("dripToProductAccount", () => {
 
 describe("formatPas", () => {
     it("renders whole amounts without a fraction", () => {
-        expect(formatPas(0n)).toBe("0 PAS");
-        expect(formatPas(ONE_PAS)).toBe("1 PAS");
-        expect(formatPas(DRIP_CAP)).toBe("10 PAS");
+        expect(formatPas(0n)).toBe(`0 ${TOKEN_SYMBOL}`);
+        expect(formatPas(ONE_PAS)).toBe(`1 ${TOKEN_SYMBOL}`);
+        expect(formatPas(DRIP_CAP)).toBe(`10 ${TOKEN_SYMBOL}`);
     });
 
     it("trims trailing zeros and caps at 4 fractional digits", () => {
-        expect(formatPas(ONE_PAS + ONE_PAS / 2n)).toBe("1.5 PAS");
-        // 0.123456 PAS (1_234_560_000 planck at 10 decimals) -> truncated to 4 dp
-        expect(formatPas(1_234_560_000n)).toBe("0.1234 PAS");
+        expect(formatPas(ONE_PAS + ONE_PAS / 2n)).toBe(`1.5 ${TOKEN_SYMBOL}`);
+        // 0.123456 token units (1_234_560_000 planck at 10 decimals) -> truncated to 4 dp
+        expect(formatPas(1_234_560_000n)).toBe(`0.1234 ${TOKEN_SYMBOL}`);
     });
 });

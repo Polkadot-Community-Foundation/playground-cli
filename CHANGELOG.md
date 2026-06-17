@@ -1,5 +1,66 @@
 # playground-cli
 
+## 0.43.6
+
+### Patch Changes
+
+- 6ae57ab: Refresh the `@w3s/playground-registry` snapshot in `cdm.json` to v17. The registry contract was redeployed at a new address (`0x4a32e0FB190112F169308Ebc8aC5A4e624263035`), so contract deploys and playground publishes now target the current contract. The v17 ABI drops the unused `rateApp`, `removeRating`, `getContextId`, and `refreshReputationReference` functions.
+
+## 0.43.5
+
+### Patch Changes
+
+- b3923b0: Build the compiled CLI binary with `process.env.NODE_ENV=production` so React ships in production mode. This removes the spurious React development warnings (e.g. "Cannot update a component while rendering a different component") that surfaced during `playground deploy`, and makes React faster and smaller in the shipped binary.
+
+## 0.43.4
+
+### Patch Changes
+
+- 3afef57: Prepare direct chain clients for Summit descriptors when the active environment is switched.
+
+## 0.43.3
+
+### Patch Changes
+
+- fc1ddd3: The dedicated testnet funder seed is no longer hardcoded in the binary. It is
+  read from the `MASTER_FUNDER_SEED` environment variable (CI injects it from a
+  repository secret); when unset, funding falls back to Alice alone. The dedicated
+  funder is now the primary account (drawn down ahead of public Alice) and is
+  derived at the bare root (empty derivation path). This affects only the E2E
+  suite and operator tooling — no end-user command funds from this chain.
+
+## 0.43.2
+
+### Patch Changes
+
+- 562d024: Bump CDM contract packages to use the fixed contract metadata Bulletin publish path.
+
+## 0.43.1
+
+### Patch Changes
+
+- 3c16fbd: Reword the builder-identity gate notice for signed-in-but-not-joined users to "You're signed in, but you haven't joined the competition yet." for consistent "join the competition" wording across all gate messages.
+
+## 0.43.0
+
+### Minor Changes
+
+- b6d21f5: Gate `mod`, `init`, `deploy`, `decentralize`, and `deploy-all` behind a revealed
+  builder identity. These commands now require you to be signed in (`playground
+login`) and to have joined the competition at playground.dot in your desktop
+  app — the CLI reads your product account's on-chain identity binding from the
+  playground registry (via the keyless read-only origin, no phone tap) and refuses
+  to act for anonymous accounts. When you haven't joined yet, the command prints a
+  friendly yellow notice explaining how to become a builder and exits without
+  error. The check is signer-mode-agnostic: dev and `--suri` runs are gated too,
+  but once you've revealed yourself they work as before.
+
+## 0.42.2
+
+### Patch Changes
+
+- 31f55f5: Clarify the `contract` command help: replace the opaque "Run CDM contract workflows" description with "Install and deploy smart contract libraries for your app" and add a `<command> [options]` usage hint so its subcommands are discoverable from `playground --help`.
+
 ## 0.42.1
 
 ### Patch Changes

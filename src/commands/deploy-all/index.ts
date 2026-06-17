@@ -31,6 +31,7 @@ import { Command, Option } from "commander";
 import { captureWarning, errorMessage, withSpan } from "../../telemetry.js";
 import { resolveSigner, SignerNotAvailableError, type ResolvedSigner } from "../../utils/signer.js";
 import { getConnection, destroyConnection } from "../../utils/connection.js";
+import { enforceIdentityGate } from "../shared/gateOrNotice.js";
 import { checkMapping } from "../../utils/account/mapping.js";
 import { readLoginStampMs, staleSessionWarning } from "../../utils/loginStamp.js";
 import { onProcessShutdown } from "../../utils/process-guard.js";
@@ -144,6 +145,16 @@ async function runDeployAll(opts: DeployAllOpts): Promise<void> {
     onProcessShutdown(cleanupOnce);
 
     try {
+        // Builder-identity gate (any signer mode): only revealed builders who
+        // joined the competition may deploy. Runs before signer resolution;
+        // reuses the shared connection. Blocked is a soft outcome (exit 0).
+        const conn = await getConnection();
+        if (await enforceIdentityGate(conn.raw.assetHub)) {
+            cleanupOnce();
+            process.exitCode = 0;
+            return;
+        }
+
         userSigner = await preflightSigner({ env, mode, suri: opts.suri, publishToPlayground });
 
         if (mode === "phone" && userSigner?.source !== "session") {
