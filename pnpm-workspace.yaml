@@ -34,8 +34,8 @@ minimumReleaseAgeExclude:
   - "@novasamatech/storage-adapter@0.8.7"
   - "@novasamatech/scale@0.8.7"
   - "@novasamatech/substrate-slot-sr25519-wasm@0.8.7"
-  - '@parity/cdm-builder@3.1.6'
-  - '@parity/cdm-codegen@0.6.19'
+  - '@parity/cdm-builder@3.1.7'
+  - '@parity/cdm-codegen@0.6.20'
   - '@parity/cdm-env@2.0.6'
   - '@parity/product-sdk-chain-client@0.7.4'
   - '@parity/product-sdk-cloud-storage@0.6.4'
