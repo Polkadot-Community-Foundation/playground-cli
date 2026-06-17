@@ -37,14 +37,29 @@ End-to-end first-run setup. Login and toolchain install run **concurrently**; ac
 
 1. **Login via the Polkadot mobile app** — a QR code is printed to the terminal. Scan it with the app. If you already have a session persisted in `~/.polkadot-apps/`, this step is skipped.
 2. **Toolchain install** — `git`, `curl`, a C linker (`build-essential`), `rustup`, nightly, `rust-src`, `cargo-pvm-contract`, IPFS, and `wget`. Existing installs are detected and skipped.
-3. **Account setup** (only if a session is available) — in order:
-    - **Fund** — if your balance on Paseo Asset Hub is below 1 PAS, Alice sends 10 PAS (testnet).
-    - **Map** — `Revive.map_account` is signed by you on the mobile app so an H160 is associated with your SS58 address.
-    - **Allow** — Alice grants you 1000 transactions / 100 MB of Bulletin storage.
+3. **Account setup** (only if a session is available) — request the playground's mobile resource allowances in a **single approval dialog** on your phone:
+    - **`BulletInAllowance`** — a storage slot key (cached locally under `~/.polkadot-apps/`) used to sign Bulletin chunk uploads at deploy time.
+    - **`SmartContractAllowance`** — granting this mints PGAS to your `playground.dot/0` product account, and that mint is what creates, account-maps (via `pallet_revive`'s auto-mapper), and funds the account on-chain.
+
+Login is **funding-free**: it never sends native tokens and never calls `map_account` itself. If your product account later needs a little testnet balance, run [`playground drip`](#playground-drip).
 
 Flags:
 
 - `-y, --yes` — skip the QR login entirely. Dependencies still install, account setup is skipped (no session).
+
+### `playground drip`
+
+Top up your signed-in `playground.dot/0` product account with a little testnet PAS so you have balance for on-chain work. Resolves your account from the active session (no `--address` flag — it only ever funds the caller's own account) and sends one `DRIP_AMOUNT` (1 PAS) per run, up to a `DRIP_CAP` (10 PAS); once at or above the cap it skips. The funds come from the shared dev funder account, not a public faucet.
+
+Soft outcomes exit 0 and render as a friendly callout rather than a stack trace: "not logged in", and "the dev funder is out of tokens" (`DevFunderExhaustedError`). Only an unexpected failure exits non-zero. Login never calls this automatically — funding is always an explicit, opt-in step.
+
+### `playground status`
+
+Show your signed-in product account, its balances, and the status of your Bulletin / smart-contract allowances. Read-only — it signs nothing and submits no transactions. When no session is paired it prints an actionable "log in first" box and exits 0; only an unexpected failure exits non-zero.
+
+### `playground init`
+
+Start a new project from the playground starter template. It is a thin shorthand for [`playground mod playground-template`](#playground-mod) — it runs the exact same clone-and-setup flow against the `playground-template` registry app, so new users get a ready-to-build project with one command. See `playground mod` below for what the clone does (tarball download, fresh `git init`, package-manager setup).
 
 ### `playground update`
 
@@ -126,6 +141,23 @@ A single app's failure is isolated — the others still deploy — and the comma
 #### Why one invocation instead of N concurrent `playground deploy` processes
 
 Every deploy extrinsic (DotNS register/`setContenthash`, Bulletin chunk `store`, the playground `registry.publish`) re-reads the account's on-chain next-index at submission time. Two concurrent deploys signing from the **same** account would read the same nonce and one tx would be rejected ("nonce too low"/replaced). `deploy-all` shares one in-memory signing gate across the batch so at most one same-account deploy is submitting at a time — the simplest correct fix without an on-disk nonce-reservation lock across separate processes.
+
+### `playground decentralize`
+
+Take an existing static site — either a live URL to mirror or a local build directory — upload it to Polkadot Bulletin, and register a `.dot` name pointing at it. This is the "decentralize a site I already have" counterpart to `playground deploy` (which builds your project first).
+
+Provide `--site` or `--path` to run headless; omit both to launch the interactive TUI (source → URL/path → signer → domain → publish? → moddable?).
+
+Flags:
+
+- `--site <url>` — URL of a live static site to clone (http/https).
+- `--path <dir>` — a local directory of built static files (e.g. `./dist`). Conflicts with `--site`.
+- `--dot <name>` — DotNS domain (with or without the `.dot` suffix). Omit to auto-generate a free random name.
+- `--suri <suri>` — sign with this SURI (a dev name like `//Bob`, or a BIP-39 mnemonic). Defaults to the session signer paired by `playground login`.
+- `--playground` — after upload, also publish a minimal entry to the playground registry so the app appears in the playground-app's Apps tab. Off by default.
+- `--tag <tag>` — category tag for the published app so people can filter for it. Requires `--playground`.
+- `--moddable` — record the public GitHub origin of `--path`'s repo so others can `playground mod` it. Requires `--path` and `--playground` (a mirrored `--site` URL has no git source). Off by default.
+- `--env <env>` — target environment; same choices and default as `playground deploy`.
 
 ### `playground contract`
 

@@ -50,6 +50,7 @@ export type CliCommandName =
     | "login"
     | "drip"
     | "status"
+    | "init"
     | "deploy"
     | "deploy-all"
     | "contract"
