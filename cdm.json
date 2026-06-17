@@ -5,8 +5,8 @@
   },
   "contracts": {
     "@w3s/playground-registry": {
-      "version": 15,
-      "address": "0xd9894fA7A2D234A9ebF0AbD08b53360e620AEf62",
+      "version": 17,
+      "address": "0x4a32e0FB190112F169308Ebc8aC5A4e624263035",
       "abi": [
         {
           "type": "constructor",
@@ -140,42 +140,6 @@
         },
         {
           "type": "function",
-          "name": "rateApp",
-          "inputs": [
-            {
-              "name": "domain",
-              "type": "string"
-            },
-            {
-              "name": "rating",
-              "type": "uint8"
-            },
-            {
-              "name": "comment_uri",
-              "type": "string"
-            }
-          ],
-          "outputs": [],
-          "stateMutability": "nonpayable"
-        },
-        {
-          "type": "function",
-          "name": "removeRating",
-          "inputs": [
-            {
-              "name": "domain",
-              "type": "string"
-            },
-            {
-              "name": "reviewer",
-              "type": "address"
-            }
-          ],
-          "outputs": [],
-          "stateMutability": "nonpayable"
-        },
-        {
-          "type": "function",
           "name": "star",
           "inputs": [
             {
@@ -185,18 +149,6 @@
           ],
           "outputs": [],
           "stateMutability": "nonpayable"
-        },
-        {
-          "type": "function",
-          "name": "getContextId",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "",
-              "type": "bytes32"
-            }
-          ],
-          "stateMutability": "view"
         },
         {
           "type": "function",
@@ -1018,13 +970,6 @@
         },
         {
           "type": "function",
-          "name": "refreshReputationReference",
-          "inputs": [],
-          "outputs": [],
-          "stateMutability": "nonpayable"
-        },
-        {
-          "type": "function",
           "name": "importApp",
           "inputs": [
             {
@@ -1297,7 +1242,7 @@
           "stateMutability": "nonpayable"
         }
       ],
-      "metadataCid": "bafk2bzacecmce7tevya3yoh4m2sefbbn4xmqtj4tnttiw7jg5oxrz6dptyoca"
+      "metadataCid": "bafk2bzaceajvnka7nooku6vuuwwizjttilvh7ygsa6knpi5yns52bz7fyjfkg"
     }
   }
 }
