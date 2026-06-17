@@ -41,7 +41,7 @@ export function identityGateCopy(status: BlockedIdentityStatus): GateNoticeCopy 
             return {
                 title: "Join the competition first",
                 lines: [
-                    "You're signed in, but you haven't revealed yourself yet — and there are no points for anonymous builders.",
+                    "You're signed in, but you haven't joined the competition yet.",
                     "",
                     "To deploy, mod, or decentralize an app you need to first become a builder and join the competition at playground.dot in your desktop app, then try again.",
                 ],
