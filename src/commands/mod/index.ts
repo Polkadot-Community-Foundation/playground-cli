@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import { withSpan } from "../../telemetry.js";
 import { getConnection, destroyConnection } from "../../utils/connection.js";
 import { getReadOnlyRegistryContract } from "../../utils/registry.js";
+import { enforceIdentityGate } from "../shared/gateOrNotice.js";
 import { AppBrowser, type AppEntry } from "./AppBrowser.js";
 import { SetupScreen } from "./SetupScreen.js";
 import { QuestPicker } from "./QuestPicker.js";
@@ -58,6 +59,15 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
         const registry = await withSpan("cli.mod.registry", "load registry contract", () =>
             getReadOnlyRegistryContract(client.raw.assetHub),
         );
+
+        // Builder-identity gate: modding is reserved for revealed builders who
+        // joined the competition. This also gates `playground init`, which
+        // delegates here. Reuse the registry we just resolved so the gate
+        // doesn't re-resolve it. Blocked is a soft outcome (yellow box, exit 0).
+        if (await enforceIdentityGate(client.raw.assetHub, registry)) {
+            process.exitCode = 0;
+            return;
+        }
 
         let domain: string;
         let metadata: AppEntry | null = null;
