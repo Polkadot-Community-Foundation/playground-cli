@@ -62,10 +62,11 @@ After a registry-contract redeploy, the next CI run restores them automatically.
 
 `MASTER_FUNDER_SEED` is a BIP-39 mnemonic read at runtime by
 `src/utils/account/funder.ts` (env var, never hardcoded). It derives the
-dedicated funder at `//0`, which is the **primary** funder — the chain draws it
-down first and falls back to public Alice only when it's empty. When unset the
-chain is just Alice — fine for offline/local runs, but CI must set it. Provide
-it to local runs with `export MASTER_FUNDER_SEED=…`.
+dedicated funder at the bare root (empty derivation path), which is the
+**primary** funder — the chain draws it down first and falls back to public
+Alice only when it's empty. When unset the chain is just Alice — fine for
+offline/local runs, but CI must set it. Provide it to local runs with
+`export MASTER_FUNDER_SEED=…`.
 
 `GITHUB_TOKEN` (auto-provided) is used by the report job and cleanup cron.
 
@@ -115,7 +116,7 @@ Nothing to do manually. `globalSetup` (`e2e/cli/setup/fund.ts`) and
 Alice as the fallback.
 
 If both the dedicated funder and Alice are empty, re-fund the dedicated funder
-account (the `//0`-derived address — run `bun run scripts/check-funder-balance.ts`
+account (the bare-root address — run `bun run scripts/check-funder-balance.ts`
 with the seed exported to print it) on Paseo, and update the secret if the seed
 itself changed.
 

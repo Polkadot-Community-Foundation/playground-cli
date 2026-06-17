@@ -41,13 +41,13 @@ import { ss58Encode } from "@parity/product-sdk-address";
 import { type Env, getChainConfig } from "../../config.js";
 
 /**
- * Dedicated testnet funder, derived at `//0` from the `MASTER_FUNDER_SEED`
- * env var (a BIP-39 mnemonic). `null` when the var is unset/blank — callers
- * then fall back to Alice alone. Derived once at module load so we don't
- * re-run BIP-39 + sr25519 on every access.
+ * Dedicated testnet funder, derived at the bare root (empty derivation path)
+ * from the `MASTER_FUNDER_SEED` env var (a BIP-39 mnemonic). `null` when the
+ * var is unset/blank — callers then fall back to Alice alone. Derived once at
+ * module load so we don't re-run BIP-39 + sr25519 on every access.
  */
 const dedicatedSeed = process.env.MASTER_FUNDER_SEED?.trim();
-const dedicated = dedicatedSeed ? seedToAccount(dedicatedSeed, "//0") : null;
+const dedicated = dedicatedSeed ? seedToAccount(dedicatedSeed, "") : null;
 const dedicatedAddress = dedicated ? ss58Encode(dedicated.publicKey) : null;
 
 export interface Funder {
@@ -68,11 +68,11 @@ export interface Funder {
  * `MASTER_FUNDER_SEED` is configured; without it the chain is Alice-only.
  */
 export const FUNDER_CHAIN: readonly Funder[] = [
-    ...(dedicated
+    ...(dedicated && dedicatedAddress
         ? [
               {
                   name: "dedicated",
-                  address: dedicatedAddress as string,
+                  address: dedicatedAddress,
                   signer: dedicated.signer,
               },
           ]

@@ -28,6 +28,13 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 const VALID_MNEMONIC = "bottom drive obey lake curtain smoke basket hold race lonely fit walk";
 
+// Frozen bare-root (empty derivation path) address of VALID_MNEMONIC. Pins the
+// derivation path so a regression back to `//0` (or any other junction) fails
+// loudly: the funder is funded at the bare root, and a path drift would silently
+// move the signer to an unfunded account. `//0` of this mnemonic is a DIFFERENT
+// address (5D34dL5…), so this vector genuinely guards the path.
+const VALID_MNEMONIC_BARE_ROOT = "5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV";
+
 afterEach(() => {
     delete process.env.MASTER_FUNDER_SEED;
     vi.resetModules();
@@ -50,8 +57,9 @@ describe("FUNDER_CHAIN dedicated-funder gating", () => {
 
         // Dedicated funder is tried first; Alice is the fallback.
         expect(FUNDER_CHAIN.map((f) => f.name)).toEqual(["dedicated", "Alice"]);
-        // Address is derived from the seed and matches the leading chain entry.
-        expect(DEDICATED_FUNDER_ADDRESS).toMatch(/^5/);
+        // Derived at the bare root (empty path) and matches the leading entry.
+        // The frozen vector pins the derivation path against `//0` regressions.
+        expect(DEDICATED_FUNDER_ADDRESS).toBe(VALID_MNEMONIC_BARE_ROOT);
         expect(FUNDER_CHAIN[0]?.address).toBe(DEDICATED_FUNDER_ADDRESS);
     });
 
