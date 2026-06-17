@@ -48,7 +48,8 @@ import {
     type DecentralizeOutcome,
     type DecentralizeSource,
 } from "../../utils/decentralize/run.js";
-import { destroyConnection } from "../../utils/connection.js";
+import { getConnection, destroyConnection } from "../../utils/connection.js";
+import { enforceIdentityGate } from "../shared/gateOrNotice.js";
 import {
     ensureGitInstalled,
     ModdablePreflightError,
@@ -147,6 +148,18 @@ export const decentralizeCommand = new Command("decentralize")
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
+
+            // Builder-identity gate (any signer mode): only revealed builders
+            // who joined the competition may decentralize. Blocked is a soft
+            // outcome (yellow box, exit 0); release the shared connection we
+            // primed for the read before returning.
+            const conn = await getConnection();
+            if (await enforceIdentityGate(conn.raw.assetHub)) {
+                destroyConnection();
+                process.exitCode = 0;
+                return;
+            }
+
             if (opts.site || opts.path) {
                 await runHeadless({ env, opts });
             } else {

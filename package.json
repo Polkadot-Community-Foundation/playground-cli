@@ -1,7 +1,7 @@
 {
     "name": "playground-cli",
     "description": "CLI for Polkadot Playground",
-    "version": "0.42.1",
+    "version": "0.43.2",
     "private": true,
     "license": "Apache-2.0",
     "type": "module",
@@ -25,8 +25,8 @@
         "test:e2e:nightly": "tools/e2e-local.sh nightly"
     },
     "dependencies": {
-        "@parity/cdm-builder": "3.1.6",
-        "@parity/cdm-codegen": "0.6.19",
+        "@parity/cdm-builder": "3.1.7",
+        "@parity/cdm-codegen": "0.6.20",
         "@parity/cdm-env": "^2.0.6",
         "@parity/dotns-cli": "0.7.2",
         "@parity/product-sdk-address": "^0.1.1",
