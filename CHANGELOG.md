@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.43.4
+
+### Patch Changes
+
+- 3afef57: Prepare direct chain clients for Summit descriptors when the active environment is switched.
+
 ## 0.43.3
 
 ### Patch Changes
