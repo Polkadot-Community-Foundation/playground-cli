@@ -742,6 +742,7 @@ function makeInstallCommand(): Command {
 }
 
 export const contractCommand = new Command("contract")
-    .description("Run CDM contract workflows")
+    .description("Install and deploy smart contract libraries for your app")
+    .usage("<command> [options]")
     .addCommand(makeDeployCommand())
     .addCommand(makeInstallCommand());
