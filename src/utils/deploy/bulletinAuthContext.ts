@@ -31,11 +31,11 @@
 
 import { createClient } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
-import { paseo_bulletin as bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
 import type { CloudStorageApi } from "@parity/product-sdk-cloud-storage";
 import { asCloudStorageApi } from "../allowances/bulletin.js";
 import { getChainConfig, type Env } from "../../config.js";
 import { BULLETIN_WS_HEARTBEAT_MS } from "../bulletinWs.js";
+import { getBulletinDescriptor } from "../descriptors.js";
 
 export interface BulletinAuthContext {
     bulletinApi: CloudStorageApi;
@@ -59,7 +59,7 @@ export function createBulletinAuthContext(env: Env | undefined): BulletinAuthCon
             }),
         );
         return {
-            bulletinApi: asCloudStorageApi(client.getTypedApi(bulletin)),
+            bulletinApi: asCloudStorageApi(client.getTypedApi(getBulletinDescriptor(cfg.env))),
             destroy: () => client.destroy(),
         };
     } catch {

@@ -44,8 +44,6 @@ import {
     resolveQueryOrigin,
 } from "@parity/cdm-env";
 import { createContractFromClient } from "@parity/product-sdk-contracts";
-import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
-import { paseo_bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
 import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { Command, Option } from "commander";
 import { createClient, type HexString, type SS58String } from "polkadot-api";
@@ -61,6 +59,7 @@ import {
     wrapSignerWithEvents,
     type SigningEvent,
 } from "../utils/deploy/signingProxy.js";
+import { getAssetHubDescriptor, getBulletinDescriptor } from "../utils/descriptors.js";
 import { onProcessShutdown } from "../utils/process-guard.js";
 import { resolveSigner, type ResolvedSigner, type SignerOptions } from "../utils/signer.js";
 import { runContractDeployWithUI } from "./contractDeployUi.js";
@@ -366,6 +365,9 @@ function asCdmAssetHubDescriptor(d: unknown): PipelineChainClient["descriptors"]
 async function createContractChainClient(
     target: ContractDeployTarget,
 ): Promise<ContractChainClient> {
+    const cfg = getChainConfig();
+    const assetHubDescriptor = getAssetHubDescriptor(cfg.env);
+    const bulletinDescriptor = getBulletinDescriptor(cfg.env);
     const raw = {
         assetHub: createClient(getWsProvider([target.assethubUrl])),
         bulletin: createClient(
@@ -388,12 +390,12 @@ async function createContractChainClient(
     }
 
     return {
-        assetHub: asCdmAssetHubApi(raw.assetHub.getTypedApi(paseo_asset_hub)),
-        bulletin: raw.bulletin.getTypedApi(paseo_bulletin),
+        assetHub: asCdmAssetHubApi(raw.assetHub.getTypedApi(assetHubDescriptor)),
+        bulletin: raw.bulletin.getTypedApi(bulletinDescriptor),
         raw,
         descriptors: {
-            assetHub: asCdmAssetHubDescriptor(paseo_asset_hub),
-            bulletin: paseo_bulletin,
+            assetHub: asCdmAssetHubDescriptor(assetHubDescriptor),
+            bulletin: bulletinDescriptor,
         },
         destroy,
     };
