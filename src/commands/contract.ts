@@ -138,8 +138,8 @@ export interface CdmPackageOwnershipConflict {
     caller: HexString;
 }
 
-function assertHexAddress(value: string, label: string): HexString {
-    if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
+function assertHexAddress(value: string | undefined, label: string): HexString {
+    if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) {
         throw new Error(`${label} must be a 20-byte hex address`);
     }
     return value as HexString;
@@ -227,10 +227,12 @@ export function resolveContractInstallTarget(
         registryAddress ??= preset.registryAddress;
     }
 
-    registryAddress ??= cdmJson?.registry;
     assethubUrl ??= cfg.assetHubRpc;
     ipfsGatewayUrl ??= cfg.bulletinGateway;
-    registryAddress ??= getRegistryAddress(cfg.cdmEnvName);
+    if (registryAddress == null) {
+        const activeRegistryAddress = getRegistryAddress(cfg.cdmEnvName);
+        registryAddress = activeRegistryAddress || cdmJson?.registry;
+    }
 
     return {
         assethubUrl,
