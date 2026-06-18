@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.44.1
+
+### Patch Changes
+
+- bf8e403: Use the active Playground contract registry for contract installs instead of stale `cdm.json` registry snapshots.
+
 ## 0.44.0
 
 ### Minor Changes
