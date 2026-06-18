@@ -114,7 +114,7 @@ describe("resolveContractInstallTarget", () => {
         });
     });
 
-    it("uses the registry recorded in cdm.json when present", () => {
+    it("prefers the active playground registry over stale cdm.json by default", () => {
         const cfg = getChainConfig();
         const cdmJson: CdmJson = {
             dependencies: {},
@@ -124,7 +124,7 @@ describe("resolveContractInstallTarget", () => {
         expect(resolveContractInstallTarget({}, cdmJson)).toEqual({
             assethubUrl: cfg.assetHubRpc,
             ipfsGatewayUrl: cfg.bulletinGateway,
-            registryAddress: "0x1111111111111111111111111111111111111111",
+            registryAddress: getRegistryAddress(cfg.cdmEnvName),
             chainName: undefined,
         });
     });
