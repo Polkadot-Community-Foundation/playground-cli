@@ -1,5 +1,11 @@
 # playground-cli
 
+## 0.45.0
+
+### Minor Changes
+
+- 16ab67f: Switch the active testnet back to paseo-next-v2 (reverting the Web3 Summit switch).
+
 ## 0.44.2
 
 ### Patch Changes
