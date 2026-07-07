@@ -271,8 +271,10 @@ export const TOOL_STEPS: ToolStep[] = [
                 } else {
                     const os = platform() === "darwin" ? "darwin" : "linux";
                     const cpu = arch() === "arm64" ? "arm64" : "amd64";
+                    // Run without sudo first (falls through to ~/.local/bin);
+                    // sudo -n avoids hanging on a password prompt (stdin is /dev/null).
                     await runPiped(
-                        `curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_${os}-${cpu}.tar.gz | tar xz && cd kubo && ${sudo()}bash install.sh && cd .. && rm -rf kubo`,
+                        `curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_${os}-${cpu}.tar.gz | tar xz && mkdir -p "$HOME/.local/bin" && (cd kubo && bash install.sh || sudo -n bash install.sh) && rm -rf kubo`,
                         onData,
                     );
                 }

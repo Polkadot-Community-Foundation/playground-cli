@@ -59,10 +59,10 @@ jobs:
             - name: Compile CLI binaries
               if: steps.changesets.outputs.found == 'true'
               run: |
-                  bun build --compile --define process.env.NODE_ENV='"production"' --target=bun-linux-x64 src/index.ts --outfile dot-linux-x64
-                  bun build --compile --define process.env.NODE_ENV='"production"' --target=bun-linux-arm64 src/index.ts --outfile dot-linux-arm64
-                  bun build --compile --define process.env.NODE_ENV='"production"' --target=bun-darwin-x64 src/index.ts --outfile dot-darwin-x64
-                  bun build --compile --define process.env.NODE_ENV='"production"' --target=bun-darwin-arm64 src/index.ts --outfile dot-darwin-arm64
+                  bun build --compile --target=bun-linux-x64 src/index.ts --outfile dot-linux-x64
+                  bun build --compile --target=bun-linux-arm64 src/index.ts --outfile dot-linux-arm64
+                  bun build --compile --target=bun-darwin-x64 src/index.ts --outfile dot-darwin-x64
+                  bun build --compile --target=bun-darwin-arm64 src/index.ts --outfile dot-darwin-arm64
 
             - name: Generate release tag
               if: steps.changesets.outputs.found == 'true'
