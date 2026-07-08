@@ -1,5 +1,33 @@
 # playground-cli
 
+## 0.45.0
+
+### Minor Changes
+
+- 16ab67f: Switch the active testnet back to paseo-next-v2 (reverting the Web3 Summit switch).
+
+## 0.44.2
+
+### Patch Changes
+
+- 978e9f5: Fix `playground login` hanging during the IPFS (Kubo) install step. The installer now runs `install.sh` without sudo first (falling through to `~/.local/bin`) and uses `sudo -n` as a fallback so it no longer blocks on a sudo password prompt.
+
+## 0.44.1
+
+### Patch Changes
+
+- bf8e403: Use the active Playground contract registry for contract installs instead of stale `cdm.json` registry snapshots.
+
+## 0.44.0
+
+### Minor Changes
+
+- 316ebff: Switch the active testnet to Web3 Summit. Balances and drips now read in SUM, and all chain interactions (Asset Hub, Bulletin, People, registry) target the summit endpoints. The playground registry contract resolves live from the summit CDM meta-registry.
+
+### Patch Changes
+
+- f3bb0ba: Fix every UI-rendering command crashing with `jsx_dev_runtime.jsxDEV is not a function` (`--version`/`--help` were unaffected). The compiled binary's `--define process.env.NODE_ENV='"production"'` forced React's JSX runtime to its production build (which omits `jsxDEV`), while bun's bundler still emits `jsxDEV` calls — so every Ink render threw. Drop the define from all `bun build --compile` invocations (build, cli:install, and the three release workflows) so the runtime and the emitted JSX transform agree again.
+
 ## 0.43.6
 
 ### Patch Changes
