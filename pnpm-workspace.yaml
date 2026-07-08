@@ -45,6 +45,7 @@ minimumReleaseAgeExclude:
   - '@parity/product-sdk-local-storage@0.2.9'
   - '@parity/product-sdk-signer@0.8.1'
   - '@parity/product-sdk-tx@0.2.14'
+  - '@polkadot-community-foundation/polkadot-app-deploy@0.12.0'
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
