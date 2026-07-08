@@ -14,6 +14,9 @@ allowBuilds:
   # patch on that exact package (see patchedDependencies below) already applies
   # the fix, so the postinstall is redundant. Keep at false.
   "@parity/polkadot-app-deploy": false
+  # Same package under its real (PCF) name once installed via the npm: alias —
+  # same rationale, same deny.
+  "@polkadot-community-foundation/polkadot-app-deploy": false
   esbuild: false
   node-datachannel: false
 
