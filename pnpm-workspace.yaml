@@ -21,6 +21,7 @@ allowBuilds:
   node-datachannel: false
 
 minimumReleaseAgeExclude:
+  - "@polkadot-community-foundation/cdm-env@2.2.0"
   - "@parity/polkadot-app-deploy@0.11.0"
   - "@parity/dotns-cli@0.7.2"
   # The @novasamatech/* 0.8.7 family (pulled transitively by
