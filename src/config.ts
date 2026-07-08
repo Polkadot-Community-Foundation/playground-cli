@@ -158,6 +158,28 @@ const PASEO_NEXT_V2: ChainConfig = {
     pgasAssetId: 2_000_000_000,
 };
 
+// Paseo Next (PCF) — the re-home target. Same interim Paseo Next chains as
+// paseo-next-v2, but scoped to PCF-owned deployments: DotNS/CDM/Publisher resolve
+// through PCF's own registries (env id `paseo-next` in polkadot-app-deploy's
+// catalog; CDM meta-registry via cdmEnvName `paseo-next`, empty until PCF's CDM
+// registry is deployed to AH-next 1500 — not the default env, so the config.test.ts
+// non-empty-registry guard does not apply to it yet).
+const PASEO_NEXT: ChainConfig = {
+    env: "paseo-next",
+    network: "testnet",
+    tokenSymbol: "PAS",
+    relayRpc: "wss://paseo-rpc.n.dwellir.com",
+    assetHubRpc: "wss://paseo-asset-hub-next-rpc.polkadot.io",
+    bulletinRpc: "wss://paseo-bulletin-next-rpc.polkadot.io",
+    bulletinRpcFallbacks: [],
+    peopleEndpoints: ["wss://paseo-people-next-system-rpc.polkadot.io"],
+    bulletinGateway: "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
+    autoAccountMapping: true,
+    faucetUrl: "https://faucet.polkadot.io/?network=pah",
+    cdmEnvName: "paseo-next",
+    pgasAssetId: 2_000_000_000,
+};
+
 // Web3 Summit network. Every endpoint/network value mirrors polkadot-app-deploy's
 // `assets/environments.json` `summit` entry verbatim (the `config.test.ts` guard
 // fails CI if they drift). The CDM meta-registry address is NOT stored here — it
@@ -187,6 +209,7 @@ const SUMMIT: ChainConfig = {
  */
 export const CONFIGS: Partial<Record<Env, ChainConfig>> = {
     "paseo-next-v2": PASEO_NEXT_V2,
+    "paseo-next": PASEO_NEXT,
     summit: SUMMIT,
     // Other envs are not wired yet — getChainConfig() throws below.
 };

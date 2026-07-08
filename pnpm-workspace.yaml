@@ -14,6 +14,9 @@ allowBuilds:
   # patch on that exact package (see patchedDependencies below) already applies
   # the fix, so the postinstall is redundant. Keep at false.
   "@parity/polkadot-app-deploy": false
+  # Same package under its real (PCF) name once installed via the npm: alias —
+  # same rationale, same deny.
+  "@polkadot-community-foundation/polkadot-app-deploy": false
   esbuild: false
   node-datachannel: false
 
@@ -45,6 +48,7 @@ minimumReleaseAgeExclude:
   - '@parity/product-sdk-local-storage@0.2.9'
   - '@parity/product-sdk-signer@0.8.1'
   - '@parity/product-sdk-tx@0.2.14'
+  - '@polkadot-community-foundation/polkadot-app-deploy@0.12.0'
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
