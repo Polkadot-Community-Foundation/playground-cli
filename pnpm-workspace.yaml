@@ -21,6 +21,7 @@ allowBuilds:
   node-datachannel: false
 
 minimumReleaseAgeExclude:
+  - "@parity/polkadot-app-deploy@0.12.1"
   - "@polkadot-community-foundation/cdm-env@2.2.0"
   - "@parity/polkadot-app-deploy@0.11.0"
   - "@parity/dotns-cli@0.7.2"
@@ -50,6 +51,7 @@ minimumReleaseAgeExclude:
   - '@parity/product-sdk-signer@0.8.1'
   - '@parity/product-sdk-tx@0.2.14'
   - '@polkadot-community-foundation/polkadot-app-deploy@0.12.0'
+  - '@polkadot-community-foundation/polkadot-app-deploy@0.12.1'
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing

@@ -27,8 +27,8 @@ importers:
         specifier: 0.7.2
         version: 0.7.2(@polkadot/util@14.0.3)(jiti@2.7.0)(postcss@8.5.16)(react-native@0.85.2(@babel/core@7.29.7)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.9.0)
       '@parity/polkadot-app-deploy':
-        specifier: npm:@polkadot-community-foundation/polkadot-app-deploy@0.12.0
-        version: '@polkadot-community-foundation/polkadot-app-deploy@0.12.0(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)'
+        specifier: npm:@polkadot-community-foundation/polkadot-app-deploy@0.12.1
+        version: '@polkadot-community-foundation/polkadot-app-deploy@0.12.1(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)'
       '@parity/product-sdk-address':
         specifier: ^0.1.1
         version: 0.1.1
@@ -1516,8 +1516,8 @@ packages:
   '@polkadot-community-foundation/cdm-env@2.2.0':
     resolution: {integrity: sha512-2Q1M0A+4LAOm0SrdkG53fhjYxn60Elq7jHNUCHft1uD7hJTiCuzanhJnSRN/pNvdNZKwiBpwoUzrhFsTL+rCtQ==}
 
-  '@polkadot-community-foundation/polkadot-app-deploy@0.12.0':
-    resolution: {integrity: sha512-Zv3uDsbXB6HaBpqaFzYM0Adh+rYJ+F18KPy90UlNpd6ll8VaNrIh/jjj2nm3LC1hX3vpW00aYsoCw8Eu7LYSSg==}
+  '@polkadot-community-foundation/polkadot-app-deploy@0.12.1':
+    resolution: {integrity: sha512-SMZXwg2Ks3E2VjDCaHExTziVHxhfd9f/VEyINlis36+YIEymA9oO1NgXjj/9+S4/dH0ZOOFyzfvW7d6H3lxlOQ==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -4107,11 +4107,6 @@ packages:
 
   semver@7.8.2:
     resolution: {integrity: sha512-c8jsqUZm3omBOI66G90z1Dyw5z622G8oLG+omfsHBJf3CWQTlOcwOjvOG6wtiNfW6anKm/eA39LMwMtMez2TiQ==}
-    engines: {node: '>=10'}
-    hasBin: true
-
-  semver@7.8.4:
-    resolution: {integrity: sha512-rUCObTnP32Q08R2uuIrt7r9PlEonuTmtuXYcW6s5kjdlj3xbnwe+21yXptAUYcMAABLkYYTtnmzb3w3EDZfueA==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -7527,7 +7522,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@polkadot-community-foundation/polkadot-app-deploy@0.12.0(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
+  '@polkadot-community-foundation/polkadot-app-deploy@0.12.1(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
     dependencies:
       '@ipld/car': 5.4.3
       '@ipld/dag-pb': 4.1.5
@@ -10169,7 +10164,7 @@ snapshots:
       klaw-sync: 6.0.0
       minimist: 1.2.8
       open: 7.4.2
-      semver: 7.8.4
+      semver: 7.8.5
       slash: 2.0.0
       tmp: 0.2.7
       yaml: 2.9.0
@@ -10641,8 +10636,6 @@ snapshots:
   semver@7.8.1: {}
 
   semver@7.8.2: {}
-
-  semver@7.8.4: {}
 
   semver@7.8.5: {}
 
