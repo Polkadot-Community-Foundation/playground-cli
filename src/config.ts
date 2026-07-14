@@ -36,6 +36,7 @@ export const ENV_IDS = [
     "paseo-review",
     "paseo-next-v2",
     "summit",
+    "devnet",
     "polkadot",
     "kusama",
 ] as const;
@@ -201,6 +202,31 @@ const SUMMIT: ChainConfig = {
     pgasAssetId: 2_000_000_000,
 };
 
+// PCF public products devnet — the whole suite on standard Paseo (Asset Hub 1000
+// / Bulletin 1010 / People 1004). Every endpoint/network value mirrors
+// polkadot-app-deploy's `assets/environments.json` `devnet` entry verbatim (the
+// `config.test.ts` guard fails CI if they drift). DotNS names + CDM meta-registry
+// are wired later, so `cdmEnvName: "devnet"` resolves empty for now — devnet is
+// NOT the default env, so the config.test.ts non-empty-registry guard does not
+// apply to it yet. `pgasAssetId` copies the other testnets (display-only; not
+// cross-checked by the divergence guard) — reset it from the chain's asset
+// registry once the PGAS asset is registered on this Asset Hub.
+const DEVNET: ChainConfig = {
+    env: "devnet",
+    network: "testnet",
+    tokenSymbol: "PAS",
+    relayRpc: "wss://paseo-rpc.n.dwellir.com",
+    assetHubRpc: "wss://asset-hub-paseo-rpc.n.dwellir.com",
+    bulletinRpc: "wss://bulletin-paseo.tservices.es:8443",
+    bulletinRpcFallbacks: [],
+    peopleEndpoints: ["wss://people-paseo.rotko.net"],
+    bulletinGateway: "https://bullet.sik.rocks/ipfs/",
+    autoAccountMapping: true,
+    faucetUrl: null,
+    cdmEnvName: "devnet",
+    pgasAssetId: 2_000_000_000,
+};
+
 /**
  * Wired environments. Exported (read-only) so the `config.test.ts` divergence
  * guard can compare every entry against polkadot-app-deploy's `environments.json`
@@ -211,6 +237,7 @@ export const CONFIGS: Partial<Record<Env, ChainConfig>> = {
     "paseo-next-v2": PASEO_NEXT_V2,
     "paseo-next": PASEO_NEXT,
     summit: SUMMIT,
+    devnet: DEVNET,
     // Other envs are not wired yet — getChainConfig() throws below.
 };
 
@@ -264,6 +291,8 @@ export function getNetworkLabel(env: Env = getActiveEnv()): string {
             return "paseo review";
         case "summit":
             return "summit";
+        case "devnet":
+            return "devnet";
         case "preview":
             return "preview";
         case "polkadot":
