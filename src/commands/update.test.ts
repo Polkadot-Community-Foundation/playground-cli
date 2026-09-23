@@ -70,7 +70,7 @@ describe("fetchLatestTag", () => {
         const tag = await fetchLatestTag(fakeFetch as unknown as typeof fetch);
         expect(tag).toBe("v1.2.3");
         expect(fakeFetch).toHaveBeenCalledWith(
-            expect.stringContaining("data.jsdelivr.com/v1/packages/gh/paritytech/playground-cli"),
+            expect.stringContaining("data.jsdelivr.com/v1/packages/gh/Polkadot-Community-Foundation/playground-cli"),
             expect.objectContaining({
                 headers: expect.objectContaining({ Accept: expect.any(String) }),
             }),

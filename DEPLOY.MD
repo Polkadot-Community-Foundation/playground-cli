@@ -15,7 +15,7 @@ This doc runs **after** `polkadot-app-deploy`'s [`DEPLOYMENT.md`](https://github
 ## 1. Get the code
 
 ```bash
-git clone https://github.com/paritytech/playground-cli.git
+git clone https://github.com/Polkadot-Community-Foundation/playground-cli.git
 cd playground-cli
 git checkout main
 pnpm install --frozen-lockfile

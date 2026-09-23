@@ -605,7 +605,7 @@ jobs:
                       DEBIAN_FRONTEND=noninteractive apt-get install -qq -y --no-install-recommends \
                         curl ca-certificates bash sudo git
 
-                      curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh \
+                      curl -fsSL https://raw.githubusercontent.com/Polkadot-Community-Foundation/playground-cli/main/install.sh \
                         | bash
                     ' 2>&1 | tee /tmp/cold-start.log
 

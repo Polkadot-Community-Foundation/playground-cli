@@ -2,7 +2,7 @@
 set -e
 
 INSTALL_DIR="$HOME/.polkadot"
-REPO="paritytech/playground-cli"
+REPO="Polkadot-Community-Foundation/playground-cli"
 # The command users invoke, plus a short alias. Both resolve to the same binary.
 CMD="playground"
 ALIAS="pg"

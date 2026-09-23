@@ -57,7 +57,14 @@ export const ENV_FLAG_CHOICES: readonly string[] = [...ENV_IDS, ...LEGACY_ENV_AL
  * rest. The `config.test.ts` guard blocks the flip until the target env's
  * endpoints match upstream AND its CDM meta-registry address exists.
  */
-export const ACTIVE_TESTNET_ENV: Env = "paseo-next-v2";
+// PCF: release binaries bake `devnet` in at build time (bunfig.toml `[define]`);
+// source runs and the test suite keep upstream's `paseo-next-v2`.
+const BUILD_DEFAULT_ENV = process.env.PLAYGROUND_DEFAULT_ENV;
+export const ACTIVE_TESTNET_ENV: Env = (ENV_IDS as readonly string[]).includes(
+    BUILD_DEFAULT_ENV ?? "",
+)
+    ? (BUILD_DEFAULT_ENV as Env)
+    : "paseo-next-v2";
 export const DEFAULT_ENV: Env = ACTIVE_TESTNET_ENV;
 
 /**

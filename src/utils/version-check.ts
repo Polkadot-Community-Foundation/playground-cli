@@ -35,7 +35,7 @@
 
 import { GLYPH } from "./ui/theme/tokens.js";
 
-const JSDELIVR_URL = "https://data.jsdelivr.com/v1/packages/gh/paritytech/playground-cli/resolved";
+const JSDELIVR_URL = "https://data.jsdelivr.com/v1/packages/gh/Polkadot-Community-Foundation/playground-cli/resolved";
 const FETCH_TIMEOUT_MS = 1000;
 
 const ANSI_YELLOW = "\x1b[33m";

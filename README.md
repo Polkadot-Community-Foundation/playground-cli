@@ -18,13 +18,13 @@ sudo apt update && sudo apt install -y build-essential curl
 Then install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Polkadot-Community-Foundation/playground-cli/main/install.sh | bash
 ```
 
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=v0.2.0 bash
+curl -fsSL https://raw.githubusercontent.com/Polkadot-Community-Foundation/playground-cli/main/install.sh | VERSION=v0.2.0 bash
 ```
 
 The installer drops the binary into `~/.polkadot/bin/playground`, symlinks both `playground` and the short `pg` alias into `~/.local/bin/`, appends the path to your shell rc, and then runs `playground login` so you can finish setup without a second command.
@@ -263,7 +263,7 @@ pnpm vitest run --config e2e/vitest.config.ts e2e/cli/session.test.ts
 Every PR automatically publishes a dev release tagged with the branch name. Others can try it with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=dev/my-branch bash
+curl -fsSL https://raw.githubusercontent.com/Polkadot-Community-Foundation/playground-cli/main/install.sh | VERSION=dev/my-branch bash
 ```
 
 ### Releasing
