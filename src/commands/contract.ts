@@ -44,7 +44,7 @@ import {
     resolveQueryOrigin,
 } from "@polkadot-community-foundation/cdm-env";
 import { createContractFromClient } from "@parity/product-sdk-contracts";
-import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "bulletin-deploy";
 import { Command, Option } from "commander";
 import { createClient, type HexString, type SS58String } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
@@ -62,6 +62,7 @@ import {
 import { getAssetHubDescriptor, getBulletinDescriptor } from "../utils/descriptors.js";
 import { onProcessShutdown } from "../utils/process-guard.js";
 import { resolveSigner, type ResolvedSigner, type SignerOptions } from "../utils/signer.js";
+import { remapCargoMetadataError } from "../utils/toolchain.js";
 import { runContractDeployWithUI } from "./contractDeployUi.js";
 import { runContractInstallWithUI } from "./contractInstallUi.js";
 
@@ -296,7 +297,12 @@ async function assertCdmPackageOwnership({
     registryAddress: HexString;
     origin: SS58String;
 }): Promise<void> {
-    const detected = detectBuildOrder(rootDir);
+    let detected: ReturnType<typeof detectBuildOrder>;
+    try {
+        detected = detectBuildOrder(rootDir);
+    } catch (err) {
+        throw remapCargoMetadataError(err);
+    }
     const packageNames = [
         ...new Set(
             detected.contracts
@@ -347,23 +353,6 @@ async function assertCdmPackageOwnership({
     }
 }
 
-// ── cdm-builder descriptor skew bridge ─────────────────────────────────────
-// Our root `@parity/product-sdk-descriptors` paseo-asset-hub descriptor and
-// cdm-env's `CdmDeployAssetHubDescriptor` (which `cdm-builder` generates the
-// `PipelineChainClient` type from) come from different product-sdk descriptor
-// generations, so the `DotnsGateway` pallet shape differs nominally (e.g.
-// `PopControllerAddressSet` vs `DispatcherAddressSet`). They are structurally
-// identical for the Revive + registry calls the contract pipeline actually
-// makes — it never touches DotnsGateway — so cast through these single seams.
-// Delete once the two descriptor generations realign. Sibling of the
-// `asCloudStorageApi` seam (see CLAUDE.md "cdm-builder version skew").
-function asCdmAssetHubApi(api: unknown): PipelineChainClient["assetHub"] {
-    return api as PipelineChainClient["assetHub"];
-}
-function asCdmAssetHubDescriptor(d: unknown): PipelineChainClient["descriptors"]["assetHub"] {
-    return d as PipelineChainClient["descriptors"]["assetHub"];
-}
-
 async function createContractChainClient(
     target: ContractDeployTarget,
 ): Promise<ContractChainClient> {
@@ -392,11 +381,11 @@ async function createContractChainClient(
     }
 
     return {
-        assetHub: asCdmAssetHubApi(raw.assetHub.getTypedApi(assetHubDescriptor)),
+        assetHub: raw.assetHub.getTypedApi(assetHubDescriptor),
         bulletin: raw.bulletin.getTypedApi(bulletinDescriptor),
         raw,
         descriptors: {
-            assetHub: asCdmAssetHubDescriptor(assetHubDescriptor),
+            assetHub: assetHubDescriptor,
             bulletin: bulletinDescriptor,
         },
         destroy,
