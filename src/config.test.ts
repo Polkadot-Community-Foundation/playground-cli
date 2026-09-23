@@ -35,13 +35,15 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
-import { loadEnvironments } from "@parity/polkadot-app-deploy";
+import { loadEnvironments } from "bulletin-deploy";
 import { getRegistryAddress } from "@polkadot-community-foundation/cdm-env";
 import {
     CONFIGS,
     DEFAULT_ENV,
+    DEFAULT_TLD_FALLBACK,
     getActiveEnv,
     getChainConfig,
+    getEnvTld,
     getPgasAssetId,
     setActiveEnv,
     type ChainConfig,
@@ -57,7 +59,6 @@ describe("getPgasAssetId", () => {
 
     it("returns a number for every wired env", () => {
         expect(typeof getPgasAssetId("paseo-next-v2")).toBe("number");
-        expect(typeof getPgasAssetId("summit")).toBe("number");
     });
 });
 
@@ -105,8 +106,42 @@ describe("config ↔ polkadot-app-deploy environments.json (divergence guard)", 
             it("bulletin gateway derives from upstream ipfs", () => {
                 expect(cfg.bulletinGateway).toBe(`${upstreamEnv(envId)?.ipfs}/ipfs/`);
             });
+
+            // The PCF polkadot-app-deploy catalog (aliased as bulletin-deploy)
+            // does not mirror upstream's paseo-next-v2 popSelfServe block; PCF
+            // maintains only devnet, so paseo-next-v2 keeps upstream's link.
+            it.skipIf(envId === "paseo-next-v2")(
+                "faucet URL matches upstream popSelfServe.faucetUrl",
+                () => {
+                    // The `?parachain=<id>` form is load-bearing: `?network=pah`
+                    // drips to the PUBLIC Paseo Asset Hub (para 1000), not this
+                    // env's chain — a network=pah drip provably left a next-v2
+                    // (para 1500) balance at 0. Upstream's catalog carries the
+                    // correct per-env link; ours must match it (or be null when
+                    // upstream declares none).
+                    expect(cfg.faucetUrl).toBe(upstreamEnv(envId)?.popSelfServe?.faucetUrl ?? null);
+                },
+            );
+
+            it("tld matches upstream (with the upstream 'dot' fallback)", () => {
+                // bulletin-deploy 0.15 made the DotNS TLD per-env (`tld` in
+                // environments.json, e.g. "paseo" on paseo-next-v2); envs
+                // without one fall back to its DEFAULT_TLD ("dot"). Our copy
+                // must track it exactly or every registered/served name
+                // lands under the wrong suffix.
+                expect(cfg.tld).toBe(upstreamEnv(envId)?.tld ?? DEFAULT_TLD_FALLBACK);
+            });
         });
     }
+
+    it("getEnvTld falls back to 'dot' for envs without a wired config", () => {
+        // Unwired env ⇒ no CONFIGS entry ⇒ the upstream DEFAULT_TLD fallback.
+        expect(getEnvTld("preview")).toBe(DEFAULT_TLD_FALLBACK);
+    });
+
+    it("getEnvTld resolves the active env's TLD by default", () => {
+        expect(getEnvTld()).toBe(CONFIGS[DEFAULT_ENV]?.tld);
+    });
 
     it("default env has a non-empty CDM meta-registry address in @polkadot-community-foundation/cdm-env", () => {
         const cfg = CONFIGS[DEFAULT_ENV];
@@ -128,19 +163,19 @@ describe("active env (setActiveEnv / getChainConfig default)", () => {
     });
 
     it("makes the no-arg getChainConfig() follow the active env", () => {
-        // Regression for the --env summit --playground bug: the registry-publish
-        // leg resolves the chain + CDM meta-registry through the no-arg
-        // getChainConfig() default, so it must follow --env, not DEFAULT_ENV.
-        setActiveEnv("summit");
-        expect(getActiveEnv()).toBe("summit");
+        // Regression for the --env <non-default> --playground bug: the
+        // registry-publish leg resolves the chain + CDM meta-registry through the
+        // no-arg getChainConfig() default, so it must follow --env, not DEFAULT_ENV.
+        setActiveEnv("devnet");
+        expect(getActiveEnv()).toBe("devnet");
         const cfg = getChainConfig();
-        expect(cfg.env).toBe("summit");
-        expect(cfg.assetHubRpc).toBe(CONFIGS.summit!.assetHubRpc);
-        expect(cfg.cdmEnvName).toBe("w3s");
+        expect(cfg.env).toBe("devnet");
+        expect(cfg.assetHubRpc).toBe(CONFIGS.devnet!.assetHubRpc);
+        expect(cfg.cdmEnvName).toBe("devnet");
     });
 
     it("does not override an explicitly-passed env", () => {
-        setActiveEnv("summit");
+        setActiveEnv("devnet");
         expect(getChainConfig("paseo-next-v2").env).toBe("paseo-next-v2");
     });
 });

@@ -88,7 +88,7 @@ export function productScopedAdapter<A extends { appId: string }>(adapter: A): A
  */
 export const PLAYGROUND_RESOURCES: AllocatableResource[] = [
     { tag: "BulletInAllowance", value: undefined },
-    { tag: "SmartContractAllowance", value: 0 },
+    { tag: "SmartContractAllowance", value: { tag: "Index", value: 0 } },
 ];
 
 export interface AllocationSummary {

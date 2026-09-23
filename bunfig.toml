@@ -1,0 +1,5 @@
+# PCF: the compiled `dot` binary defaults to the PCF products devnet.
+# `bun build` inlines this; vitest (Node) never reads it, so tests keep
+# upstream's default env. See ACTIVE_TESTNET_ENV in src/config.ts.
+[define]
+"process.env.PLAYGROUND_DEFAULT_ENV" = "\"devnet\""

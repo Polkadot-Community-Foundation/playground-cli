@@ -9,49 +9,54 @@
 allowBuilds:
   "@biomejs/biome": true
   "@parity/product-sdk-terminal": false
-  # @parity/polkadot-app-deploy ships a postinstall (`patch-package || true`)
-  # bundling an @novasamatech/sdk-statement@0.6.0 patch. We deny it: our own pnpm
-  # patch on that exact package (see patchedDependencies below) already applies
-  # the fix, so the postinstall is redundant. Keep at false.
-  "@parity/polkadot-app-deploy": false
-  # Same package under its real (PCF) name once installed via the npm: alias —
-  # same rationale, same deny.
+  # bulletin-deploy (installed as an npm: alias of the PCF
+  # @polkadot-community-foundation/polkadot-app-deploy fork) ships a postinstall
+  # (`patch-package || true`) bundling an @novasamatech/sdk-statement@0.6.0 patch.
+  # We deny it: our own pnpm patch on that exact package (see patchedDependencies
+  # below) already applies the fix, so the postinstall is redundant. Keep at
+  # false, under both the alias and the real package name.
+  "bulletin-deploy": false
   "@polkadot-community-foundation/polkadot-app-deploy": false
   esbuild: false
   node-datachannel: false
 
 minimumReleaseAgeExclude:
-  - "@parity/polkadot-app-deploy@0.12.1"
-  - "@polkadot-community-foundation/cdm-env@2.2.0"
-  - "@parity/polkadot-app-deploy@0.11.0"
-  - "@parity/dotns-cli@0.7.2"
-  # The @novasamatech/* 0.8.7 family (pulled transitively by
-  # @parity/product-sdk-terminal@^0.5.0 → host-papp@^0.8.7) publishes the stable
-  # tag the same day; the min-age gate would otherwise pin us to the older
-  # 0.8.7-N prerelease line. We opt these onto the stable line explicitly — they
-  # come from the vetted triangle-js-sdks source. host-papp pins statement-store
-  # exact, so the whole family must move together. Drop these once the version
-  # naturally ages past the min-age window.
-  - "@novasamatech/host-papp@0.8.7"
-  - "@novasamatech/host-api@0.8.7"
-  - "@novasamatech/host-api-wrapper@0.8.7"
-  - "@novasamatech/statement-store@0.8.7"
-  - "@novasamatech/storage-adapter@0.8.7"
-  - "@novasamatech/scale@0.8.7"
-  - "@novasamatech/substrate-slot-sr25519-wasm@0.8.7"
-  - '@parity/cdm-builder@3.1.7'
-  - '@parity/cdm-codegen@0.6.20'
-  - '@parity/cdm-env@2.0.6'
-  - '@parity/product-sdk-chain-client@0.7.4'
-  - '@parity/product-sdk-cloud-storage@0.6.4'
-  - '@parity/product-sdk-contracts@0.7.7'
-  - '@parity/product-sdk-host@0.10.2'
-  - '@parity/product-sdk-keys@0.3.10'
-  - '@parity/product-sdk-local-storage@0.2.9'
-  - '@parity/product-sdk-signer@0.8.1'
-  - '@parity/product-sdk-tx@0.2.14'
-  - '@polkadot-community-foundation/polkadot-app-deploy@0.12.0'
-  - '@polkadot-community-foundation/polkadot-app-deploy@0.12.1'
+  # 0.15.0 stable published 2026-08-12; it is byte-identical to the validated
+  # rc.2 source (rc.3 was test-script-only), so we opt past the min-age window.
+  # Drop once it ages out.
+  - "bulletin-deploy@0.15.0"
+  - "@parity/dotns-cli@0.8.0"
+  # The @novasamatech/* 0.8.11 family (pulled transitively by
+  # @parity/product-sdk-terminal@^0.6.2 → host-papp@^0.8.9, which resolves to the
+  # 0.8.11 line) publishes the stable tag the same day; the min-age gate would
+  # otherwise pin us to the older prerelease line. We opt these onto the stable
+  # line explicitly — they come from the vetted triangle-js-sdks source.
+  # host-papp pins statement-store exact, so the whole family must move together.
+  # Drop these once the version naturally ages past the min-age window.
+  - "@novasamatech/host-papp@0.8.11"
+  - "@novasamatech/host-api@0.8.11"
+  - "@novasamatech/host-api-wrapper@0.8.11"
+  - "@novasamatech/statement-store@0.8.11"
+  - "@novasamatech/storage-adapter@0.8.11"
+  - "@novasamatech/scale@0.8.11"
+  - "@novasamatech/substrate-slot-sr25519-wasm@0.8.11"
+  - '@parity/cdm-builder@5.0.1'
+  - '@parity/cdm-codegen@0.6.26'
+  - '@parity/cdm-env@2.4.0'
+  - '@parity/product-sdk-chain-client@0.10.0'
+  - '@parity/product-sdk-cloud-storage@0.10.0'
+  - '@parity/product-sdk-contracts@0.10.1'
+  - '@parity/product-sdk-descriptors@0.9.0'
+  - '@parity/product-sdk-host@0.15.1'
+  - '@parity/product-sdk-keys@0.3.18'
+  - '@parity/product-sdk-local-storage@0.3.4'
+  - '@parity/product-sdk-signer@0.12.1'
+  - '@parity/product-sdk-tx@0.4.1'
+  - '@parity/product-sdk-terminal@0.7.1'
+  # PCF forks (npm: aliases in package.json), opted past the min-age window.
+  - "@polkadot-community-foundation/polkadot-app-deploy@0.16.7"
+  - "@polkadot-community-foundation/dotns-cli@0.9.5"
+  - "@polkadot-community-foundation/cdm-env@2.3.0"
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
@@ -72,5 +77,5 @@ overrides:
 patchedDependencies:
   # PATCH(playground-cli) — local-only fixes pending upstream. See CLAUDE.md
   # "Two local pnpm patches remain" for what each one does.
-  "@novasamatech/statement-store@0.8.7": "patches/@novasamatech__statement-store@0.8.7.patch"
+  "@novasamatech/statement-store@0.8.11": "patches/@novasamatech__statement-store@0.8.11.patch"
   "@novasamatech/sdk-statement@0.6.0": "patches/@novasamatech__sdk-statement@0.6.0.patch"

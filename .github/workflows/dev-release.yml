@@ -56,7 +56,7 @@ jobs:
                       Dev build from `${{ github.head_ref }}`.
 
                       ```
-                      curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=dev/${{ github.head_ref }} bash
+                      curl -fsSL https://raw.githubusercontent.com/Polkadot-Community-Foundation/playground-cli/main/install.sh | VERSION=dev/${{ github.head_ref }} bash
                       ```
 
             - name: Comment install command on PR
@@ -69,7 +69,7 @@ jobs:
                   BODY="${MARKER}
                   **Dev build ready** — try this branch:
                   \`\`\`
-                  curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | VERSION=dev/${BRANCH} bash
+                  curl -fsSL https://raw.githubusercontent.com/Polkadot-Community-Foundation/playground-cli/main/install.sh | VERSION=dev/${BRANCH} bash
                   \`\`\`"
 
                   # Find existing comment by marker, update or create

@@ -43,7 +43,7 @@ describe("PLAYGROUND_RESOURCES", () => {
             "SmartContractAllowance",
         ]);
         const sc = PLAYGROUND_RESOURCES.find((r) => r.tag === "SmartContractAllowance");
-        expect(sc?.value).toBe(0);
+        expect(sc?.value).toEqual({ tag: "Index", value: 0 });
     });
 });
 
@@ -53,7 +53,7 @@ describe("summarizeOutcomes", () => {
         const resources: typeof PLAYGROUND_RESOURCES = [
             { tag: "BulletInAllowance", value: undefined },
             { tag: "StatementStoreAllowance", value: undefined },
-            { tag: "SmartContractAllowance", value: 0 },
+            { tag: "SmartContractAllowance", value: { tag: "Index", value: 0 } },
         ];
         const summary = summarizeOutcomes([allocated, rejected, notAvailable], resources);
         expect(summary.granted.map((r) => r.tag)).toEqual(["BulletInAllowance"]);
@@ -77,7 +77,9 @@ describe("describeResource", () => {
 
 describe("describeAllocationFailure", () => {
     const bulletin: typeof PLAYGROUND_RESOURCES = [{ tag: "BulletInAllowance", value: undefined }];
-    const sc: typeof PLAYGROUND_RESOURCES = [{ tag: "SmartContractAllowance", value: 0 }];
+    const sc: typeof PLAYGROUND_RESOURCES = [
+        { tag: "SmartContractAllowance", value: { tag: "Index", value: 0 } },
+    ];
 
     test("returns null when nothing failed", () => {
         const summary = summarizeOutcomes([allocated], bulletin);

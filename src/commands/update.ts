@@ -32,7 +32,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { withSpan, errorMessage } from "../telemetry.js";
 import { runCliCommand } from "../cli-runtime.js";
 
-const REPO = "paritytech/playground-cli";
+const REPO = "Polkadot-Community-Foundation/playground-cli";
 const JSDELIVR_RESOLVED_URL = `https://data.jsdelivr.com/v1/packages/gh/${REPO}/resolved`;
 
 export function resolveInstallDir(env: NodeJS.ProcessEnv = process.env): string {

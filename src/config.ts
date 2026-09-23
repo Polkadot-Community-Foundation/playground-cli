@@ -18,9 +18,10 @@
  * contract addresses, dapp identifiers, and feature defaults.
  *
  * Env IDs mirror polkadot-app-deploy's `assets/environments.json` (paseo-next,
- * paseo-next-v2, paseo-review, summit, preview, polkadot, kusama) so a single
- * value threads through both layers. paseo-next-v2 and summit are wired today;
- * others throw from `getChainConfig` until they're populated.
+ * paseo-next-v2, paseo-review, preview, polkadot, kusama) so a single value
+ * threads through both layers. Only paseo-next-v2 is wired today; others throw
+ * from `getChainConfig` until they're populated. (Summit / w3s was retired when
+ * polkadot-app-deploy 0.13.x dropped it from `environments.json`.)
  */
 
 /**
@@ -35,7 +36,6 @@ export const ENV_IDS = [
     "paseo-next",
     "paseo-review",
     "paseo-next-v2",
-    "summit",
     "devnet",
     "polkadot",
     "kusama",
@@ -52,12 +52,19 @@ export const ENV_FLAG_CHOICES: readonly string[] = [...ENV_IDS, ...LEGACY_ENV_AL
 /**
  * THE network switch. This single constant selects the active testnet for the
  * whole CLI — it feeds both `DEFAULT_ENV` and the legacy `testnet` alias in
- * `resolveLegacyEnv`. Flipping it (e.g. to `"summit"`) is the one-line change an
- * open-source actor makes to point a release at a different network; CI does the
+ * `resolveLegacyEnv`. Flipping it (e.g. to another wired env) is the one-line
+ * change an open-source actor makes to point a release at a different network; CI does the
  * rest. The `config.test.ts` guard blocks the flip until the target env's
  * endpoints match upstream AND its CDM meta-registry address exists.
  */
-export const ACTIVE_TESTNET_ENV: Env = "paseo-next-v2";
+// PCF: release binaries bake `devnet` in at build time (bunfig.toml `[define]`);
+// source runs and the test suite keep upstream's `paseo-next-v2`.
+const BUILD_DEFAULT_ENV = process.env.PLAYGROUND_DEFAULT_ENV;
+export const ACTIVE_TESTNET_ENV: Env = (ENV_IDS as readonly string[]).includes(
+    BUILD_DEFAULT_ENV ?? "",
+)
+    ? (BUILD_DEFAULT_ENV as Env)
+    : "paseo-next-v2";
 export const DEFAULT_ENV: Env = ACTIVE_TESTNET_ENV;
 
 /**
@@ -117,17 +124,33 @@ export interface ChainConfig {
     /** True when Revive auto-maps SS58 → H160 on first tx (paseo-next-v2 onward). */
     autoAccountMapping: boolean;
     /**
-     * Base public faucet URL for this env (callers append `&address=…`), or null
-     * when the env has no public faucet. Single source for the faucet link —
-     * `src/utils/account/funder.ts::faucetUrlFor` reads it from here.
+     * Base public faucet URL for this env (callers append the `address` query
+     * param), or null when the env has no public faucet. Single source for the
+     * faucet link — `src/utils/account/funder.ts::faucetUrlFor` reads it from
+     * here. Mirrors upstream's `popSelfServe.faucetUrl` in bulletin-deploy's
+     * `environments.json` (divergence-guarded): the `?parachain=<id>` form is
+     * load-bearing — `?network=pah` drips to the PUBLIC Paseo Asset Hub
+     * (para 1000), not this env's chain, proven empirically when a
+     * `network=pah` drip left a next-v2 (para 1500) balance at 0.
      */
     faucetUrl: string | null;
     /**
+     * DotNS top-level domain for names registered on this env (no leading dot,
+     * e.g. `"paseo"` on paseo-next-v2 — DotNS TLDs went per-network when the
+     * paseo-next-v2 testnet was wiped and DotNS redeployed; previewnet keeps
+     * `"dot"`). Mirrors the per-env `tld` field in bulletin-deploy's
+     * `environments.json`; the `config.test.ts` divergence guard pins the two
+     * copies identical. Read it via `getEnvTld()` — the single helper every
+     * domain-side consumer goes through.
+     */
+    tld: string;
+    /**
      * Chain name that `@polkadot-community-foundation/cdm-env`'s `getRegistryAddress` understands, used
-     * to resolve the CDM meta-registry address for this env. Differs from `env`
-     * where the two catalogs disagree (our `summit` is cdm-env's `w3s`). The
-     * meta-registry ADDRESS itself lives ONLY in `@polkadot-community-foundation/cdm-env` and is never
-     * stored here — see `src/utils/registry.ts` and CLAUDE.md.
+     * to resolve the CDM meta-registry address for this env. Kept separate from
+     * `env` because the two catalogs can disagree on a network's name (the
+     * retired summit env was cdm-env's `w3s`); `paseo-next-v2` passes through
+     * unchanged. The meta-registry ADDRESS itself lives ONLY in `@polkadot-community-foundation/cdm-env`
+     * and is never stored here — see `src/utils/registry.ts` and CLAUDE.md.
      */
     cdmEnvName: string;
     /**
@@ -154,63 +177,19 @@ const PASEO_NEXT_V2: ChainConfig = {
     peopleEndpoints: ["wss://paseo-people-next-system-rpc.polkadot.io"],
     bulletinGateway: "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
     autoAccountMapping: true,
-    faucetUrl: "https://faucet.polkadot.io/?network=pah",
+    faucetUrl: "https://faucet.polkadot.io/?parachain=1500",
+    tld: "paseo",
     cdmEnvName: "paseo-next-v2",
-    pgasAssetId: 2_000_000_000,
-};
-
-// Paseo Next (PCF) — the re-home target. Same interim Paseo Next chains as
-// paseo-next-v2, but scoped to PCF-owned deployments: DotNS/CDM/Publisher resolve
-// through PCF's own registries (env id `paseo-next` in polkadot-app-deploy's
-// catalog; CDM meta-registry via cdmEnvName `paseo-next`, empty until PCF's CDM
-// registry is deployed to AH-next 1500 — not the default env, so the config.test.ts
-// non-empty-registry guard does not apply to it yet).
-const PASEO_NEXT: ChainConfig = {
-    env: "paseo-next",
-    network: "testnet",
-    tokenSymbol: "PAS",
-    relayRpc: "wss://paseo-rpc.n.dwellir.com",
-    assetHubRpc: "wss://paseo-asset-hub-next-rpc.polkadot.io",
-    bulletinRpc: "wss://paseo-bulletin-next-rpc.polkadot.io",
-    bulletinRpcFallbacks: [],
-    peopleEndpoints: ["wss://paseo-people-next-system-rpc.polkadot.io"],
-    bulletinGateway: "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
-    autoAccountMapping: true,
-    faucetUrl: "https://faucet.polkadot.io/?network=pah",
-    cdmEnvName: "paseo-next",
-    pgasAssetId: 2_000_000_000,
-};
-
-// Web3 Summit network. Every endpoint/network value mirrors polkadot-app-deploy's
-// `assets/environments.json` `summit` entry verbatim (the `config.test.ts` guard
-// fails CI if they drift). The CDM meta-registry address is NOT stored here — it
-// resolves at runtime from `@polkadot-community-foundation/cdm-env` via `cdmEnvName: "w3s"`, and is empty
-// until that package ships it (see CLAUDE.md → "Adding a network / summit").
-const SUMMIT: ChainConfig = {
-    env: "summit",
-    network: "testnet",
-    tokenSymbol: "SUM",
-    relayRpc: "wss://summit-rpc.polkadot.io",
-    assetHubRpc: "wss://summit-asset-hub-rpc.polkadot.io",
-    bulletinRpc: "wss://summit-bulletin-rpc.polkadot.io",
-    bulletinRpcFallbacks: [],
-    peopleEndpoints: ["wss://summit-people-rpc.polkadot.io"],
-    bulletinGateway: "https://summit-ipfs.polkadot.io/ipfs/",
-    autoAccountMapping: true,
-    faucetUrl: null,
-    cdmEnvName: "w3s",
     pgasAssetId: 2_000_000_000,
 };
 
 // PCF public products devnet — the whole suite on standard Paseo (Asset Hub 1000
 // / Bulletin 1010 / People 1004). Every endpoint/network value mirrors
-// polkadot-app-deploy's `assets/environments.json` `devnet` entry verbatim (the
-// `config.test.ts` guard fails CI if they drift). DotNS names + CDM meta-registry
-// are wired later, so `cdmEnvName: "devnet"` resolves empty for now — devnet is
-// NOT the default env, so the config.test.ts non-empty-registry guard does not
-// apply to it yet. `pgasAssetId` copies the other testnets (display-only; not
-// cross-checked by the divergence guard) — reset it from the chain's asset
-// registry once the PGAS asset is registered on this Asset Hub.
+// bulletin-deploy's (PCF polkadot-app-deploy) `assets/environments.json`
+// `devnet` entry verbatim (the `config.test.ts` guard fails CI if they drift).
+// The CDM meta-registry resolves from `@polkadot-community-foundation/cdm-env`
+// via `cdmEnvName: "devnet"`. `pgasAssetId` copies the other testnets
+// (display-only; not cross-checked by the divergence guard).
 const DEVNET: ChainConfig = {
     env: "devnet",
     network: "testnet",
@@ -220,9 +199,10 @@ const DEVNET: ChainConfig = {
     bulletinRpc: "wss://bulletin-paseo.tservices.es:8443",
     bulletinRpcFallbacks: [],
     peopleEndpoints: ["wss://people-paseo.rotko.net"],
-    bulletinGateway: "https://bullet.sik.rocks/ipfs/",
+    bulletinGateway: "https://devnet-ipfs.api.polkadotcommunity.foundation/ipfs/",
     autoAccountMapping: true,
     faucetUrl: null,
+    tld: "dot",
     cdmEnvName: "devnet",
     pgasAssetId: 2_000_000_000,
 };
@@ -235,8 +215,6 @@ const DEVNET: ChainConfig = {
  */
 export const CONFIGS: Partial<Record<Env, ChainConfig>> = {
     "paseo-next-v2": PASEO_NEXT_V2,
-    "paseo-next": PASEO_NEXT,
-    summit: SUMMIT,
     devnet: DEVNET,
     // Other envs are not wired yet — getChainConfig() throws below.
 };
@@ -268,6 +246,34 @@ export function getChainConfig(env: Env = getActiveEnv()): ChainConfig {
 }
 
 /**
+ * Fallback TLD for envs that don't declare one — mirrors bulletin-deploy's
+ * `DEFAULT_TLD` ("dot" is what every pre-per-network DotNS deployment mints
+ * under, and what upstream falls back to when an env has no `tld`).
+ */
+export const DEFAULT_TLD_FALLBACK = "dot";
+
+/**
+ * Every TLD DotNS has ever minted names under, mirroring bulletin-deploy's
+ * `KNOWN_TLDS` (not exported from its package root, so we keep this copy).
+ * Used only by `normalizeDomain`'s wrong-TLD guard: input ending in a
+ * DIFFERENT known TLD than the env's is a user error worth an actionable
+ * message, while an unknown suffix falls through to plain label validation.
+ */
+export const KNOWN_TLDS: readonly string[] = ["dot", "paseo"];
+
+/**
+ * DotNS TLD for the given env (defaults to the active env), with the upstream
+ * `"dot"` fallback for envs that don't declare one. THE single source of truth
+ * for the domain side of the CLI — everything that renders, parses, or
+ * registers a `<label>.<tld>` name goes through here. Note this is
+ * intentionally separate from `PLAYGROUND_PRODUCT_ID`, which stays
+ * `playground.dot` on every network (see its doc).
+ */
+export function getEnvTld(env: Env = DEFAULT_ENV): string {
+    return CONFIGS[env]?.tld ?? DEFAULT_TLD_FALLBACK;
+}
+
+/**
  * Map legacy `--env testnet|mainnet` flag values onto the new env IDs.
  * Keeps existing scripts/CI working while we transition.
  */
@@ -289,8 +295,6 @@ export function getNetworkLabel(env: Env = getActiveEnv()): string {
             return "paseo next";
         case "paseo-review":
             return "paseo review";
-        case "summit":
-            return "summit";
         case "devnet":
             return "devnet";
         case "preview":
@@ -305,7 +309,7 @@ export function getNetworkLabel(env: Env = getActiveEnv()): string {
 /**
  * Native token symbol for the given env (defaults to the active env). Display
  * only — drives balance/drip labels via `formatPas`. Flipping
- * `ACTIVE_TESTNET_ENV` (e.g. to `"summit"`) re-labels everything from here.
+ * `ACTIVE_TESTNET_ENV` re-labels everything from here.
  */
 export function getTokenSymbol(env: Env = DEFAULT_ENV): string {
     return getChainConfig(env).tokenSymbol;
@@ -333,6 +337,9 @@ export const DAPP_ID = "dot-cli";
  * `mnemonic + "/product/{PLAYGROUND_PRODUCT_ID}/0"`; changing this value
  * changes the on-chain account.
  */
+// NOTE: this id is TLD-independent by ecosystem convention — product ids stay
+// `<label>.dot` on every network; only DotNS registration/serving names use
+// the per-env TLD (see `getEnvTld`). Do NOT thread `getEnvTld` through here.
 export const PLAYGROUND_PRODUCT_ID = "playground.dot";
 
 /**

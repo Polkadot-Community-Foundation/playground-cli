@@ -1,5 +1,49 @@
 # playground-cli
 
+## 0.47.0
+
+### Minor Changes
+
+- f64dad1: Support per-network DotNS TLDs (`.paseo` on paseo-next-v2) and move the deploy library to `bulletin-deploy@0.15.0` (the renamed `@parity/polkadot-app-deploy`), which carries the post-wipe DotNS contract addresses. Deploys, decentralize, mod lookups, and all UI copy now use the environment's TLD; a name typed with the wrong TLD (e.g. `my-app.dot` on paseo-next-v2) is rejected with an actionable message. The `playground.dot` product id is unchanged by convention. The faucet links now use the correct `?parachain=1500` form (the previous `?network=pah` form dripped to the public Paseo Asset Hub, para 1000, instead of this network's chain).
+
+## 0.46.2
+
+### Patch Changes
+
+- f05c69d: Update the `@parity/product-sdk-*` dependencies to the 0.21.0 release line (contracts 0.10.1, descriptors 0.9.0, host 0.15.1, tx 0.4.1, cloud-storage 0.10.0, keys 0.3.18, terminal 0.7.1; chain-client 0.10.0, local-storage 0.3.4, signer 0.12.1 transitively). The motivating change is `descriptors@0.9.0`, which regenerates the paseo-bulletin descriptors for the upcoming v0.0.22-paseo Bulletin runtime (spec 1_000_022, new `DataRenewal` pallet) — fixing commands that broke against the upgraded Bulletin chain. The rest of the line is additive: `tx@0.4` adds `TxValidityError`, `contracts@0.10` adds `isContractAccountMapped` + origin validation, `terminal@0.7` adds `AllowanceExpiredError` and optional explicit `productId` on the allocation APIs.
+
+  Also upgrade the CDM packages to match: `@parity/cdm-builder` 3.2.0 → 5.0.1, `@parity/cdm-codegen` 0.6.23 → 0.6.26, `@parity/cdm-env` ^2.1.0 → ^2.4.0. cdm-builder 5.x is built against the same `descriptors@0.9.0` / `contracts@0.10.x`, so all five cdm-builder version-skew cast seams in the contract pipeline (`asCdmAssetHubApi`, `asCdmAssetHubDescriptor`, `asCdmBulletinApi`, `asCdmBulletinDescriptor`, `asCdmRegistryContract`) are deleted — the types now align directly. cdm-env 2.3.0 moves the paseo preset's meta-registry address to the new-generation proxy registry (`0xc1a73a4f93fde65b1cb1680baead248073566cb0`), so contract installs and playground publishes now resolve against the current registry.
+
+## 0.46.1
+
+### Patch Changes
+
+- 2ce7c9b: Contract deploy now shows an actionable message when `cargo metadata` fails, instead of dumping the raw `Command failed: cargo metadata … --no-deps` command. The message explains the likely causes (missing Rust toolchain, offline git-dependency fetch, or an invalid Cargo.toml) and still surfaces cargo's own diagnostic (e.g. the offending `Cargo.toml` line) so a malformed manifest stays fixable.
+
+## 0.46.0
+
+### Minor Changes
+
+- 56be8d2: Bump the full `@parity` dependency stack to latest published and migrate to the
+  `Result`-based SDK error API.
+
+  - `@parity/product-sdk-*` to latest: host 0.14.1 (now built on `@parity/truapi`
+    instead of the former `@novasamatech` in-container host-api), cloud-storage
+    0.8.1, contracts 0.9.2, descriptors 0.8.0, keys 0.3.16, terminal 0.6.2, tx
+    0.3.2. Dropped the temporary vendored headless-host prerelease.
+  - `@parity/polkadot-app-deploy` 0.11.0 → 0.13.1, `@parity/dotns-cli` 0.7.2 →
+    0.8.0, `@parity/cdm-builder` 3.1.7 → 3.2.0, `@parity/cdm-codegen` 0.6.20 →
+    0.6.23, `@parity/cdm-env` 2.0.6 → 2.1.0, and `polkadot-api` aligned to 2.2.1
+    (single runtime instance).
+  - Migrated command handlers to the `Result` API (`submitAndWatch`, contract
+    `.tx`, cloud-storage `checkAuthorization`, `ContractManager.fromLiveClient`),
+    preserving user-facing error messages — and a failed registry publish now
+    surfaces the on-chain revert reason (e.g. `Unauthorized`, `NotRevealed`)
+    instead of a generic "reverted", failing fast on deterministic reverts.
+  - Retired the `summit` / `w3s` environment: polkadot-app-deploy 0.13.x removed
+    it from `environments.json` and product-sdk-descriptors 0.8.0 dropped the
+    `summit-*` descriptors. Only `paseo-next-v2` is wired.
+
 ## 0.45.0
 
 ### Minor Changes

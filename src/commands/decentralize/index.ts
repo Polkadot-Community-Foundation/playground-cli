@@ -42,6 +42,8 @@ import {
     DEFAULT_ENV,
     ENV_FLAG_CHOICES,
     type Env,
+    getChainConfig,
+    getEnvTld,
     resolveLegacyEnv,
     setActiveEnv,
 } from "../../config.js";
@@ -105,7 +107,7 @@ export function assertTagRequiresPlayground(opts: {
 export const decentralizeCommand = new Command("decentralize")
     .description(
         "Mirror a live static site (or upload a local build directory) to Polkadot Bulletin " +
-            "and register a .dot name pointing at it",
+            `and register a .${getEnvTld()} name pointing at it`,
     )
     .option(
         "--site <url>",
@@ -119,7 +121,7 @@ export const decentralizeCommand = new Command("decentralize")
     )
     .option(
         "--dot <name>",
-        "DotNS domain (with or without `.dot`). Omit to auto-generate a free random name.",
+        `DotNS domain (with or without .${getEnvTld()}). Omit to auto-generate a free random name.`,
     )
     .addOption(
         // Same single-sourced choices + DEFAULT_ENV as deploy/deploy-all so all
@@ -154,7 +156,11 @@ export const decentralizeCommand = new Command("decentralize")
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
-            // Make --env active before any chain access (see deploy/index.ts + config.ts).
+            // Fail fast on an unwired --env (non-zero, canonical message)
+            // BEFORE the identity gate's soft exit-0 can swallow it — same
+            // ordering as `playground deploy`. Then make it the active env
+            // before any chain access (see deploy/index.ts + config.ts).
+            getChainConfig(env);
             setActiveEnv(env);
 
             // Builder-identity gate (any signer mode): only revealed builders
