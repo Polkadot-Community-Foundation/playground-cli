@@ -23,7 +23,7 @@ import { productScopedAdapter } from "./resources.js";
 
 const SMART_CONTRACT_ALLOWANCE: AllocatableResource = {
     tag: "SmartContractAllowance",
-    value: 0,
+    value: { tag: "Index", value: 0 },
 };
 
 export interface SmartContractAllowanceOptions {
