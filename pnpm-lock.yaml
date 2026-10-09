@@ -24,8 +24,8 @@ importers:
         specifier: 0.6.26
         version: 0.6.26(@polkadot-api/ink-contracts@0.6.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       '@parity/dotns-cli':
-        specifier: npm:@polkadot-community-foundation/dotns-cli@0.9.5
-        version: '@polkadot-community-foundation/dotns-cli@0.9.5(@polkadot/util@14.0.3)(esbuild@0.27.7)(jiti@2.7.0)(postcss@8.5.15)(react-native@0.85.2(@babel/core@7.29.7)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.9.0)'
+        specifier: npm:@polkadot-community-foundation/dotns-cli@0.10.1
+        version: '@polkadot-community-foundation/dotns-cli@0.10.1(@polkadot/util@14.0.3)(esbuild@0.27.7)(jiti@2.7.0)(postcss@8.5.15)(react-native@0.85.2(@babel/core@7.29.7)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.9.0)'
       '@parity/product-sdk-address':
         specifier: ^0.1.1
         version: 0.1.1
@@ -1578,8 +1578,8 @@ packages:
   '@polkadot-community-foundation/cdm-env@2.3.0':
     resolution: {integrity: sha512-Jgf3pfiIN/UgFMqqgTpguOCjXQXS41li/A9pr0bQzDdxguF7AzzbrBo9f69567nsnHfQRjowe3ZvH/UBZylI6Q==}
 
-  '@polkadot-community-foundation/dotns-cli@0.9.5':
-    resolution: {integrity: sha512-a1I1ATUJfuQK5Bhczyz2bzAInKlAD5V9Z66UUtXetJf+Ua9EAxP0bWTmsGsXoT7OxV2HW+px75JEcUbbURKKeA==}
+  '@polkadot-community-foundation/dotns-cli@0.10.1':
+    resolution: {integrity: sha512-tuvDCgmDsrnx5iBVNOBriOwKSxicXwAKVkTGSWO1q/3spyW+rjWBX/lvEUt2mS1Q0oHbWQXPRycWjjA4HcprzA==}
     engines: {bun: '>=1.2.6'}
     hasBin: true
 
@@ -7752,7 +7752,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@polkadot-community-foundation/dotns-cli@0.9.5(@polkadot/util@14.0.3)(esbuild@0.27.7)(jiti@2.7.0)(postcss@8.5.15)(react-native@0.85.2(@babel/core@7.29.7)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.9.0)':
+  '@polkadot-community-foundation/dotns-cli@0.10.1(@polkadot/util@14.0.3)(esbuild@0.27.7)(jiti@2.7.0)(postcss@8.5.15)(react-native@0.85.2(@babel/core@7.29.7)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.9.0)':
     dependencies:
       '@chainsafe/libp2p-noise': 17.0.0
       '@chainsafe/libp2p-yamux': 8.0.1

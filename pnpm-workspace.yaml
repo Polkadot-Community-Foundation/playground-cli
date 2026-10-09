@@ -55,7 +55,7 @@ minimumReleaseAgeExclude:
   - '@parity/product-sdk-terminal@0.7.1'
   # PCF forks (npm: aliases in package.json), opted past the min-age window.
   - "@polkadot-community-foundation/polkadot-app-deploy@0.16.7"
-  - "@polkadot-community-foundation/dotns-cli@0.9.5"
+  - "@polkadot-community-foundation/dotns-cli@0.10.1"
   - "@polkadot-community-foundation/cdm-env@2.3.0"
 
 overrides:
