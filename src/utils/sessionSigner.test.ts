@@ -17,7 +17,7 @@ import { describe, expect, it, test, vi } from "vitest";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { deriveProductAccountPublicKey, seedToAccount } from "@parity/product-sdk-keys";
 import type { UserSession } from "@parity/product-sdk-terminal";
-import { PLAYGROUND_PRODUCT_ID, getEnvTld } from "../config.js";
+import { DEFAULT_ENV, PLAYGROUND_PRODUCT_ID, getEnvTld, setActiveEnv } from "../config.js";
 import { rebuildTxSigner, type TxCreateArgs, type TxSigner } from "./txSigner.js";
 import {
     INCOMPLETE_SESSION_MESSAGE,
@@ -178,6 +178,28 @@ describe("createPlaygroundSessionSigner", () => {
         const options = createSessionSignerForAccountMock.mock.calls.at(-1)?.[2];
         expect(PHONE_TX_EXTENSION_VERSION).toBe(1);
         expect(options).toEqual({ txExtVersion: PHONE_TX_EXTENSION_VERSION });
+    });
+
+    test("uses the env's own pipeline on devnet, whose Asset Hub declares pipeline 0 only", async () => {
+        createSessionSignerForAccountMock.mockResolvedValue(
+            rebuildTxSigner(
+                { publicKey: HOST_VECTOR_ACCOUNT } as TxSigner,
+                async () => "0x",
+                async () => new Uint8Array(),
+            ),
+        );
+        setActiveEnv("devnet");
+        try {
+            await createPlaygroundSessionSigner(fakeSession({ rootAccountId: root.publicKey }), {
+                productId: PLAYGROUND_PRODUCT_ID,
+                derivationIndex: 0,
+            });
+        } finally {
+            setActiveEnv(DEFAULT_ENV);
+        }
+
+        const options = createSessionSignerForAccountMock.mock.calls.at(-1)?.[2];
+        expect(options).toEqual({ txExtVersion: 0 });
     });
 
     /**

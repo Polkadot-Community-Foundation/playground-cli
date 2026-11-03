@@ -41,6 +41,7 @@ import {
     type ProductAccountRef,
     type UserSession,
 } from "@parity/product-sdk-terminal";
+import { getChainConfig } from "../config.js";
 import { rebuildTxSigner, type TxSigner } from "./txSigner.js";
 
 export type { ProductAccountRef };
@@ -95,7 +96,7 @@ export async function createPlaygroundSessionSigner(
     // what we print cannot desync.
     return wrapSignerWithSssFastFail(
         await createSessionSignerForAccount(session, ref, {
-            txExtVersion: PHONE_TX_EXTENSION_VERSION,
+            txExtVersion: getChainConfig().phoneTxExtVersion ?? PHONE_TX_EXTENSION_VERSION,
         }),
     );
 }

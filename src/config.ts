@@ -162,6 +162,14 @@ export interface ChainConfig {
      * registry.
      */
     pgasAssetId: number;
+    /**
+     * Transaction-extension pipeline the phone signs this env's Asset Hub calls
+     * on, when it differs from `PHONE_TX_EXTENSION_VERSION` in
+     * `utils/sessionSigner.ts`. Read the declared pipelines from the chain's
+     * `Metadata_metadata_at_version(16)`; a chain that declares pipeline 0 only
+     * must set 0 here, or every phone-signed call fails before it is sent.
+     */
+    phoneTxExtVersion?: number;
 }
 
 // Paseo Next v2 — the active env. DotNS contracts are owned by
@@ -205,6 +213,7 @@ const DEVNET: ChainConfig = {
     tld: "dot",
     cdmEnvName: "devnet",
     pgasAssetId: 2_000_000_000,
+    phoneTxExtVersion: 0,
 };
 
 /**
