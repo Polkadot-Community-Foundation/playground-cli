@@ -42,6 +42,17 @@ describe("PLAYGROUND_RESOURCES", () => {
             "BulletInAllowance",
             "SmartContractAllowance",
         ]);
+        // The destination must be the TAGGED form. A bare `0` grants fine on
+        // the phone, so the failure is invisible at grant time — but the SDK
+        // sub-keys its allowance cache by destination, and an untagged value
+        // takes the `Raw` branch and hexes `undefined`, so every later read
+        // throws `undefined is not an object (evaluating 'bytes.length')` and
+        // `playground login` reports "allowances ✕" on a healthy account.
+        // `tsc` DOES reject the bare number, so this test is belt-and-braces
+        // rather than the only guard — but run tsc directly, not through
+        // `pnpm exec`: if pnpm's deps-status check fails first (e.g. the
+        // release-age policy), it exits before tsc runs and an unwary grep for
+        // "error TS" reports a clean typecheck that never happened.
         const sc = PLAYGROUND_RESOURCES.find((r) => r.tag === "SmartContractAllowance");
         expect(sc?.value).toEqual({ tag: "Index", value: 0 });
     });

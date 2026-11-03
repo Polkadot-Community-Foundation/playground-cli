@@ -45,11 +45,32 @@ vi.mock("@parity/product-sdk-terminal", async (importOriginal) => {
         ...actual,
         createTerminalAdapter: createTerminalAdapterMock,
         waitForSessions: waitForSessionsMock,
+        // RFC-0022: the product account is derived from a subtree key the
+        // WALLET owns, which the SDK fetches over the statement store and
+        // caches on disk under the default storage dir. Unmocked, these tests
+        // would hang waiting for a phone and write a bogus key into the real
+        // ~/.polkadot-apps subtree cache — corrupting the developer's live
+        // session. Any 32-byte value works here; the address math itself is
+        // pinned in sessionSigner.test.ts against host-rust-core's vector.
+        deriveProductPublicKey: deriveProductPublicKeyMock,
+        createSessionSignerForAccount: createSessionSignerForAccountMock,
     };
 });
 
 // waitForLogin records the login stamp with its default storage dir; mock it
 // so tests never write to the real ~/.polkadot-apps.
+const { deriveProductPublicKeyMock, createSessionSignerForAccountMock } = vi.hoisted(() => ({
+    deriveProductPublicKeyMock: vi.fn(async () => new Uint8Array(32).fill(0x5a)),
+    // A polkadot-api 3 signer: the creation call itself, with publicKey and
+    // signBytes attached.
+    createSessionSignerForAccountMock: vi.fn(async () =>
+        Object.assign(async () => "0x", {
+            publicKey: new Uint8Array(32).fill(0x5a),
+            signBytes: async () => new Uint8Array(),
+        }),
+    ),
+}));
+
 const { recordLoginStampMock } = vi.hoisted(() => ({
     recordLoginStampMock: vi.fn(async () => undefined),
 }));

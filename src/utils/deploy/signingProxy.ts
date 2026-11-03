@@ -14,24 +14,35 @@
 // limitations under the License.
 
 /**
- * Wraps a `PolkadotSigner` so the TUI can render a "check your phone" panel
+ * Wraps a `TxSigner` so the TUI can render a "check your phone" panel
  * around each signing call. We cannot infer this from polkadot-app-deploy's
  * stdout (the log is printed before the signer is invoked and gives no
  * completion hook), so the reliable place to hook is the signer itself.
+ *
+ * Only REAL signing is reported. papi also invokes the signer with a mocked
+ * signature to size a transaction for fee estimation; that never reaches the
+ * phone, so it passes straight through (see `isMockedCreate`).
  */
 
-import type { PolkadotSigner } from "polkadot-api";
 import type { AllowancePrompt } from "../allowances/bulletin.js";
+import { isMockedCreate, rebuildTxSigner, type TxSigner } from "../txSigner.js";
 
 export type SigningEvent =
-    | { kind: "sign-request"; label: string; step: number }
+    /** `attempt` is 1 for the first request of a step, 2+ for a re-send of the same approval. */
+    | { kind: "sign-request"; label: string; step: number; attempt: number }
     | { kind: "sign-complete"; label: string; step: number }
     | { kind: "sign-error"; label: string; step: number; message: string };
 
 export interface SigningCounter {
-    /** Reserve the next step number. */
-    next(): { step: number };
-    /** How many steps were reserved so far — useful for a final tally. */
+    /**
+     * Reserve a step for a signature request labelled `label`. Repeating the
+     * label of a request that has not completed is a RE-SEND of the same
+     * approval — same step, next attempt — not a new step.
+     */
+    next(label: string): { step: number; attempt: number };
+    /** Mark `step` approved, so the next request is a new step even if it repeats the label. */
+    complete(step: number): void;
+    /** How many distinct steps were reserved so far — useful for a final tally. */
     count(): number;
 }
 
@@ -42,13 +53,31 @@ export interface SigningCounter {
  * that runtime skipped left users on "step 4 of 5" with no fifth step), and
  * RFC-0010 allowance taps are demand-driven so they can't be counted up
  * front. The UI shows "step 1", "step 2", … and never has to guess.
+ *
+ * Steps count APPROVALS, not requests. When the phone does not answer (the
+ * usual cause is the app not being in the foreground, which shows no prompt
+ * at all), bulletin-deploy times out and calls the signer again — often while
+ * the first call is still pending, so a "not completed" request is the signal,
+ * not a rejection. Numbering each request made a stall read as progress: a
+ * user who had approved nothing saw "step 3: Link content" on a deploy that
+ * needs two approvals.
  */
 export function createSigningCounter(): SigningCounter {
     let step = 0;
+    let current: { label: string; attempt: number; done: boolean } | null = null;
     return {
-        next() {
+        next(label) {
+            if (current && !current.done && current.label === label) {
+                current.attempt += 1;
+                return { step, attempt: current.attempt };
+            }
             step += 1;
-            return { step };
+            current = { label, attempt: 1, done: false };
+            return { step, attempt: 1 };
+        },
+        complete(completed) {
+            // A late completion of an EARLIER step must not close the current one.
+            if (current && completed === step) current.done = true;
         },
         count() {
             return step;
@@ -66,17 +95,18 @@ export interface WrapOptions {
 }
 
 /**
- * Returns a new `PolkadotSigner` that mirrors `inner` but emits lifecycle
+ * Returns a new `TxSigner` that mirrors `inner` but emits lifecycle
  * events around each signing call. The wrapper does NOT swallow errors — the
  * original rejection still propagates — it only surfaces them to `onEvent`
  * so the TUI can render a red banner.
  */
-export function wrapSignerWithEvents(inner: PolkadotSigner, options: WrapOptions): PolkadotSigner {
+export function wrapSignerWithEvents(inner: TxSigner, options: WrapOptions): TxSigner {
     const announce = async <T>(fn: () => Promise<T>): Promise<T> => {
-        const { step } = options.counter.next();
-        options.onEvent({ kind: "sign-request", label: options.label, step });
+        const { step, attempt } = options.counter.next(options.label);
+        options.onEvent({ kind: "sign-request", label: options.label, step, attempt });
         try {
             const value = await fn();
+            options.counter.complete(step);
             options.onEvent({ kind: "sign-complete", label: options.label, step });
             return value;
         } catch (err) {
@@ -86,20 +116,59 @@ export function wrapSignerWithEvents(inner: PolkadotSigner, options: WrapOptions
         }
     };
 
-    return {
-        publicKey: inner.publicKey,
-        signTx: (callData, signedExtensions, metadata, atBlockNumber, hasher) =>
-            announce(() =>
-                inner.signTx(callData, signedExtensions, metadata, atBlockNumber, hasher),
+    return rebuildTxSigner(
+        inner,
+        (...args) => (isMockedCreate(args) ? inner(...args) : announce(() => inner(...args))),
+        (data) => announce(() => inner.signBytes(data)),
+    );
+}
+
+/**
+ * Wraps the phone signer handed to bulletin-deploy for DotNS, labelling each
+ * transaction it signs with the operation it is for. `labels` lists the DotNS
+ * approvals in the order bulletin-deploy fires them
+ * (`signerMode.ts::dotnsApprovals`); past the end of the list we repeat the
+ * last label rather than invent an index.
+ *
+ * The label advances on COMPLETED signatures, not on calls: a timed-out
+ * request is re-sent as another signer call for the SAME operation (often
+ * while the first is still pending), and counting calls relabelled that retry
+ * as the next operation — a re-sent commitment showed up as "Finalize domain".
+ * `max` keeps a late completion of an abandoned attempt from skipping a label.
+ * Fee-estimation calls (mocked signature) neither prompt nor advance the label.
+ */
+export function wrapDotnsSigner(
+    inner: TxSigner,
+    labels: string[],
+    counter: SigningCounter,
+    onEvent: (event: SigningEvent) => void,
+): TxSigner {
+    const fallbackLabel = labels[labels.length - 1] ?? "DotNS step";
+    let completed = 0;
+    return rebuildTxSigner(
+        inner,
+        async (...args) => {
+            if (isMockedCreate(args)) return inner(...args);
+            const index = completed;
+            const created = await wrapSignerWithEvents(inner, {
+                label: labels[index] ?? fallbackLabel,
+                counter,
+                onEvent,
+            })(...args);
+            completed = Math.max(completed, index + 1);
+            return created;
+        },
+        (data) =>
+            wrapSignerWithEvents(inner, { label: "DotNS signBytes", counter, onEvent }).signBytes(
+                data,
             ),
-        signBytes: (data) => announce(() => inner.signBytes(data)),
-    };
+    );
 }
 
 /**
  * Prompt factory for phone taps that are NOT signer calls: RFC-0010
  * resource-allocation requests (the first-use Bulletin allowance grant). They
- * ride the statement store outside any `PolkadotSigner`, so
+ * ride the statement store outside any `TxSigner`, so
  * `wrapSignerWithEvents` never sees them — until this existed the phone
  * showed an approval dialog while the deploy TUI sat silent.
  *
@@ -114,10 +183,13 @@ export function createApprovalPrompt(
     onEvent: (event: SigningEvent) => void,
 ): AllowancePrompt {
     return (label) => {
-        const { step } = counter.next();
-        onEvent({ kind: "sign-request", label, step });
+        const { step, attempt } = counter.next(label);
+        onEvent({ kind: "sign-request", label, step, attempt });
         return {
-            complete: () => onEvent({ kind: "sign-complete", label, step }),
+            complete: () => {
+                counter.complete(step);
+                onEvent({ kind: "sign-complete", label, step });
+            },
             fail: (message) => onEvent({ kind: "sign-error", label, step, message }),
         };
     };

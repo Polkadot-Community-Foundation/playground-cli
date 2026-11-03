@@ -15,7 +15,11 @@
 
 import type { PolkadotClient } from "polkadot-api";
 import { withSpan } from "../../telemetry.js";
-import { checkIdentityGate, type IdentityRegistry } from "../../utils/identity/identityGate.js";
+import {
+    checkIdentityGate,
+    resolveActingH160,
+    type ActingAs,
+} from "../../utils/identity/identityGate.js";
 import { renderIdentityGateNotice } from "./IdentityGateNotice.js";
 
 /**
@@ -34,13 +38,14 @@ import { renderIdentityGateNotice } from "./IdentityGateNotice.js";
  */
 export async function enforceIdentityGate(
     rawAssetHubClient: PolkadotClient,
-    registry?: IdentityRegistry,
+    acting?: ActingAs,
 ): Promise<boolean> {
     const skip = process.env.PLAYGROUND_SKIP_IDENTITY_GATE;
     if (skip && skip !== "0" && skip.toLowerCase() !== "false") return false;
-    const result = await withSpan("cli.identity-gate", "check builder identity", () =>
-        checkIdentityGate(rawAssetHubClient, { registry }),
-    );
+    const result = await withSpan("cli.identity-gate", "check builder identity", async () => {
+        const account = await resolveActingH160(acting);
+        return checkIdentityGate(rawAssetHubClient, account ? { account } : {});
+    });
     if (result.status === "revealed") return false;
     await renderIdentityGateNotice(result.status);
     return true;

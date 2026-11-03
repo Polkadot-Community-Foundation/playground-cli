@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * Session-backed `PolkadotSigner` for the playground product account.
+ * Session-backed `TxSigner` for the playground product account.
  *
  * Thin wrapper over `@parity/product-sdk-terminal@0.3.0`'s
  * `createSessionSignerForAccount`, which routes transaction signing through
@@ -34,13 +34,14 @@
  * this CLI).
  */
 
-import { deriveProductAccountPublicKey } from "@parity/product-sdk-keys";
 import {
+    AllowanceExpiredError,
     createSessionSignerForAccount,
+    deriveProductPublicKey,
     type ProductAccountRef,
     type UserSession,
 } from "@parity/product-sdk-terminal";
-import type { PolkadotSigner } from "polkadot-api";
+import { rebuildTxSigner, type TxSigner } from "./txSigner.js";
 
 export type { ProductAccountRef };
 
@@ -57,35 +58,70 @@ export function sessionRootPublicKey(session: UserSession): Uint8Array {
 }
 
 /**
- * Soft-derive the product account public key off a wallet root.
+ * Derive the playground product account public key (RFC-0022).
  *
- * This is the single source of truth for product-account math in the CLI.
- * Both `createPlaygroundSessionSigner` (which feeds the key to the SDK
- * signer) and `auth.ts::deriveSessionAddresses` (which builds the display
- * triple for `playground login`) go through here so a future change to
- * derivation params can't silently desync the signer from what we print.
+ * It used to be three SOFT junctions (`product`/`playground.dot`/`0`) off
+ * `session.rootAccountId`, computed locally with no network. RFC-0022 makes
+ * `//product//{productId}` two HARD junctions, and a public key cannot cross a
+ * hard junction — so the parent must be the product SUBTREE key, which only
+ * the wallet can produce (`session.getProductSubtree`; consent-free, and the
+ * SDK caches it at `{appId}_ProductSubtrees.json`, reaching the phone only on
+ * a cold cache).
  *
- * sr25519 soft derivation is composable on public keys alone, so deriving
- * from `rootAccountId` locally produces the SAME public key the mobile
- * derives privately via `mnemonic + "/product/...{idx}"`. Algorithm
- * parity with mobile/desktop is locked by the frozen vectors in
- * `@parity/product-sdk-keys`'s `product-account.test.ts` and by the
- * `deriveSessionAddresses` block in `src/utils/auth.test.ts`.
+ * Three consequences worth knowing:
+ *   - it takes a SESSION, not a root public key;
+ *   - it is ASYNC, and on a cold cache it needs the phone reachable;
+ *   - the address differs from the pre-RFC-0022 one, so every product account
+ *     moved when this landed (see the migration note in CLAUDE.md).
+ *
+ * `deriveProductPublicKey` is the SDK's single source of truth for this math,
+ * so we delegate rather than re-derive. Cross-host agreement (CLI vs phone) is
+ * pinned at the primitive in `sessionSigner.test.ts` against host-rust-core's
+ * own vector — never against our own output.
  */
-export function derivePlaygroundProductPublicKey(
-    rootAccountId: Uint8Array,
-    ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
-): Uint8Array {
-    return deriveProductAccountPublicKey(rootAccountId, ref.productId, ref.derivationIndex);
-}
-
-export function createPlaygroundSessionSigner(
+export async function derivePlaygroundProductPublicKey(
     session: UserSession,
     ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
-): PolkadotSigner {
-    const publicKey = derivePlaygroundProductPublicKey(sessionRootPublicKey(session), ref);
-    return wrapSignerWithSssFastFail(createSessionSignerForAccount(session, { ...ref, publicKey }));
+): Promise<Uint8Array> {
+    return deriveProductPublicKey(session, ref);
 }
+
+export async function createPlaygroundSessionSigner(
+    session: UserSession,
+    ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
+): Promise<TxSigner> {
+    // `publicKey` omitted on purpose: the SDK fetches the subtree and derives
+    // it through the same cached path as the display address, so the signer and
+    // what we print cannot desync.
+    return wrapSignerWithSssFastFail(
+        await createSessionSignerForAccount(session, ref, {
+            txExtVersion: PHONE_TX_EXTENSION_VERSION,
+        }),
+    );
+}
+
+/**
+ * Transaction-extension pipeline the phone signs on.
+ *
+ * Asset Hub runtime 3004000 (paseo-next-v2) declares two pipelines, and only
+ * version 1 carries `VerifyMultiSignature` (the signature) and `AsPgas` (PGAS
+ * fee sponsorship). The SDK defaults to version 0, and on it the phone returns
+ * a v5 general transaction with nowhere to put the signature: every
+ * phone-signed DotNS, registry and contract call fails with
+ * `Invalid.UnknownOrigin` (Nov 2026; reported in paritytech/platform-bugs).
+ * Version 1 was verified end to end on a phone deploy.
+ *
+ * ⚠️ Hardcoded, and only safe because this signer signs Asset Hub transactions
+ * only. On a chain with no pipeline 1 the SDK throws "chain declares no
+ * transaction-extension pipeline version 1". Bulletin is such a chain (it
+ * declares pipeline 0 only), so Bulletin uploads must stay on the slot or dev
+ * keys that `resolveStorageSignerOptions` and `getBulletinAllowanceSigner`
+ * hand out, never on this signer. Read the pipeline from metadata
+ * (`Metadata_metadata_at_version(16)`; the default V14 metadata shows one
+ * pipeline) before pointing this signer at another chain, and drop the
+ * constant once product-sdk picks the signing pipeline itself.
+ */
+export const PHONE_TX_EXTENSION_VERSION = 1;
 
 export const SESSION_EXPIRED_MESSAGE =
     "Phone session expired: the statement-store allowance lapses ~2-3 days after login " +
@@ -93,16 +129,38 @@ export const SESSION_EXPIRED_MESSAGE =
     'Run "playground logout" and then "playground login" to pair again.';
 
 /**
+ * Whether an error means the statement-store allowance has lapsed.
+ *
+ * Name-based as well as `instanceof`, deliberately: a pnpm tree can hold more
+ * than one copy of the SDK, and `instanceof` across copies silently returns
+ * false. Getting this wrong loses the actionable message, so it fails safe
+ * toward recognising the error.
+ */
+export function isAllowanceExpired(err: unknown): boolean {
+    if (err instanceof AllowanceExpiredError) return true;
+    if (!(err instanceof Error)) return false;
+    return (
+        err.name === "AllowanceExpiredError" || err.constructor?.name === "AllowanceExpiredError"
+    );
+}
+
+/**
  * Fast-fail for expired statement-store (SSS) allowances.
  *
  * Phone signing rides the statement store: `session.createTransaction` /
  * `session.signRaw` submit a statement on the People chain that the phone
  * subscribes to. The SSS allowance is a 1-day renewable resource (plus a
- * grace window, ~2-3 days total after login). When it lapses, the
- * statement-store adapter logs `NoAllowanceError` to `console.error` but
- * does NOT reject the promise — the signing call hangs for the SDK's 180s
- * queue timeout while the outer transaction watcher gives up at 90s with a
- * misleading "transaction watcher silent" error, times 3 retries.
+ * grace window, ~2-3 days total after login), and it cannot be renewed
+ * remotely, so the only remedy is re-pairing.
+ *
+ * There are TWO expiry shapes to catch, because the SDK changed:
+ *   - since product-sdk-terminal 0.10.0 it REJECTS with
+ *     `AllowanceExpiredError`, handled in the catch below;
+ *   - before that the statement-store adapter logged `NoAllowanceError` to
+ *     `console.error` and did NOT reject — the call hung for the SDK's 180s
+ *     queue timeout while the outer watcher gave up at 90s with a misleading
+ *     "transaction watcher silent" error, times 3 retries. The console
+ *     interception still covers that, and any path that still only logs.
  *
  * This wrapper intercepts `console.error` for the duration of each signing
  * call, detects the NoAllowanceError line, and rejects within ~200ms with an
@@ -126,7 +184,7 @@ export const SESSION_EXPIRED_MESSAGE =
  * rejection escapes; any post-restore NoAllowanceError lines simply land on
  * the regular console.error.
  */
-export function wrapSignerWithSssFastFail(signer: PolkadotSigner): PolkadotSigner {
+export function wrapSignerWithSssFastFail(signer: TxSigner): TxSigner {
     function wrap<Args extends unknown[], R>(
         fn: (...args: Args) => Promise<R>,
     ): (...args: Args) => Promise<R> {
@@ -152,6 +210,22 @@ export function wrapSignerWithSssFastFail(signer: PolkadotSigner): PolkadotSigne
                         }, 200);
                     }),
                 ]);
+            } catch (err) {
+                // Since product-sdk-terminal 0.10.0 the SDK REJECTS with
+                // `AllowanceExpiredError` instead of logging `NoAllowanceError`
+                // and hanging, so the console interception above never fires on
+                // the primary expiry path. Without this branch the user gets a
+                // raw SDK error instead of the one message that states the only
+                // remedy (logout + login — the renewal request itself would
+                // travel over the expired channel).
+                //
+                // Matched by name as well as `instanceof`: duplicate copies of
+                // the package in a pnpm tree make `instanceof` unreliable, and
+                // failing open here would lose the remedy.
+                if (isAllowanceExpired(err)) {
+                    throw new Error(SESSION_EXPIRED_MESSAGE, { cause: err });
+                }
+                throw err;
             } finally {
                 // Both arms are settled or abandoned here: the interval must
                 // die (it would otherwise keep the event loop alive — see
@@ -163,9 +237,7 @@ export function wrapSignerWithSssFastFail(signer: PolkadotSigner): PolkadotSigne
         };
     }
 
-    return {
-        publicKey: signer.publicKey,
-        signTx: wrap(signer.signTx.bind(signer)),
-        signBytes: wrap(signer.signBytes.bind(signer)),
-    };
+    // Transaction creation (the signer call itself, since papi 3) and raw
+    // signing both ride the statement store, so both get the fast-fail.
+    return rebuildTxSigner(signer, wrap(signer), wrap(signer.signBytes.bind(signer)));
 }

@@ -59,6 +59,7 @@ import { normalizeDomain } from "../../utils/deploy/playground.js";
 import { assertBuildDirExists } from "../../utils/deploy/buildDir.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { NO_SESSION_HEADLESS_ERROR } from "./signerNotice.js";
+import { formatSignRequestLine } from "../../utils/ui/theme/phoneApprovalCopy.js";
 
 interface DeployOpts {
     suri?: string;
@@ -178,7 +179,12 @@ export const deployCommand = new Command("deploy")
             // will use. Blocked is a soft outcome (yellow box, exit 0).
             try {
                 const conn = await getConnection();
-                if (await enforceIdentityGate(conn.raw.assetHub)) {
+                if (
+                    await enforceIdentityGate(conn.raw.assetHub, {
+                        suri: opts.suri,
+                        signer: opts.signer,
+                    })
+                ) {
                     cleanupOnce();
                     process.exitCode = 0;
                     return;
@@ -587,7 +593,7 @@ async function runHeadless(ctx: {
             (mode === "phone" || ctx.userSigner?.source === "dev"
                 ? ctx.userSigner?.address
                 : undefined),
-        claimedOwnerH160: setup.claimedOwnerH160,
+        userSessionH160: setup.userSessionH160,
     });
     process.stdout.write("\n" + renderSummaryText(view) + "\n");
 
@@ -760,9 +766,7 @@ function logHeadlessEvent(event: DeployEvent) {
     } else if (event.kind === "storage-event" && event.event.kind === "chunk-progress") {
         process.stdout.write(`  chunk ${event.event.current}/${event.event.total}\n`);
     } else if (event.kind === "signing" && event.event.kind === "sign-request") {
-        process.stdout.write(
-            `  📱 Approve on your phone (step ${event.event.step}): ${event.event.label}\n`,
-        );
+        process.stdout.write(formatSignRequestLine(event.event));
     } else if (event.kind === "error") {
         process.stderr.write(`  ✖ ${event.phase}: ${event.message}\n`);
     }
@@ -794,7 +798,7 @@ function logHeadlessContractInstallEvent(event: ContractInstallEvent) {
 
 function logHeadlessSigningEvent(event: SigningEvent) {
     if (event.kind === "sign-request") {
-        process.stdout.write(`  approve on your phone (step ${event.step}): ${event.label}\n`);
+        process.stdout.write(formatSignRequestLine(event));
     }
 }
 

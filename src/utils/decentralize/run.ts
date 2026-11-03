@@ -44,6 +44,7 @@ import {
     createApprovalPrompt,
     type SigningCounter,
     type SigningEvent,
+    wrapDotnsSigner,
     wrapSignerWithEvents,
 } from "../deploy/signingProxy.js";
 import { runStorageDeploy } from "../deploy/storage.js";
@@ -145,7 +146,7 @@ export interface RunDecentralizeOptions {
      * — git origin exists, public, GitHub) before passing it in; the runner
      * just threads it through. Only meaningful for `path` sources — mirrored
      * URL sites have no git source, so URL-mode callers always pass
-     * null/omit, and `isModdable` stays false.
+     * null/omit, and the app records no repository (not moddable).
      */
     repositoryUrl?: string | null;
     env: Env;
@@ -198,7 +199,7 @@ export async function runDecentralize(
     // signs with a dev key (polkadot-app-deploy default mnemonic or `--suri`).
     // This drives the "owned by a development account" callout — which speaks
     // to DotNS *domain* ownership (dev-signed in dev mode regardless of any
-    // registry-level `claimedOwnerH160`).
+    // registry-level owner override — #525 removed that capability).
     const storageSignerSource: ResolvedSigner["source"] = mode === "phone" ? "session" : "dev";
 
     // Shared counter across every phone tap (DotNS commitment/finalize/link,
@@ -209,7 +210,7 @@ export async function runDecentralize(
     const counter = createSigningCounter();
     const emitSigning = (event: SigningEvent) => onEvent?.({ kind: "signing", event });
     // "Check your phone" surface for allocation taps (the first-use Bulletin
-    // slot grant) — they happen outside any PolkadotSigner, so the signer
+    // slot grant) — they happen outside any TxSigner, so the signer
     // wrap below can't see them.
     const allowancePrompt = createApprovalPrompt(counter, emitSigning);
 
@@ -320,7 +321,6 @@ export async function runDecentralize(
             const publishResult = await publishToPlayground({
                 domain: label,
                 publishSigner,
-                claimedOwnerH160: setup.claimedOwnerH160,
                 repositoryUrl,
                 tag: options.tag ?? null,
                 // Path sources have a real project root — its README.md (if
@@ -332,8 +332,6 @@ export async function runDecentralize(
                 cwd: source.kind === "path" ? findProjectRoot(source.directory) : undefined,
                 env,
                 isPrivate: false,
-                isModdable: repositoryUrl !== null,
-                isDevSigner: setup.publishSigner.source === "dev",
                 onLogEvent: (event) => onEvent?.({ kind: "playground-event", event }),
                 onAllowancePrompt: allowancePrompt,
             });
@@ -363,7 +361,7 @@ export async function runDecentralize(
 }
 
 /**
- * Wrap the polkadot-app-deploy DotNS auth signer so each `signTx` call surfaces a
+ * Wrap the polkadot-app-deploy DotNS auth signer so each signing call surfaces a
  * "check your phone" lifecycle event labelled by the matching DotNS approval.
  * Mirrors deploy's `maybeWrapAuthForSigning`. Returns `auth` unchanged when
  * there's no signer (dev mode → explicit dev mnemonic signed in-process,
@@ -378,25 +376,5 @@ function wrapAuthForSigning(
     if (!auth.signer || !auth.signerAddress) return auth;
 
     const labels = approvals.filter((a) => a.phase === "dotns").map((a) => a.label);
-    const fallbackLabel = labels[labels.length - 1] ?? "DotNS step";
-    const signer = auth.signer;
-    let seen = 0;
-
-    return {
-        ...auth,
-        signer: {
-            publicKey: signer.publicKey,
-            signTx: (...args: Parameters<typeof signer.signTx>) => {
-                const label = labels[seen] ?? fallbackLabel;
-                seen += 1;
-                return wrapSignerWithEvents(signer, { label, counter, onEvent }).signTx(...args);
-            },
-            signBytes: (...args: Parameters<typeof signer.signBytes>) =>
-                wrapSignerWithEvents(signer, {
-                    label: "DotNS signBytes",
-                    counter,
-                    onEvent,
-                }).signBytes(...args),
-        },
-    };
+    return { ...auth, signer: wrapDotnsSigner(auth.signer, labels, counter, onEvent) };
 }
