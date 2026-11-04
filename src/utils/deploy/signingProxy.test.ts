@@ -14,7 +14,14 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import { createSigningCounter, createApprovalPrompt, type SigningEvent } from "./signingProxy.js";
+import { rebuildTxSigner, type TxCreateArgs, type TxSigner } from "../txSigner.js";
+import {
+    createSigningCounter,
+    createApprovalPrompt,
+    wrapDotnsSigner,
+    wrapSignerWithEvents,
+    type SigningEvent,
+} from "./signingProxy.js";
 
 describe("createSigningCounter", () => {
     it("returns bare sequential step numbers with no predicted total", () => {
@@ -23,10 +30,264 @@ describe("createSigningCounter", () => {
         // skipped) stranded users on "step 4 of 5" with no fifth step. The
         // counter now just numbers taps as they happen.
         const c = createSigningCounter();
-        expect(c.next()).toEqual({ step: 1 });
-        expect(c.next()).toEqual({ step: 2 });
-        expect(c.next()).toEqual({ step: 3 });
+        expect(c.next("a")).toEqual({ step: 1, attempt: 1 });
+        expect(c.next("b")).toEqual({ step: 2, attempt: 1 });
+        expect(c.next("c")).toEqual({ step: 3, attempt: 1 });
         expect(c.count()).toBe(3);
+    });
+
+    /**
+     * Seen live: a user who had approved NOTHING saw "step 3: Link content" on
+     * a deploy that needs two approvals — each unanswered request was re-sent
+     * and numbered as the next step.
+     */
+    it("numbers a re-send of an uncompleted request as the same step, next attempt", () => {
+        const c = createSigningCounter();
+        expect(c.next("Link content")).toEqual({ step: 1, attempt: 1 });
+        expect(c.next("Link content")).toEqual({ step: 1, attempt: 2 });
+        expect(c.next("Link content")).toEqual({ step: 1, attempt: 3 });
+        expect(c.count()).toBe(1);
+    });
+
+    it("starts a new step for a repeated label once the previous one completed", () => {
+        // A legitimately repeated operation (e.g. the fallback DotNS label when
+        // bulletin-deploy fires more signatures than planned) is progress.
+        const c = createSigningCounter();
+        const { step } = c.next("DotNS step");
+        c.complete(step);
+        expect(c.next("DotNS step")).toEqual({ step: 2, attempt: 1 });
+    });
+
+    it("moves on to a new step when the label changes", () => {
+        const c = createSigningCounter();
+        c.next("Link content");
+        expect(c.next("Publish to Playground registry")).toEqual({ step: 2, attempt: 1 });
+    });
+
+    it("ignores a late completion of an earlier step", () => {
+        const c = createSigningCounter();
+        c.complete(c.next("Link content").step);
+        c.next("Publish to Playground registry");
+        c.complete(1);
+        expect(c.next("Publish to Playground registry")).toEqual({ step: 2, attempt: 2 });
+    });
+});
+
+/**
+ * A phone signer whose calls stay pending until the test settles them. Since
+ * polkadot-api 3 a signer IS the transaction-creation call (resolving to the
+ * signed extrinsic hex), with `publicKey` / `signBytes` attached.
+ */
+function fakePhoneSigner() {
+    const pending: { resolve: (v: string) => void; reject: (e: Error) => void }[] = [];
+    const bytesPending: { resolve: (v: Uint8Array) => void }[] = [];
+    const calls: TxCreateArgs[] = [];
+    const signer: TxSigner = rebuildTxSigner(
+        { publicKey: new Uint8Array(32).fill(7) } as TxSigner,
+        (...args) => {
+            calls.push(args);
+            return new Promise<string>((resolve, reject) => pending.push({ resolve, reject }));
+        },
+        () => new Promise<Uint8Array>((resolve) => bytesPending.push({ resolve })),
+    );
+    return { signer, pending, bytesPending, calls };
+}
+
+const createArgs = [{}, {}, {}, false] as unknown as TxCreateArgs;
+/** What papi passes from `getPaymentInfo` / `getEstimatedFees`: a mocked signature. */
+const mockedArgs = [{}, {}, {}, true] as unknown as TxCreateArgs;
+const flush = () => new Promise((r) => setTimeout(r, 0));
+const requests = (events: SigningEvent[]) =>
+    events
+        .filter((e) => e.kind === "sign-request")
+        .map(({ label, step, attempt }: any) => ({
+            label,
+            step,
+            attempt,
+        }));
+
+describe("wrapSignerWithEvents", () => {
+    it("reports a re-send while the first request is still pending as a retry", async () => {
+        // bulletin-deploy times out and calls the signer again WITHOUT the first
+        // call ever settling, so "not completed" — not a rejection — is the signal.
+        const events: SigningEvent[] = [];
+        const { signer, pending } = fakePhoneSigner();
+        const wrapped = wrapSignerWithEvents(signer, {
+            label: "Publish to Playground registry",
+            counter: createSigningCounter(),
+            onEvent: (e) => events.push(e),
+        });
+
+        void wrapped(...createArgs);
+        const retry = wrapped(...createArgs);
+        pending[1]!.resolve("0x01");
+        await retry;
+
+        expect(events).toEqual([
+            { kind: "sign-request", label: "Publish to Playground registry", step: 1, attempt: 1 },
+            { kind: "sign-request", label: "Publish to Playground registry", step: 1, attempt: 2 },
+            { kind: "sign-complete", label: "Publish to Playground registry", step: 1 },
+        ]);
+    });
+
+    it("reports a re-send after a rejected request as a retry", async () => {
+        const events: SigningEvent[] = [];
+        const { signer, pending } = fakePhoneSigner();
+        const wrapped = wrapSignerWithEvents(signer, {
+            label: "Link content",
+            counter: createSigningCounter(),
+            onEvent: (e) => events.push(e),
+        });
+
+        const first = wrapped(...createArgs);
+        pending[0]!.reject(new Error("timed out"));
+        await expect(first).rejects.toThrow("timed out");
+        void wrapped(...createArgs);
+
+        expect(requests(events)).toEqual([
+            { label: "Link content", step: 1, attempt: 1 },
+            { label: "Link content", step: 1, attempt: 2 },
+        ]);
+    });
+    it("passes fee-estimation calls through without a phone prompt", async () => {
+        // papi 3 invokes the signer with a mocked signature from
+        // getPaymentInfo / getEstimatedFees. Nothing reaches the phone, so a
+        // prompt here would be a phantom approval step.
+        const events: SigningEvent[] = [];
+        const { signer, pending, calls } = fakePhoneSigner();
+        const wrapped = wrapSignerWithEvents(signer, {
+            label: "Publish to Playground registry",
+            counter: createSigningCounter(),
+            onEvent: (e) => events.push(e),
+        });
+
+        const estimate = wrapped(...mockedArgs);
+        pending[0]!.resolve("0xfee");
+        await expect(estimate).resolves.toBe("0xfee");
+
+        expect(events).toEqual([]);
+        expect(calls).toEqual([mockedArgs]);
+    });
+
+    it("stays a callable signer that keeps publicKey and still reports signBytes", async () => {
+        const events: SigningEvent[] = [];
+        const { signer, bytesPending } = fakePhoneSigner();
+        const wrapped = wrapSignerWithEvents(signer, {
+            label: "Sign message",
+            counter: createSigningCounter(),
+            onEvent: (e) => events.push(e),
+        });
+
+        expect(typeof wrapped).toBe("function");
+        expect(wrapped.publicKey).toEqual(signer.publicKey);
+        const signed = wrapped.signBytes(new Uint8Array([9]));
+        bytesPending[0]!.resolve(new Uint8Array([4]));
+        await expect(signed).resolves.toEqual(new Uint8Array([4]));
+        expect(requests(events)).toEqual([{ label: "Sign message", step: 1, attempt: 1 }]);
+    });
+});
+
+describe("wrapDotnsSigner", () => {
+    const REGISTER = ["Reserve domain", "Finalize domain", "Link content"];
+
+    it("keeps a re-sent DotNS request on its own label instead of the next one", async () => {
+        // Regression: labels advanced per signer CALL, so a re-sent commitment
+        // was shown as "Finalize domain".
+        const events: SigningEvent[] = [];
+        const { signer, pending } = fakePhoneSigner();
+        const wrapped = wrapDotnsSigner(signer, REGISTER, createSigningCounter(), (e) =>
+            events.push(e),
+        );
+
+        void wrapped(...createArgs); // never answered
+        const retry = wrapped(...createArgs);
+        pending[1]!.resolve("0x01");
+        await retry;
+        void wrapped(...createArgs);
+
+        expect(requests(events)).toEqual([
+            { label: "Reserve domain", step: 1, attempt: 1 },
+            { label: "Reserve domain", step: 1, attempt: 2 },
+            { label: "Finalize domain", step: 2, attempt: 1 },
+        ]);
+    });
+
+    it("reproduces the live report: three unanswered Link content requests are ONE step", async () => {
+        const events: SigningEvent[] = [];
+        const counter = createSigningCounter();
+        const { signer, pending } = fakePhoneSigner();
+        const dotns = wrapDotnsSigner(signer, ["Link content"], counter, (e) => events.push(e));
+        const publish = wrapSignerWithEvents(signer, {
+            label: "Publish to Playground registry",
+            counter,
+            onEvent: (e) => events.push(e),
+        });
+
+        void dotns(...createArgs);
+        void dotns(...createArgs);
+        const third = dotns(...createArgs);
+        pending[2]!.resolve("0x01");
+        await third;
+        void publish(...createArgs);
+
+        expect(requests(events)).toEqual([
+            { label: "Link content", step: 1, attempt: 1 },
+            { label: "Link content", step: 1, attempt: 2 },
+            { label: "Link content", step: 1, attempt: 3 },
+            { label: "Publish to Playground registry", step: 2, attempt: 1 },
+        ]);
+    });
+
+    it("does not skip a label when an abandoned attempt completes late", async () => {
+        const events: SigningEvent[] = [];
+        const { signer, pending } = fakePhoneSigner();
+        const wrapped = wrapDotnsSigner(signer, REGISTER, createSigningCounter(), (e) =>
+            events.push(e),
+        );
+
+        const abandoned = wrapped(...createArgs);
+        const retry = wrapped(...createArgs);
+        pending[1]!.resolve("0x01");
+        await retry;
+        pending[0]!.resolve("0x02");
+        await abandoned;
+        await flush();
+        void wrapped(...createArgs);
+
+        expect(requests(events).at(-1)).toEqual({ label: "Finalize domain", step: 2, attempt: 1 });
+    });
+
+    it("neither prompts nor advances the label for a fee estimate", async () => {
+        const events: SigningEvent[] = [];
+        const { signer, pending } = fakePhoneSigner();
+        const wrapped = wrapDotnsSigner(signer, REGISTER, createSigningCounter(), (e) =>
+            events.push(e),
+        );
+
+        const estimate = wrapped(...mockedArgs);
+        pending[0]!.resolve("0xfee");
+        await estimate;
+        void wrapped(...createArgs);
+
+        expect(requests(events)).toEqual([{ label: "Reserve domain", step: 1, attempt: 1 }]);
+    });
+
+    it("repeats the last label past the end of the plan", async () => {
+        const events: SigningEvent[] = [];
+        const { signer, pending } = fakePhoneSigner();
+        const wrapped = wrapDotnsSigner(signer, ["Link content"], createSigningCounter(), (e) =>
+            events.push(e),
+        );
+
+        const first = wrapped(...createArgs);
+        pending[0]!.resolve("0x01");
+        await first;
+        void wrapped(...createArgs);
+
+        expect(requests(events)).toEqual([
+            { label: "Link content", step: 1, attempt: 1 },
+            { label: "Link content", step: 2, attempt: 1 },
+        ]);
     });
 });
 
@@ -37,13 +298,18 @@ describe("createApprovalPrompt", () => {
         const prompt = createApprovalPrompt(counter, (e) => events.push(e));
 
         // A signing tap reserves step 1 elsewhere…
-        counter.next();
+        counter.next("Link content");
         // …so the allowance tap continues the same sequence at step 2.
         const handle = prompt("Grant Bulletin storage allowance");
         handle.complete();
 
         expect(events).toEqual([
-            { kind: "sign-request", label: "Grant Bulletin storage allowance", step: 2 },
+            {
+                kind: "sign-request",
+                label: "Grant Bulletin storage allowance",
+                step: 2,
+                attempt: 1,
+            },
             { kind: "sign-complete", label: "Grant Bulletin storage allowance", step: 2 },
         ]);
     });
@@ -56,7 +322,12 @@ describe("createApprovalPrompt", () => {
         handle.fail("declined on phone");
 
         expect(events).toEqual([
-            { kind: "sign-request", label: "Grant Bulletin storage allowance", step: 1 },
+            {
+                kind: "sign-request",
+                label: "Grant Bulletin storage allowance",
+                step: 1,
+                attempt: 1,
+            },
             {
                 kind: "sign-error",
                 label: "Grant Bulletin storage allowance",

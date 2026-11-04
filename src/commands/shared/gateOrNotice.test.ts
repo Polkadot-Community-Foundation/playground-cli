@@ -18,13 +18,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mock the gate decision + the Ink render so the test exercises only the
 // mapping contract enforceIdentityGate owns. withSpan is collapsed to a
 // pass-through so the span wrapper doesn't pull in Sentry.
-const { checkIdentityGateMock, renderNoticeMock } = vi.hoisted(() => ({
+const { checkIdentityGateMock, resolveActingH160Mock, renderNoticeMock } = vi.hoisted(() => ({
     checkIdentityGateMock: vi.fn(),
+    resolveActingH160Mock: vi.fn().mockResolvedValue(undefined),
     renderNoticeMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../utils/identity/identityGate.js", () => ({
     checkIdentityGate: checkIdentityGateMock,
+    resolveActingH160: resolveActingH160Mock,
 }));
 
 vi.mock("./IdentityGateNotice.js", () => ({
@@ -43,6 +45,7 @@ const H160 = "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef" as `0x${string}`;
 beforeEach(() => {
     vi.clearAllMocks();
     renderNoticeMock.mockResolvedValue(undefined);
+    resolveActingH160Mock.mockResolvedValue(undefined);
 });
 
 describe("enforceIdentityGate", () => {
@@ -98,12 +101,29 @@ describe("enforceIdentityGate", () => {
         },
     );
 
-    it("forwards a pre-resolved registry to the gate (so mod doesn't re-resolve)", async () => {
+    /**
+     * Callers pass the client and nothing else. There used to be a second
+     * parameter for a pre-resolved contract; `mod` passed its registry handle
+     * (which has no `isVerified`), the cast hid it from tsc, and every `mod`
+     * run reported "couldn't verify your builder status" on a healthy chain.
+     * The gate resolves the verifier itself now, so that is unrepresentable —
+     * this pins that nothing is forwarded.
+     */
+    it("passes only the client to the gate — no contract can be injected", async () => {
         checkIdentityGateMock.mockResolvedValue({ status: "revealed", productH160: H160 });
-        const registry = { getRootAccount: { query: vi.fn() } };
 
-        await enforceIdentityGate(RAW, registry as any);
+        await enforceIdentityGate(RAW);
 
-        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, { registry });
+        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, {});
+    });
+
+    it("checks the explicitly chosen signer's account instead of the session", async () => {
+        resolveActingH160Mock.mockResolvedValue(H160);
+        checkIdentityGateMock.mockResolvedValue({ status: "revealed", productH160: H160 });
+
+        await enforceIdentityGate(RAW, { suri: "//Bob" });
+
+        expect(resolveActingH160Mock).toHaveBeenCalledWith({ suri: "//Bob" });
+        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, { account: H160 });
     });
 });

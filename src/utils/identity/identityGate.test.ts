@@ -16,14 +16,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Boundary mocks: the gate composes session lookup (auth.ts) + a read-only
-// registry dry-run (registry.ts). We never want a real adapter / network here.
-const { findSessionMock, deriveSessionAddressesMock, getReadOnlyRegistryContractMock } = vi.hoisted(
-    () => ({
-        findSessionMock: vi.fn(),
-        deriveSessionAddressesMock: vi.fn(),
-        getReadOnlyRegistryContractMock: vi.fn(),
-    }),
-);
+// verifier dry-run (registry.ts). We never want a real adapter / network here.
+const { findSessionMock, deriveSessionAddressesMock, getVerifierContractMock } = vi.hoisted(() => ({
+    findSessionMock: vi.fn(),
+    deriveSessionAddressesMock: vi.fn(),
+    getVerifierContractMock: vi.fn(),
+}));
 
 vi.mock("../auth.js", () => ({
     findSession: findSessionMock,
@@ -31,10 +29,12 @@ vi.mock("../auth.js", () => ({
 }));
 
 vi.mock("../registry.js", () => ({
-    getReadOnlyRegistryContract: getReadOnlyRegistryContractMock,
+    getVerifierContract: getVerifierContractMock,
 }));
 
-import { checkIdentityGate, isAnonymousRoot } from "./identityGate.js";
+import { checkIdentityGate, resolveActingH160 } from "./identityGate.js";
+import { ss58ToH160 } from "@parity/product-sdk-address";
+import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 
 const ZERO = ("0x" + "00".repeat(32)) as `0x${string}`;
 const REVEALED = ("0x" + "11".repeat(32)) as `0x${string}`;
@@ -45,10 +45,14 @@ function fakeHandle() {
     return { adapter: { destroy }, address: "5x", session: { rootAccountId: new Uint8Array(32) } };
 }
 
-function fakeRegistry(
+// Stands in for whatever `registry.getVerifier()` names — the gate must ask
+// THAT contract's `isVerified`, never the identity spine's `getRootAccount`
+// (the spine said "anonymous" while the wired open verifier said "yes",
+// so the CLI refused publishes the chain would have accepted).
+function fakeVerifier(
     query: (addr: `0x${string}`) => Promise<{ success: boolean; value?: unknown }>,
 ) {
-    return { getRootAccount: { query: vi.fn(query) } };
+    return { isVerified: { query: vi.fn(query) } };
 }
 
 const FAST = { attempts: 2, delayMs: 0 };
@@ -62,57 +66,21 @@ beforeEach(() => {
     });
 });
 
-describe("isAnonymousRoot", () => {
-    it("treats the 32-zero-byte hex sentinel as anonymous", () => {
-        expect(isAnonymousRoot(ZERO)).toBe(true);
-        expect(isAnonymousRoot("0X" + "00".repeat(32))).toBe(true);
-        expect(isAnonymousRoot("00".repeat(32))).toBe(true); // no 0x prefix
-        expect(isAnonymousRoot("0x")).toBe(true); // empty body
-    });
-
-    it("treats a non-zero root as revealed", () => {
-        expect(isAnonymousRoot(REVEALED)).toBe(false);
-        expect(isAnonymousRoot("0x" + "00".repeat(31) + "01")).toBe(false);
-        expect(
-            isAnonymousRoot("0xAbC0000000000000000000000000000000000000000000000000000000000000"),
-        ).toBe(false);
-    });
-
-    it("handles byte-array representations", () => {
-        expect(isAnonymousRoot(new Uint8Array(32))).toBe(true);
-        const nonZero = new Uint8Array(32);
-        nonZero[31] = 1;
-        expect(isAnonymousRoot(nonZero)).toBe(false);
-        expect(isAnonymousRoot([0, 0, 0])).toBe(true);
-        expect(isAnonymousRoot([0, 1, 0])).toBe(false);
-    });
-
-    it("treats null/undefined as anonymous", () => {
-        expect(isAnonymousRoot(null)).toBe(true);
-        expect(isAnonymousRoot(undefined)).toBe(true);
-    });
-
-    it("throws on an unrecognized representation (forces unverifiable upstream)", () => {
-        expect(() => isAnonymousRoot(5 as unknown)).toThrow();
-        expect(() => isAnonymousRoot({} as unknown)).toThrow();
-    });
-});
-
 describe("checkIdentityGate", () => {
-    it("returns not-logged-in and never reads the registry when no session exists", async () => {
+    it("returns not-logged-in and never reads the verifier when no session exists", async () => {
         findSessionMock.mockResolvedValue(null);
 
         const result = await checkIdentityGate({} as any, FAST);
 
         expect(result).toEqual({ status: "not-logged-in" });
-        expect(getReadOnlyRegistryContractMock).not.toHaveBeenCalled();
+        expect(getVerifierContractMock).not.toHaveBeenCalled();
     });
 
-    it("returns revealed for a non-zero root and releases the session adapter", async () => {
+    it("returns revealed when the wired verifier accepts the caller, and releases the adapter", async () => {
         const handle = fakeHandle();
         findSessionMock.mockResolvedValue(handle);
-        getReadOnlyRegistryContractMock.mockResolvedValue(
-            fakeRegistry(async () => ({ success: true, value: REVEALED })),
+        getVerifierContractMock.mockResolvedValue(
+            fakeVerifier(async () => ({ success: true, value: true })),
         );
 
         const result = await checkIdentityGate({} as any, FAST);
@@ -121,11 +89,11 @@ describe("checkIdentityGate", () => {
         expect(handle.adapter.destroy).toHaveBeenCalledTimes(1);
     });
 
-    it("returns anonymous for the zero-root sentinel and releases the adapter", async () => {
+    it("returns anonymous when the wired verifier rejects the caller, and releases the adapter", async () => {
         const handle = fakeHandle();
         findSessionMock.mockResolvedValue(handle);
-        getReadOnlyRegistryContractMock.mockResolvedValue(
-            fakeRegistry(async () => ({ success: true, value: ZERO })),
+        getVerifierContractMock.mockResolvedValue(
+            fakeVerifier(async () => ({ success: true, value: false })),
         );
 
         const result = await checkIdentityGate({} as any, FAST);
@@ -137,21 +105,21 @@ describe("checkIdentityGate", () => {
     it("returns unverifiable when the dry-run fails on every attempt", async () => {
         const handle = fakeHandle();
         findSessionMock.mockResolvedValue(handle);
-        const registry = fakeRegistry(async () => ({ success: false }));
-        getReadOnlyRegistryContractMock.mockResolvedValue(registry);
+        const verifier = fakeVerifier(async () => ({ success: false }));
+        getVerifierContractMock.mockResolvedValue(verifier);
 
         const result = await checkIdentityGate({} as any, FAST);
 
         expect(result.status).toBe("unverifiable");
-        expect(registry.getRootAccount.query).toHaveBeenCalledTimes(2); // retried
+        expect(verifier.isVerified.query).toHaveBeenCalledTimes(2); // retried
         expect(handle.adapter.destroy).toHaveBeenCalledTimes(1);
     });
 
     it("returns unverifiable when the query throws", async () => {
         const handle = fakeHandle();
         findSessionMock.mockResolvedValue(handle);
-        getReadOnlyRegistryContractMock.mockResolvedValue(
-            fakeRegistry(async () => {
+        getVerifierContractMock.mockResolvedValue(
+            fakeVerifier(async () => {
                 throw new Error("RPC down");
             }),
         );
@@ -162,16 +130,25 @@ describe("checkIdentityGate", () => {
         expect(handle.adapter.destroy).toHaveBeenCalledTimes(1);
     });
 
-    it("uses an injected registry without re-resolving its own", async () => {
+    /**
+     * There is no way to hand the gate a pre-resolved contract, by design: the
+     * verifier it must query is named by `registry.getVerifier()`, so no handle
+     * a caller already holds is the right one. `mod` used to inject its registry
+     * (a cast, so tsc stayed silent) and the gate reported "couldn't verify your
+     * builder status" on a healthy chain. This pins that it always resolves the
+     * verifier itself.
+     */
+    it("always resolves the verifier itself — there is no injection seam", async () => {
         const handle = fakeHandle();
         findSessionMock.mockResolvedValue(handle);
-        const registry = fakeRegistry(async () => ({ success: true, value: REVEALED }));
+        getVerifierContractMock.mockResolvedValue(
+            fakeVerifier(async () => ({ success: true, value: true })),
+        );
 
-        const result = await checkIdentityGate({} as any, { ...FAST, registry });
+        const result = await checkIdentityGate({} as any, FAST);
 
         expect(result).toEqual({ status: "revealed", productH160: H160 });
-        expect(registry.getRootAccount.query).toHaveBeenCalledTimes(1);
-        expect(getReadOnlyRegistryContractMock).not.toHaveBeenCalled();
+        expect(getVerifierContractMock).toHaveBeenCalledTimes(1);
     });
 
     it("returns unverifiable (and releases the adapter) when the session can't be derived", async () => {
@@ -185,6 +162,41 @@ describe("checkIdentityGate", () => {
 
         expect(result.status).toBe("unverifiable");
         expect(handle.adapter.destroy).toHaveBeenCalledTimes(1);
-        expect(getReadOnlyRegistryContractMock).not.toHaveBeenCalled();
+        expect(getVerifierContractMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("checkIdentityGate with an explicit account", () => {
+    it("asks the verifier about that account and never touches the session", async () => {
+        const verifier = fakeVerifier(async () => ({ success: true, value: true }));
+        getVerifierContractMock.mockResolvedValue(verifier);
+
+        const result = await checkIdentityGate({} as any, { ...FAST, account: H160 });
+
+        expect(result).toEqual({ status: "revealed", productH160: H160 });
+        expect(verifier.isVerified.query).toHaveBeenCalledWith(H160);
+        expect(findSessionMock).not.toHaveBeenCalled();
+    });
+
+    it("reports anonymous for that account when the verifier rejects it", async () => {
+        getVerifierContractMock.mockResolvedValue(
+            fakeVerifier(async () => ({ success: true, value: false })),
+        );
+
+        const result = await checkIdentityGate({} as any, { ...FAST, account: H160 });
+
+        expect(result).toEqual({ status: "anonymous", productH160: H160 });
+    });
+});
+
+describe("resolveActingH160", () => {
+    it("defers to the session when no signer was chosen", async () => {
+        expect(await resolveActingH160(undefined)).toBeUndefined();
+        expect(await resolveActingH160({})).toBeUndefined();
+        expect(await resolveActingH160({ signer: "phone" })).toBeUndefined();
+    });
+
+    it("uses the dev publish account for --signer dev", async () => {
+        expect(await resolveActingH160({ signer: "dev" })).toBe(ss58ToH160(DEV_PUBLISH_ADDRESS));
     });
 });

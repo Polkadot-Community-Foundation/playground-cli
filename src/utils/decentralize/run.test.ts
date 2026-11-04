@@ -76,6 +76,7 @@ vi.mock("@parity/product-sdk-terminal/host", () => ({
 }));
 import { DEFAULT_MNEMONIC } from "bulletin-deploy";
 import type { ResolvedSigner } from "../signer.js";
+import { rebuildTxSigner, type TxSigner } from "../txSigner.js";
 import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 import type { DecentralizeLogEvent } from "./run.js";
 import { describeDeployEvent, LARGE_SITE_FILE_THRESHOLD, runDecentralize } from "./run.js";
@@ -105,11 +106,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
     const slotSigner = { publicKey: SLOT_PUBLIC_KEY } as any;
 
     const sessionSigner: ResolvedSigner = {
-        signer: {
-            publicKey: new Uint8Array(32),
-            signTx: vi.fn(),
-            signBytes: vi.fn(),
-        } as any,
+        signer: rebuildTxSigner({ publicKey: new Uint8Array(32) } as TxSigner, vi.fn(), vi.fn()),
         address: "5Fake",
         source: "session",
         userSession: {} as any,
@@ -231,7 +228,6 @@ describe("runDecentralize — playground publish metadata", () => {
 
     type PublishArg = {
         repositoryUrl: string | null;
-        isModdable?: boolean;
         cwd?: string;
     };
 
@@ -250,7 +246,6 @@ describe("runDecentralize — playground publish metadata", () => {
         expect(publishToPlaygroundMock).toHaveBeenCalledTimes(1);
         const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
         expect(arg.repositoryUrl).toBe("https://github.com/acme/site");
-        expect(arg.isModdable).toBe(true);
         // cwd is the resolved git repo root (walked up from the typed --path),
         // not the build dir — publishToPlayground inlines the *project* README
         // as the app's detail page, matching how the moddable origin resolves.
@@ -272,11 +267,10 @@ describe("runDecentralize — playground publish metadata", () => {
 
         const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
         expect(arg.repositoryUrl).toBeNull();
-        expect(arg.isModdable).toBe(false);
         expect(arg.cwd).toBe("./dist/__repo_root__");
     });
 
-    it("url source records no repository, no moddable bit, and no project root", async () => {
+    it("url source records no repository and no project root", async () => {
         // Mirrored sites have no git source: even if a caller smuggled a repo
         // URL in, the contract for url mode is null/false/undefined — pinned
         // here without the smuggling (callers can't reach the option in url
@@ -293,7 +287,6 @@ describe("runDecentralize — playground publish metadata", () => {
 
         const arg = publishToPlaygroundMock.mock.calls[0][0] as PublishArg;
         expect(arg.repositoryUrl).toBeNull();
-        expect(arg.isModdable).toBe(false);
         expect(arg.cwd).toBeUndefined();
     });
 });

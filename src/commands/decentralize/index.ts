@@ -66,6 +66,7 @@ import {
 import type { SignerMode } from "../../utils/deploy/signerMode.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { onProcessShutdown } from "../../utils/process-guard.js";
+import { formatSignRequestLine } from "../../utils/ui/theme/phoneApprovalCopy.js";
 
 interface DecentralizeOpts {
     site?: string;
@@ -168,7 +169,7 @@ export const decentralizeCommand = new Command("decentralize")
             // outcome (yellow box, exit 0); release the shared connection we
             // primed for the read before returning.
             const conn = await getConnection();
-            if (await enforceIdentityGate(conn.raw.assetHub)) {
+            if (await enforceIdentityGate(conn.raw.assetHub, { suri: opts.suri })) {
                 destroyConnection();
                 process.exitCode = 0;
                 return;
@@ -304,9 +305,7 @@ async function runHeadless({
                     }
                     case "signing":
                         if (ev.event.kind === "sign-request") {
-                            process.stdout.write(
-                                `\n  ▸ Check your phone — approve step ${ev.event.step}: ${ev.event.label}\n`,
-                            );
+                            process.stdout.write(`\n${formatSignRequestLine(ev.event)}`);
                         } else if (ev.event.kind === "sign-error") {
                             process.stdout.write(`  ✖ signing failed: ${ev.event.message}\n`);
                         }
